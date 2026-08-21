@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.app.config import get_settings
+from config import get_settings
 from database.session import get_db
 
 router = APIRouter(prefix="/health", tags=["health"])

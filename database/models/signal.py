@@ -4,11 +4,12 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Uuid
 from sqlalchemy import Enum as SqlEnum
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from database.base import Base
 from database.models._types import utc_now
 from database.models.enums import SignalLevel
+from signal_engine.contracts import SignalEvidenceCollection
 
 if TYPE_CHECKING:
     from database.models.asset import Asset
@@ -33,3 +34,10 @@ class Signal(Base):
     )
 
     asset: Mapped["Asset"] = relationship(back_populates="signals")
+
+    @validates("reasons")
+    def validate_reasons(self, _: str, value: list[dict[str, object]]) -> list[dict[str, object]]:
+        """Normalize evidence into the canonical, JSON-serializable contract."""
+
+        evidence = SignalEvidenceCollection.model_validate(value)
+        return evidence.model_dump(mode="json")

@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime configuration loaded from environment variables and `.env`."""
+    """Runtime settings shared by every application layer."""
 
     app_name: str = "Xueqiu Investor Intelligence System"
     app_env: str = "development"
