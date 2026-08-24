@@ -102,3 +102,30 @@ def test_opinion_extractors_do_not_cross_service_boundaries(extractor_module: st
 def test_opinion_processing_service_does_not_depend_on_state_or_signal() -> None:
     imports = imported_roots("ai/services/opinion_processing.py")
     assert imports.isdisjoint({"intelligence", "signal", "signal_engine"})
+
+
+@pytest.mark.parametrize(
+    "policy_module",
+    [
+        "intelligence/policies/attention.py",
+        "intelligence/policies/asset_aggregation.py",
+        "intelligence/policies/consensus.py",
+        "intelligence/policies/inclusion.py",
+        "intelligence/policies/investor_weight.py",
+        "intelligence/policies/state_reducer.py",
+        "intelligence/policies/transition.py",
+    ],
+)
+def test_state_policies_are_pure(policy_module: str) -> None:
+    imports = imported_roots(policy_module)
+    assert imports.isdisjoint({"ai", "database", "signal", "signal_engine", "sqlalchemy"})
+
+
+def test_state_update_service_does_not_depend_on_ai_or_signal() -> None:
+    imports = imported_roots("intelligence/services/state_update.py")
+    assert imports.isdisjoint({"ai", "signal", "signal_engine"})
+
+
+def test_asset_intelligence_service_does_not_cross_forbidden_boundaries() -> None:
+    imports = imported_roots("intelligence/services/asset_intelligence.py")
+    assert imports.isdisjoint({"ai", "collectors", "signal", "signal_engine"})

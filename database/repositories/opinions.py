@@ -1,12 +1,14 @@
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import OpinionCreate, OpinionWriteResult
+from contracts import OpinionCreate, OpinionTimelineEntry, OpinionWriteResult
 from database.models.opinion import Opinion
+from database.models.raw_event import RawEvent
 
 
 class OpinionRepository:
@@ -16,6 +18,32 @@ class OpinionRepository:
     def list_by_event(self, event_id: UUID) -> list[Opinion]:
         statement = select(Opinion).where(Opinion.event_id == event_id).order_by(Opinion.id)
         return list(self._session.scalars(statement))
+
+    def get(self, opinion_id: UUID) -> Opinion | None:
+        return self._session.get(Opinion, opinion_id)
+
+    def get_view(self, opinion_id: UUID) -> OpinionTimelineEntry | None:
+        statement = (
+            select(Opinion, RawEvent.published_time)
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .where(Opinion.id == opinion_id)
+        )
+        row = self._session.execute(statement).one_or_none()
+        if row is None:
+            return None
+        return self._timeline_entry(row[0], row[1])
+
+    def list_timeline(self, investor_id: UUID, asset_id: UUID) -> list[OpinionTimelineEntry]:
+        statement = (
+            select(Opinion, RawEvent.published_time)
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .where(
+                Opinion.investor_id == investor_id,
+                Opinion.asset_id == asset_id,
+            )
+            .order_by(RawEvent.published_time, RawEvent.id, Opinion.id)
+        )
+        return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
 
     def exists(self, event_id: UUID, asset_id: UUID, model_version: str) -> bool:
         return self._get_by_identity(event_id, asset_id, model_version) is not None
@@ -84,3 +112,27 @@ class OpinionRepository:
             Opinion.model_version == model_version,
         )
         return self._session.scalar(statement)
+
+    @classmethod
+    def _timeline_entry(
+        cls,
+        opinion: Opinion,
+        published_time: datetime,
+    ) -> OpinionTimelineEntry:
+        return OpinionTimelineEntry(
+            opinion_id=opinion.id,
+            event_id=opinion.event_id,
+            investor_id=opinion.investor_id,
+            asset_id=opinion.asset_id,
+            direction=opinion.direction,
+            strength=opinion.strength,
+            confidence=opinion.confidence,
+            published_time=cls._as_utc(published_time),
+            generated_time=cls._as_utc(opinion.generated_time),
+        )
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)

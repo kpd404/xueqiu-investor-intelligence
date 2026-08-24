@@ -13,3 +13,29 @@ class OpinionDirection(StrEnum):
     NEUTRAL = "NEUTRAL"
     BULLISH = "BULLISH"
     STRONG_BULLISH = "STRONG_BULLISH"
+
+
+class AttentionLevel(StrEnum):
+    UNKNOWN = "UNKNOWN"
+    DISCOVERED = "DISCOVERED"
+    TRACKING = "TRACKING"
+    FOCUS = "FOCUS"
+    CORE_FOCUS = "CORE_FOCUS"
+    ABANDONED = "ABANDONED"
+
+
+class PositionStatus(StrEnum):
+    NO_POSITION = "NO_POSITION"
+    WATCHING = "WATCHING"
+    SMALL_POSITION = "SMALL_POSITION"
+    CORE_POSITION = "CORE_POSITION"
+    REDUCING = "REDUCING"
+    EXITED = "EXITED"
+
+
+class ConsensusDirection(StrEnum):
+    BULLISH = "BULLISH"
+    NEUTRAL = "NEUTRAL"
+    BEARISH = "BEARISH"
+    MIXED = "MIXED"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"

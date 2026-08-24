@@ -1,28 +1,15 @@
 from enum import StrEnum
 
-from contracts.enums import EventType, OpinionDirection
+from contracts.enums import (
+    AttentionLevel,
+    EventType,
+    OpinionDirection,
+    PositionStatus,
+)
 
 
 class StringEnum(StrEnum):
     """Enum whose persisted value is the declared string value."""
-
-
-class AttentionLevel(StringEnum):
-    UNKNOWN = "UNKNOWN"
-    DISCOVERED = "DISCOVERED"
-    TRACKING = "TRACKING"
-    FOCUS = "FOCUS"
-    CORE_FOCUS = "CORE_FOCUS"
-    ABANDONED = "ABANDONED"
-
-
-class PositionStatus(StringEnum):
-    NO_POSITION = "NO_POSITION"
-    WATCHING = "WATCHING"
-    SMALL_POSITION = "SMALL_POSITION"
-    CORE_POSITION = "CORE_POSITION"
-    REDUCING = "REDUCING"
-    EXITED = "EXITED"
 
 
 class SignalLevel(StringEnum):
