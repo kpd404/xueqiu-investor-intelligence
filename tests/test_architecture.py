@@ -90,6 +90,13 @@ def test_collector_adapters_do_not_depend_on_persistence_or_ai(adapter_module: s
     assert imports.isdisjoint({"ai", "database", "sqlalchemy"})
 
 
+def test_xueqiu_adapter_does_not_cross_service_boundaries() -> None:
+    imports = imported_roots("collectors/xueqiu/adapter.py")
+    assert imports.isdisjoint(
+        {"ai", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"}
+    )
+
+
 @pytest.mark.parametrize(
     "extractor_module",
     ["ai/extractors/base.py", "ai/extractors/mock.py"],

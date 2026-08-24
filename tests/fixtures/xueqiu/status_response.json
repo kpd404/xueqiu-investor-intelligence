@@ -1,0 +1,46 @@
+{
+  "list": [
+    {
+      "id": 880000000001,
+      "created_at": 1787552280000,
+      "text": "<p>示例投资者的原创公开帖子。<br/>第二行内容。</p>",
+      "description": "示例投资者的原创公开帖子。",
+      "target": "/700001/880000000001",
+      "type": "2",
+      "user_id": 700001,
+      "retweet_status_id": 0,
+      "retweeted_status": null,
+      "timeBefore": "今天 14:18",
+      "title": ""
+    },
+    {
+      "id": 880000000002,
+      "created_at": 1787548680000,
+      "text": "<p>这是一条转发，不应采集。</p>",
+      "description": "这是一条转发，不应采集。",
+      "target": "/700001/880000000002",
+      "type": "4",
+      "user_id": 700001,
+      "retweet_status_id": 770000000001,
+      "retweeted_status": {
+        "id": 770000000001
+      },
+      "timeBefore": "今天 13:18",
+      "title": ""
+    },
+    {
+      "id": 880000000003,
+      "created_at": 1787545080000,
+      "text": "<p>其他用户的帖子，不应归属给目标投资者。</p>",
+      "description": "其他用户的帖子。",
+      "target": "/700002/880000000003",
+      "type": "2",
+      "user_id": 700002,
+      "retweet_status_id": 0,
+      "retweeted_status": null,
+      "timeBefore": "今天 12:18",
+      "title": ""
+    }
+  ],
+  "has_next_page": false
+}
