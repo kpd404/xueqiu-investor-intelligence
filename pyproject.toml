@@ -33,8 +33,10 @@ include = [
     "backend*",
     "collectors*",
     "config*",
+    "contracts*",
     "database*",
     "intelligence*",
+    "pipeline*",
     "signal_engine*",
 ]
 

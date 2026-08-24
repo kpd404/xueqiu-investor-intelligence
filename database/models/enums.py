@@ -1,14 +1,10 @@
 from enum import StrEnum
 
+from contracts.enums import EventType
+
 
 class StringEnum(StrEnum):
     """Enum whose persisted value is the declared string value."""
-
-
-class EventType(StringEnum):
-    POST = "POST"
-    ARTICLE = "ARTICLE"
-    PORTFOLIO_SNAPSHOT = "PORTFOLIO_SNAPSHOT"
 
 
 class OpinionDirection(StringEnum):
@@ -42,3 +38,12 @@ class SignalLevel(StringEnum):
     HIGH_PRIORITY_RESEARCH = "HIGH_PRIORITY_RESEARCH"
     WATCH = "WATCH"
     LOW_PRIORITY = "LOW_PRIORITY"
+
+
+__all__ = [
+    "AttentionLevel",
+    "EventType",
+    "OpinionDirection",
+    "PositionStatus",
+    "SignalLevel",
+]

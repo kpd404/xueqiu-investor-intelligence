@@ -39,7 +39,15 @@ def test_database_configuration_does_not_depend_on_backend(database_module: str)
 
 @pytest.mark.parametrize(
     "package_name",
-    ["ai", "collectors", "config", "intelligence", "signal_engine"],
+    [
+        "ai",
+        "collectors",
+        "config",
+        "contracts",
+        "intelligence",
+        "pipeline",
+        "signal_engine",
+    ],
 )
 def test_layer_package_is_importable(package_name: str) -> None:
     assert importlib.import_module(package_name)
@@ -65,7 +73,18 @@ def test_pyproject_discovers_layer_packages() -> None:
         "backend*",
         "collectors*",
         "config*",
+        "contracts*",
         "database*",
         "intelligence*",
+        "pipeline*",
         "signal_engine*",
     } <= includes
+
+
+@pytest.mark.parametrize(
+    "adapter_module",
+    ["collectors/base.py", "collectors/manual/adapter.py"],
+)
+def test_collector_adapters_do_not_depend_on_persistence_or_ai(adapter_module: str) -> None:
+    imports = imported_roots(adapter_module)
+    assert imports.isdisjoint({"ai", "database", "sqlalchemy"})
