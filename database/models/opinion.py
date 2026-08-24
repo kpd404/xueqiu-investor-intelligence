@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Uuid
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, UniqueConstraint, Uuid
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
 class Opinion(Base):
     __tablename__ = "opinions"
+    __table_args__ = (
+        UniqueConstraint("event_id", "asset_id", "model_version", name="event_asset_model"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     event_id: Mapped[UUID] = mapped_column(

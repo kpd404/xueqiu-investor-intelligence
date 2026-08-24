@@ -1,18 +1,10 @@
 from enum import StrEnum
 
-from contracts.enums import EventType
+from contracts.enums import EventType, OpinionDirection
 
 
 class StringEnum(StrEnum):
     """Enum whose persisted value is the declared string value."""
-
-
-class OpinionDirection(StringEnum):
-    STRONG_BEARISH = "STRONG_BEARISH"
-    BEARISH = "BEARISH"
-    NEUTRAL = "NEUTRAL"
-    BULLISH = "BULLISH"
-    STRONG_BULLISH = "STRONG_BULLISH"
 
 
 class AttentionLevel(StringEnum):

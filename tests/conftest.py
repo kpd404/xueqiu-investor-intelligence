@@ -2,7 +2,7 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -13,20 +13,31 @@ from database.session import get_db
 
 
 @pytest.fixture
-def db_session() -> Generator[Session, None, None]:
+def db_engine() -> Generator[Engine, None, None]:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
 
-    with factory() as session:
-        yield session
+    yield engine
 
     Base.metadata.drop_all(engine)
     engine.dispose()
+
+
+@pytest.fixture
+def db_session_factory(db_engine: Engine) -> sessionmaker[Session]:
+    return sessionmaker(bind=db_engine, expire_on_commit=False)
+
+
+@pytest.fixture
+def db_session(
+    db_session_factory: sessionmaker[Session],
+) -> Generator[Session, None, None]:
+    with db_session_factory() as session:
+        yield session
 
 
 @pytest.fixture

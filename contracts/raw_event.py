@@ -151,3 +151,20 @@ class RawEventWriteResult(BaseModel):
     event_id: UUID
     hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     created: bool
+
+
+class RawEventView(BaseModel):
+    """Immutable persisted-fact view provided to downstream processors."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: UUID
+    investor_id: UUID
+    event_type: EventType
+    source: str
+    url: str
+    published_time: AwareDatetime
+    content: str
+    raw_data: dict[str, JsonValue]
+    hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    collected_time: AwareDatetime

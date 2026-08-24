@@ -88,3 +88,17 @@ def test_pyproject_discovers_layer_packages() -> None:
 def test_collector_adapters_do_not_depend_on_persistence_or_ai(adapter_module: str) -> None:
     imports = imported_roots(adapter_module)
     assert imports.isdisjoint({"ai", "database", "sqlalchemy"})
+
+
+@pytest.mark.parametrize(
+    "extractor_module",
+    ["ai/extractors/base.py", "ai/extractors/mock.py"],
+)
+def test_opinion_extractors_do_not_cross_service_boundaries(extractor_module: str) -> None:
+    imports = imported_roots(extractor_module)
+    assert imports.isdisjoint({"database", "intelligence", "signal", "signal_engine", "sqlalchemy"})
+
+
+def test_opinion_processing_service_does_not_depend_on_state_or_signal() -> None:
+    imports = imported_roots("ai/services/opinion_processing.py")
+    assert imports.isdisjoint({"intelligence", "signal", "signal_engine"})
