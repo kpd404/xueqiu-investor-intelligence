@@ -22,6 +22,12 @@ from contracts.opinion import (
     OpinionWriteResult,
     UnresolvedAsset,
 )
+from contracts.processing import (
+    CoreProcessingFailureCode,
+    CoreProcessingResult,
+    CoreProcessingWarning,
+    ProcessRawEventCommand,
+)
 from contracts.raw_event import RawEventDTO, RawEventView, RawEventWriteResult
 from contracts.state import (
     InvestorAssetStateSnapshot,
@@ -37,6 +43,10 @@ __all__ = [
     "AttentionLevel",
     "CollectionRequest",
     "ConsensusDirection",
+    "CoreProcessingFailureCode",
+    "CoreProcessingResult",
+    "CoreProcessingWarning",
+    "ProcessRawEventCommand",
     "EventType",
     "OpinionCreate",
     "OpinionDirection",

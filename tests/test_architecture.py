@@ -136,3 +136,8 @@ def test_state_update_service_does_not_depend_on_ai_or_signal() -> None:
 def test_asset_intelligence_service_does_not_cross_forbidden_boundaries() -> None:
     imports = imported_roots("intelligence/services/asset_intelligence.py")
     assert imports.isdisjoint({"ai", "collectors", "signal", "signal_engine"})
+
+
+def test_core_intelligence_pipeline_has_no_infrastructure_or_signal_dependency() -> None:
+    imports = imported_roots("pipeline/intelligence_pipeline.py")
+    assert imports.isdisjoint({"collectors", "database", "signal", "signal_engine", "sqlalchemy"})

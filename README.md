@@ -50,3 +50,11 @@ Collector 默认通过 Playwright `channel="msedge"` 启动系统 Edge，无需�
 
 如果雪球显示登录、滑动验证或访问限制页面，Collector 会停止并返回明确错误，
 不会尝试绕过。
+
+## Core intelligence pipeline demo
+
+无需实时雪球采集，使用 Manual Import 与 Mock Extractor 运行完整核心链路：
+
+```powershell
+python -m pipeline.demo
+```
