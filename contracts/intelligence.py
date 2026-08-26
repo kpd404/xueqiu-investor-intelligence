@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, AwareDatetime, BaseModel, ConfigDict, Field
 
 from contracts.enums import AttentionLevel, ConsensusDirection, OpinionDirection
 from contracts.state import InvestorAssetStateSnapshot
@@ -30,8 +30,16 @@ class InvestorStateContribution(BaseModel):
     direction: OpinionDirection
     conviction: float = Field(ge=0, le=100)
     mention_count: int = Field(ge=1)
-    last_opinion_time: AwareDatetime
+    last_activity_time: AwareDatetime = Field(
+        validation_alias=AliasChoices("last_activity_time", "last_opinion_time")
+    )
     source_event_ids: tuple[UUID, ...]
+
+    @property
+    def last_opinion_time(self) -> AwareDatetime:
+        """Compatibility alias for pre-1F consumers."""
+
+        return self.last_activity_time
 
 
 class AssetIntelligenceSnapshot(BaseModel):

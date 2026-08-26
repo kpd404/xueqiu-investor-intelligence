@@ -19,6 +19,10 @@ class OpinionRepository:
         statement = select(Opinion).where(Opinion.event_id == event_id).order_by(Opinion.id)
         return list(self._session.scalars(statement))
 
+    def list_by_analysis(self, analysis_id: UUID) -> list[Opinion]:
+        statement = select(Opinion).where(Opinion.analysis_id == analysis_id).order_by(Opinion.id)
+        return list(self._session.scalars(statement))
+
     def get(self, opinion_id: UUID) -> Opinion | None:
         return self._session.get(Opinion, opinion_id)
 
@@ -45,8 +49,22 @@ class OpinionRepository:
         )
         return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
 
+    def list_timeline_by_asset(self, asset_id: UUID) -> list[OpinionTimelineEntry]:
+        statement = (
+            select(Opinion, RawEvent.published_time)
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .where(Opinion.asset_id == asset_id)
+            .order_by(Opinion.investor_id, RawEvent.published_time, RawEvent.id, Opinion.id)
+        )
+        return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
+
     def exists(self, event_id: UUID, asset_id: UUID, model_version: str) -> bool:
-        return self._get_by_identity(event_id, asset_id, model_version) is not None
+        statement = select(Opinion.id).where(
+            Opinion.event_id == event_id,
+            Opinion.asset_id == asset_id,
+            Opinion.model_version == model_version,
+        )
+        return self._session.scalar(statement) is not None
 
     def add_many(self, commands: Sequence[OpinionCreate]) -> OpinionWriteResult:
         opinion_ids: list[UUID] = []
@@ -57,6 +75,7 @@ class OpinionRepository:
                 command.event_id,
                 command.asset_id,
                 command.model_version,
+                command.analysis_id,
             )
             if existing is not None:
                 opinion_ids.append(existing.id)
@@ -64,6 +83,7 @@ class OpinionRepository:
 
             opinion = Opinion(
                 event_id=command.event_id,
+                analysis_id=command.analysis_id,
                 investor_id=command.investor_id,
                 asset_id=command.asset_id,
                 direction=command.direction,
@@ -86,6 +106,7 @@ class OpinionRepository:
                     command.event_id,
                     command.asset_id,
                     command.model_version,
+                    command.analysis_id,
                 )
                 if existing is None:
                     raise
@@ -105,13 +126,19 @@ class OpinionRepository:
         event_id: UUID,
         asset_id: UUID,
         model_version: str,
+        analysis_id: UUID | None,
     ) -> Opinion | None:
-        statement = select(Opinion).where(
+        predicates = [
             Opinion.event_id == event_id,
             Opinion.asset_id == asset_id,
-            Opinion.model_version == model_version,
-        )
-        return self._session.scalar(statement)
+        ]
+        if analysis_id is None:
+            predicates.extend(
+                [Opinion.analysis_id.is_(None), Opinion.model_version == model_version]
+            )
+        else:
+            predicates.append(Opinion.analysis_id == analysis_id)
+        return self._session.scalar(select(Opinion).where(*predicates))
 
     @classmethod
     def _timeline_entry(

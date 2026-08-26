@@ -12,6 +12,7 @@ from database.models.enums import OpinionDirection
 
 if TYPE_CHECKING:
     from database.models.asset import Asset
+    from database.models.event_analysis import EventAnalysis
     from database.models.investor import Investor
     from database.models.raw_event import RawEvent
 
@@ -19,12 +20,17 @@ if TYPE_CHECKING:
 class Opinion(Base):
     __tablename__ = "opinions"
     __table_args__ = (
-        UniqueConstraint("event_id", "asset_id", "model_version", name="event_asset_model"),
+        # New rows are identified by the immutable analysis result, not just its model.
+        UniqueConstraint("event_id", "asset_id", "analysis_id", name="event_asset_analysis"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     event_id: Mapped[UUID] = mapped_column(
         ForeignKey("raw_events.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    # Nullable for legacy rows created before Sprint 1F. New processing always sets it.
+    analysis_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("event_analyses.id", ondelete="RESTRICT"), index=True
     )
     investor_id: Mapped[UUID] = mapped_column(
         ForeignKey("investors.id", ondelete="RESTRICT"), index=True, nullable=False
@@ -49,5 +55,6 @@ class Opinion(Base):
     model_version: Mapped[str] = mapped_column(String(255), nullable=False)
 
     event: Mapped["RawEvent"] = relationship(back_populates="opinions")
+    analysis: Mapped["EventAnalysis | None"] = relationship(back_populates="opinions")
     investor: Mapped["Investor"] = relationship(back_populates="opinions")
     asset: Mapped["Asset"] = relationship(back_populates="opinions")

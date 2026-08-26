@@ -2,7 +2,7 @@
 
 ## System Architecture Specification
 
-Version: 1.0
+Version: 1.1
 
 ---
 
@@ -456,3 +456,35 @@ Dashboard display
 系统必须能够回答：
 
 > 谁在什么时候，因为什么原因，改变了对什么资产的看法，以及这种变化是否正在形成市场趋势？
+
+---
+
+## Sprint 1F Processing Hardening
+
+### Analysis boundary
+
+The Investment Understanding layer persists one `EventAnalysis` per `RawEvent + AnalysisSpec.analysis_version` before writing zero or more `Opinion` rows. `AnalysisSpec` is a neutral immutable contract; it carries model, prompt, schema, and logical analysis versions without introducing a live Prompt Registry.
+
+`NO_OPINION`, partial resolution, and failed extraction are valid lifecycle outcomes. A completed analysis is reused on the same identity. A failed analysis may be retried and updated; no Scheduler, Job, PipelineRun, Lease, or attempt-history infrastructure is introduced here.
+
+### State boundary
+
+The State layer owns deterministic reduction. `InvestorAssetState` is the latest projection. `InvestorAssetStateChange` is an append-only ledger for material transitions and is written in the same transaction as the projection update. Its unique identity is `triggering_opinion_id + state_policy_version`.
+
+The reducer exposes separate `projection_changed` and `material_change` semantics. `last_activity_time` and `last_material_change_time` both use `RawEvent.published_time`; `generated_time` and `calculated_at` remain provenance/calculation timestamps.
+
+### Historical calculation
+
+Asset Intelligence never uses the latest projection as a historical shortcut. For `asset_id + as_of`, it groups Opinion timelines, applies `RawEvent.published_time <= as_of`, rebuilds each Investor × Asset state with the deterministic reducer, and aggregates those transient states. The current projection is never mutated by replay.
+
+### Processing outcomes
+
+The application Pipeline returns a stable `ProcessingOutcome`: `SUCCEEDED`, `PARTIALLY_SUCCEEDED`, `RETRYABLE_FAILED`, or `PERMANENTLY_FAILED`. Warnings carry a stable code, stage, and retryable flag; messages are diagnostic only. Programming errors are not converted into warnings. Missing RawEvents remain typed terminal errors.
+
+### Transaction boundary
+
+`DataPipeline` commits each RawEvent (or future small batch) before awaiting the next external Collector DTO. Browser, Playwright, and network waits never hold an open database transaction. Collector adapters remain source-only and Xueqiu verification behavior is unchanged.
+
+### Explicit non-goals
+
+Sprint 1F does not implement Real LLM providers, Prompt Registry, Signal Score, Research Candidate, Scheduler, Job/Lease/Heartbeat, Dashboard, Portfolio, Alerts, RAG, Backtesting, or Xueqiu verification bypass.

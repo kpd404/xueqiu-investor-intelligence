@@ -15,7 +15,7 @@ def reduce_investor_asset_state(
     opinions: Sequence[OpinionTimelineEntry],
     before: InvestorAssetStateSnapshot | None = None,
 ) -> StateReduction:
-    """Rebuild one Investor × Asset state from its complete opinion history."""
+    """Rebuild one Investor × Asset state from its complete effective opinion history."""
 
     if not opinions:
         raise ValueError("at least one opinion is required to build state")
@@ -44,24 +44,29 @@ def reduce_investor_asset_state(
         conviction=conviction,
         mention_count=mention_count,
         position_status=position_status,
-        last_opinion_time=latest.published_time,
-        last_change_time=before.last_change_time if before else None,
+        last_activity_time=latest.published_time,
+        last_material_change_time=before.last_material_change_time if before else None,
     )
-    changed = before is None or _material_fingerprint(before) != _material_fingerprint(candidate)
-    last_change_time = (
+    projection_changed = before is None or _projection_fingerprint(
+        before
+    ) != _projection_fingerprint(candidate)
+    transition = classify_transition(before, candidate)
+    material_change = transition.value != "NO_MATERIAL_CHANGE"
+    last_material_change_time = (
         latest.published_time
-        if changed
-        else before.last_change_time
+        if material_change
+        else before.last_material_change_time
         if before is not None
         else latest.published_time
     )
-    after = candidate.model_copy(update={"last_change_time": last_change_time})
+    after = candidate.model_copy(update={"last_material_change_time": last_material_change_time})
 
     return StateReduction(
-        changed=changed,
+        projection_changed=projection_changed,
+        material_change=material_change,
         before=before,
         after=after,
-        transition=classify_transition(before, after),
+        transition=transition,
         applied_opinion_ids=tuple(opinion.opinion_id for opinion in effective),
         source_event_ids=tuple(opinion.event_id for opinion in effective),
     )
@@ -91,12 +96,12 @@ def select_effective_opinions(
     )
 
 
-def _material_fingerprint(state: InvestorAssetStateSnapshot) -> tuple[object, ...]:
+def _projection_fingerprint(state: InvestorAssetStateSnapshot) -> tuple[object, ...]:
     return (
         state.attention_level,
         state.direction,
         state.conviction,
         state.mention_count,
         state.position_status,
-        state.last_opinion_time,
+        state.last_activity_time,
     )

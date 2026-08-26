@@ -1,11 +1,14 @@
 from collections.abc import Callable
+from datetime import UTC, datetime
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
 from contracts import (
+    STATE_POLICY_VERSION,
     InvestorAssetStateSnapshot,
     OpinionTimelineEntry,
+    StateChangeCreate,
     StateUpdateResult,
 )
 from intelligence.policies.state_reducer import reduce_investor_asset_state
@@ -17,6 +20,10 @@ class OpinionNotFoundError(LookupError):
 
 class StateEntity(Protocol):
     id: UUID
+
+
+class OpinionEntity(Protocol):
+    opinion_id: UUID
 
 
 class OpinionHistoryReader(Protocol):
@@ -37,9 +44,14 @@ class StateWriter(Protocol):
     def to_snapshot(self, state: StateEntity) -> InvestorAssetStateSnapshot: ...
 
 
+class StateChangeWriter(Protocol):
+    def add_if_absent(self, command: StateChangeCreate) -> object: ...
+
+
 class StateUnitOfWork(Protocol):
     opinions: OpinionHistoryReader
     states: StateWriter
+    state_changes: StateChangeWriter
 
     def __enter__(self) -> Self: ...
 
@@ -56,9 +68,18 @@ class StateUnitOfWork(Protocol):
 StateUnitOfWorkFactory = Callable[[], StateUnitOfWork]
 
 
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
 class StateUpdateService:
-    def __init__(self, unit_of_work_factory: StateUnitOfWorkFactory) -> None:
+    def __init__(
+        self,
+        unit_of_work_factory: StateUnitOfWorkFactory,
+        state_policy_version: str = STATE_POLICY_VERSION,
+    ) -> None:
         self._unit_of_work_factory = unit_of_work_factory
+        self._state_policy_version = state_policy_version
 
     def update(self, opinion_id: UUID) -> StateUpdateResult:
         with self._unit_of_work_factory() as unit_of_work:
@@ -77,20 +98,46 @@ class StateUpdateService:
             )
             reduction = reduce_investor_asset_state(history, before)
 
-            if reduction.changed:
+            if reduction.projection_changed:
                 state = unit_of_work.states.upsert(reduction.after, current)
             else:
                 if current is None:
                     raise RuntimeError("unchanged reduction requires an existing state")
                 state = current
+
+            state_change_id: UUID | None = None
+            if reduction.material_change:
+                if reduction.after.last_activity_time is None:
+                    raise RuntimeError("material state change requires an activity time")
+                state_change = unit_of_work.state_changes.add_if_absent(
+                    StateChangeCreate(
+                        investor_id=reduction.after.investor_id,
+                        asset_id=reduction.after.asset_id,
+                        transition_type=reduction.transition.value,
+                        effective_time=reduction.after.last_activity_time,
+                        calculated_at=utc_now(),
+                        before=(
+                            reduction.before.model_dump(mode="json")
+                            if reduction.before is not None
+                            else None
+                        ),
+                        after=reduction.after.model_dump(mode="json"),
+                        triggering_opinion_id=opinion_id,
+                        source_event_ids=reduction.source_event_ids,
+                        state_policy_version=self._state_policy_version,
+                    )
+                )
+                state_change_id = state_change.id
             unit_of_work.commit()
 
         return StateUpdateResult(
             state_id=state.id,
-            changed=reduction.changed,
+            projection_changed=reduction.projection_changed,
+            material_change=reduction.material_change,
             before=reduction.before,
             after=reduction.after,
             transition=reduction.transition,
             applied_opinion_ids=reduction.applied_opinion_ids,
             source_event_ids=reduction.source_event_ids,
+            state_change_id=state_change_id,
         )

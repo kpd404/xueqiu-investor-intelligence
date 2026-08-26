@@ -5,16 +5,25 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from database.base import Base
-from database.models import Asset, Investor, Opinion, RawEvent, RawEventImmutableError
+from database.models import (
+    Asset,
+    EventAnalysis,
+    Investor,
+    Opinion,
+    RawEvent,
+    RawEventImmutableError,
+)
 from database.models.enums import EventType, OpinionDirection
 
 
-def test_metadata_contains_exactly_the_six_core_tables() -> None:
+def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
     assert set(Base.metadata.tables) == {
         "assets",
         "investors",
         "investor_asset_states",
+        "investor_asset_state_changes",
         "opinions",
+        "event_analyses",
         "raw_events",
         "signals",
     }
@@ -56,9 +65,10 @@ def test_core_fact_and_interpretation_records_are_traceable(db_session: Session)
     db_session.commit()
 
     assert opinion.event_id == raw_event.id
-    assert opinion.investor_id == investor.id
+    assert opinion.investor_id == raw_event.investor_id == investor.id
     assert opinion.asset_id == asset.id
     assert opinion.generated_time is not None
+    assert opinion.analysis_id is None
 
 
 def test_raw_event_is_immutable_after_persistence(db_session: Session) -> None:
@@ -86,4 +96,7 @@ def test_raw_event_is_immutable_after_persistence(db_session: Session) -> None:
 
 def test_opinion_schema_has_ai_provenance_fields() -> None:
     columns = {column.name for column in inspect(Opinion).columns}
-    assert {"event_id", "confidence", "generated_time", "model_version"} <= columns
+    assert {"event_id", "analysis_id", "confidence", "generated_time", "model_version"} <= columns
+    assert {"event_id", "analysis_version", "status", "structured_output"} <= {
+        column.name for column in inspect(EventAnalysis).columns
+    }

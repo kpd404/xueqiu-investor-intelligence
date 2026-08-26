@@ -78,8 +78,8 @@ class InvestorAssetStateRepository:
             conviction=state.conviction,
             mention_count=state.mention_count,
             position_status=state.position_status,
-            last_opinion_time=self._as_utc_optional(state.last_opinion_time),
-            last_change_time=self._as_utc_optional(state.last_change_time),
+            last_activity_time=self._as_utc_optional(state.last_activity_time),
+            last_material_change_time=self._as_utc_optional(state.last_material_change_time),
         )
 
     @staticmethod
@@ -92,8 +92,8 @@ class InvestorAssetStateRepository:
         state.conviction = snapshot.conviction
         state.mention_count = snapshot.mention_count
         state.position_status = snapshot.position_status
-        state.last_opinion_time = snapshot.last_opinion_time
-        state.last_change_time = snapshot.last_change_time
+        state.last_activity_time = snapshot.last_activity_time
+        state.last_material_change_time = snapshot.last_material_change_time
 
     @staticmethod
     def _as_utc_optional(value: datetime | None) -> datetime | None:

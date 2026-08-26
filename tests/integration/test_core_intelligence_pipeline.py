@@ -14,10 +14,19 @@ from contracts import (
     OpinionDirection,
     OpinionExtractionResult,
     OpinionProcessingStatus,
+    ProcessingOutcome,
     ProcessRawEventCommand,
     RawEventView,
 )
-from database.models import Asset, Investor, InvestorAssetState, Opinion, RawEvent
+from database.models import (
+    Asset,
+    EventAnalysis,
+    Investor,
+    InvestorAssetState,
+    InvestorAssetStateChange,
+    Opinion,
+    RawEvent,
+)
 from database.repositories import RawEventRepository
 from database.unit_of_work import (
     SqlAlchemyIntelligenceUnitOfWork,
@@ -244,7 +253,9 @@ def test_reprocessing_same_event_is_fully_idempotent(
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(RawEvent)) == 1
         assert session.scalar(select(func.count()).select_from(Opinion)) == 1
+        assert session.scalar(select(func.count()).select_from(EventAnalysis)) == 1
         assert session.scalar(select(func.count()).select_from(InvestorAssetState)) == 1
+        assert session.scalar(select(func.count()).select_from(InvestorAssetStateChange)) == 1
 
 
 def test_non_investment_event_returns_no_opinion_without_downstream_state(
@@ -300,6 +311,7 @@ def test_unresolved_asset_does_not_block_resolved_asset_processing(
     )
 
     assert result.opinion_processing_status == OpinionProcessingStatus.PARTIALLY_RESOLVED
+    assert result.outcome == ProcessingOutcome.PARTIALLY_SUCCEEDED
     assert len(result.unresolved_assets) == 1
     assert result.unresolved_assets[0].symbol == "UNKNOWN"
     assert len(result.opinion_ids) == 1

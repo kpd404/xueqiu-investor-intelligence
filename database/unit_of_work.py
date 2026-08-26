@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from database.repositories import (
     AssetRepository,
+    EventAnalysisRepository,
+    InvestorAssetStateChangeRepository,
     InvestorAssetStateRepository,
     InvestorRepository,
     OpinionRepository,
@@ -25,6 +27,7 @@ class SqlAlchemyOpinionUnitOfWork:
         self._committed = False
         self.raw_events = RawEventRepository(self._session)
         self.assets = AssetRepository(self._session)
+        self.analyses = EventAnalysisRepository(self._session)
         self.opinions = OpinionRepository(self._session)
         return self
 
@@ -65,6 +68,7 @@ class SqlAlchemyStateUnitOfWork:
         self._committed = False
         self.opinions = OpinionRepository(self._session)
         self.states = InvestorAssetStateRepository(self._session)
+        self.state_changes = InvestorAssetStateChangeRepository(self._session)
         return self
 
     def __exit__(

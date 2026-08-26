@@ -35,7 +35,7 @@ class PipelineResult(BaseModel):
 
 
 class DataPipeline:
-    """Application service that stores normalized adapter output atomically."""
+    """Store normalized adapter output with one short transaction per event."""
 
     def __init__(self, repository: RawEventWriter, transaction: TransactionManager) -> None:
         self._repository = repository
@@ -43,12 +43,13 @@ class DataPipeline:
 
     async def run(self, adapter: SourceAdapter, request: CollectionRequest) -> PipelineResult:
         results: list[RawEventWriteResult] = []
-        try:
-            async for dto in adapter.collect(request):
+        async for dto in adapter.collect(request):
+            try:
                 results.append(self._repository.add_if_absent(dto))
-            self._transaction.commit()
-        except Exception:
-            self._transaction.rollback()
-            raise
+                # Do not keep a transaction open while waiting for the next browser/network DTO.
+                self._transaction.commit()
+            except Exception:
+                self._transaction.rollback()
+                raise
 
         return PipelineResult(events=tuple(results))

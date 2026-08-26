@@ -19,8 +19,8 @@ def is_valid_aggregation_state(
     return (
         state.attention_level != AttentionLevel.UNKNOWN
         and state.mention_count > 0
-        and state.last_opinion_time is not None
-        and state.last_opinion_time <= as_of
+        and state.last_activity_time is not None
+        and state.last_activity_time <= as_of
         and bool(source_event_ids)
     )
 

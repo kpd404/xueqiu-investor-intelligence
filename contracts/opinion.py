@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 
+from contracts.analysis import AnalysisSpec, EventAnalysisStatus
 from contracts.enums import OpinionDirection
 
 
@@ -55,15 +56,20 @@ class OpinionExtractionResult(BaseModel):
     investment_related: bool
     opinions: tuple[AssetOpinionExtraction, ...] = ()
     model_version: str = Field(min_length=1, max_length=255)
+    analysis_spec: AnalysisSpec | None = None
 
     @model_validator(mode="after")
     def validate_opinion_consistency(self) -> Self:
         if self.investment_related != bool(self.opinions):
             raise ValueError("investment_related must match whether opinions are present")
-
         identities = [(opinion.market, opinion.symbol) for opinion in self.opinions]
         if len(identities) != len(set(identities)):
             raise ValueError("duplicate market/symbol opinions are not allowed")
+        if (
+            self.analysis_spec is not None
+            and self.analysis_spec.model_version != self.model_version
+        ):
+            raise ValueError("analysis_spec.model_version must match model_version")
         return self
 
 
@@ -73,6 +79,7 @@ class OpinionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     event_id: UUID
+    analysis_id: UUID | None = None
     investor_id: UUID
     asset_id: UUID
     direction: OpinionDirection
@@ -107,6 +114,7 @@ class OpinionProcessingStatus(StrEnum):
     NO_OPINION = "NO_OPINION"
     PARTIALLY_RESOLVED = "PARTIALLY_RESOLVED"
     ALREADY_PROCESSED = "ALREADY_PROCESSED"
+    FAILED = "FAILED"
 
 
 class OpinionProcessingResult(BaseModel):
@@ -117,3 +125,6 @@ class OpinionProcessingResult(BaseModel):
     unresolved_assets: tuple[UnresolvedAsset, ...]
     model_version: str
     status: OpinionProcessingStatus
+    analysis_id: UUID | None = None
+    analysis_version: str | None = None
+    analysis_status: EventAnalysisStatus | None = None

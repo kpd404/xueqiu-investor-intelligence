@@ -22,6 +22,27 @@ def imported_roots(relative_path: str) -> set[str]:
     return roots
 
 
+def package_modules(package: str, *, exclude: set[str] | None = None) -> list[str]:
+    excluded = exclude or set()
+    root = PROJECT_ROOT / package
+    return [
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for path in sorted(root.rglob("*.py"))
+        if path.relative_to(PROJECT_ROOT).as_posix() not in excluded
+    ]
+
+
+def assert_package_boundary(
+    package: str, forbidden: set[str], *, exclude: set[str] | None = None
+) -> None:
+    violations = {
+        module: sorted(imported_roots(module) & forbidden)
+        for module in package_modules(package, exclude=exclude)
+        if imported_roots(module) & forbidden
+    }
+    assert violations == {}
+
+
 def test_common_config_has_no_layer_dependencies() -> None:
     forbidden = {"backend", "database", "collector", "collectors"}
     assert imported_roots("config/common.py").isdisjoint(forbidden)
@@ -141,3 +162,44 @@ def test_asset_intelligence_service_does_not_cross_forbidden_boundaries() -> Non
 def test_core_intelligence_pipeline_has_no_infrastructure_or_signal_dependency() -> None:
     imports = imported_roots("pipeline/intelligence_pipeline.py")
     assert imports.isdisjoint({"collectors", "database", "signal", "signal_engine", "sqlalchemy"})
+
+
+def test_collector_package_boundaries_are_source_only() -> None:
+    assert_package_boundary(
+        "collectors",
+        {"ai", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"},
+        exclude={"collectors/xueqiu/smoke.py"},
+    )
+
+
+def test_extractor_package_boundaries_are_provider_neutral() -> None:
+    assert_package_boundary(
+        "ai/extractors",
+        {"database", "intelligence", "signal", "signal_engine", "sqlalchemy"},
+    )
+
+
+def test_ai_service_package_does_not_cross_state_or_signal_boundaries() -> None:
+    assert_package_boundary("ai/services", {"intelligence", "signal", "signal_engine"})
+
+
+def test_policy_package_is_pure() -> None:
+    assert_package_boundary(
+        "intelligence/policies",
+        {"ai", "database", "signal", "signal_engine", "sqlalchemy"},
+    )
+
+
+def test_intelligence_service_package_does_not_depend_on_ai_or_signal() -> None:
+    assert_package_boundary(
+        "intelligence/services",
+        {"ai", "collectors", "signal", "signal_engine", "sqlalchemy"},
+    )
+
+
+def test_pipeline_package_has_no_infrastructure_or_signal_dependency() -> None:
+    assert_package_boundary(
+        "pipeline",
+        {"database", "signal", "signal_engine", "sqlalchemy"},
+        exclude={"pipeline/demo.py"},
+    )

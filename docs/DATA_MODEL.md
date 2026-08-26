@@ -2,7 +2,7 @@
 
 ## Data Model Specification
 
-Version: 1.0
+Version: 1.1
 
 ---
 
@@ -308,8 +308,8 @@ STRONG_BULLISH
 | `conviction` | float | 当前确信程度 |
 | `mention_count` | integer | 累计提及次数 |
 | `position_status` | string | 当前持仓状态 |
-| `last_opinion_time` | timestamp | 最近观点时间 |
-| `last_change_time` | timestamp | 最近状态变化时间 |
+| `last_activity_time` | timestamp | 最近观点时间 |
+| `last_material_change_time` | timestamp | 最近状态变化时间 |
 
 ### Attention Level
 
@@ -482,3 +482,47 @@ model_version
 > 某个投资者为什么在某一天改变了对某个资产的看法？
 
 这是本系统最核心的数据价值。
+
+---
+
+## Sprint 1F Temporal Processing Model
+
+### Analysis lifecycle
+
+The interpretation layer now distinguishes an analysis result from its zero-to-many Opinions:
+
+```text
+RawEvent
+    ↓
+EventAnalysis
+    ↓
+0..N Opinion
+```
+
+`EventAnalysis` is a recomputable derived result. Its identity is `event_id + analysis_version`, where `AnalysisSpec` centrally carries `analysis_version`, `model_version`, `prompt_version`, and `schema_version`.
+
+`EventAnalysis.status` is one of `SUCCESS`, `NO_OPINION`, `PARTIALLY_RESOLVED`, or `FAILED`. `NO_OPINION`, unresolved assets, and failures are persisted. Failed results are retryable and may be updated by a later attempt; this Sprint intentionally does not create an attempt-history table.
+
+New Opinions reference `EventAnalysis.id` through nullable `analysis_id`. The column remains nullable for legacy Opinions created before Sprint 1F; no synthetic historical EventAnalysis rows are created. All new Opinions written by `OpinionProcessingService` have a non-null `analysis_id`.
+
+### State projection and change ledger
+
+`InvestorAssetState` is the current projection. `InvestorAssetStateChange` is an append-only derived ledger because the projection cannot preserve `before`, `after`, transition evidence, or retry identity.
+
+A StateChange is idempotent on `triggering_opinion_id + state_policy_version`. It records `effective_time`, `calculated_at`, `before`, `after`, `source_event_ids`, and the centralized policy version (`state-v1`).
+
+`projection_changed` means any projection field changed. `material_change` means the current transition is `NEW_ATTENTION`, `OPINION_UPGRADE`, `OPINION_DOWNGRADE`, or `OPINION_REVERSAL`. A repeated direction with a new mention may have `projection_changed=true` and `material_change=false`.
+
+The state projection uses `last_activity_time` for the latest effective Opinion business time and `last_material_change_time` for the latest material transition business time. Neither field uses database write time or AI generation time.
+
+### Time semantics and replay
+
+- `as_of`: upper bound on fact-effective time, using `RawEvent.published_time`.
+- `generated_time`: time the extractor produced an Analysis/Opinion.
+- `calculated_at`: time the system persisted or calculated a derived result.
+
+Historical Asset Intelligence replays effective Opinion timelines through the deterministic State Reducer and does not mutate the current `InvestorAssetState`. This is fact-time replay using the current Analysis and Policy versions; it is not system-time reconstruction of what was known historically.
+
+### Signal boundary
+
+Signal remains outside Sprint 1F. When implemented, it must be an immutable derived snapshot with explicit `as_of`, `calculated_at`, engine version, confidence, and input identity. Existing Signal storage is not changed in this Sprint.

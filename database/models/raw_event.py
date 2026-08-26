@@ -11,6 +11,7 @@ from database.models._types import utc_now
 from database.models.enums import EventType
 
 if TYPE_CHECKING:
+    from database.models.event_analysis import EventAnalysis
     from database.models.investor import Investor
     from database.models.opinion import Opinion
 
@@ -42,6 +43,7 @@ class RawEvent(Base):
     )
 
     investor: Mapped["Investor"] = relationship(back_populates="raw_events")
+    analyses: Mapped[list["EventAnalysis"]] = relationship(back_populates="event")
     opinions: Mapped[list["Opinion"]] = relationship(back_populates="event")
 
 

@@ -1,6 +1,6 @@
 # Xueqiu Investor Intelligence System
 
-面向投资者行为变化的、数据源无关的研究情报系统。本仓库当前处于 Phase 0：Project Bootstrap。
+面向投资者行为变化的、数据源无关的研究情报系统。本仓库当前处于 Sprint 1F：Temporal & Processing Hardening。
 
 ## Local setup
 
@@ -58,3 +58,18 @@ Collector 默认通过 Playwright `channel="msedge"` 启动系统 Edge，无需�
 ```powershell
 python -m pipeline.demo
 ```
+
+## Sprint 1F status
+
+当前核心链路已离线跑通：
+
+```text
+RawEvent
+→ EventAnalysis
+→ Opinion
+→ InvestorAssetState
+→ InvestorAssetStateChange
+→ Historical / Current AssetIntelligenceSnapshot
+```
+
+Sprint 1F focuses on traceability, deterministic replay, retry-safe processing, and short database transactions. It does not enable a live LLM provider, Signal Engine, Scheduler, Dashboard, or Xueqiu verification bypass.

@@ -42,8 +42,8 @@ class InvestorAssetState(Base):
         default=PositionStatus.NO_POSITION,
         nullable=False,
     )
-    last_opinion_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_change_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_activity_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_material_change_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     investor: Mapped["Investor"] = relationship(back_populates="asset_states")
     asset: Mapped["Asset"] = relationship(back_populates="investor_states")

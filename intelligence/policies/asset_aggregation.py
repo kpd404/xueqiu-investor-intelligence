@@ -45,7 +45,7 @@ def aggregate_asset_intelligence(
                 direction=item.state.direction,
                 conviction=item.state.conviction,
                 mention_count=item.state.mention_count,
-                last_opinion_time=item.state.last_opinion_time,
+                last_activity_time=item.state.last_activity_time,
                 source_event_ids=source_event_ids,
             )
         )
