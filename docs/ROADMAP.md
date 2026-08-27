@@ -11,21 +11,30 @@
 - Sprint 1F — Temporal & Processing Hardening ✅
 - Sprint 2A Foundation — Offline architecture and collector foundation ✅
 - Sprint 2B — Real LLM Opinion Extraction ✅
-- Sprint 2B.1 — Generic OpenAI-Compatible Provider ← current
+- Sprint 2B.1 — Generic OpenAI-Compatible Provider ✅
+- Sprint 2C.1 — Following Feed Contracts & Architecture ✅
+- Sprint 2C.2 — Following Feed Browser Runtime ✅
+- Sprint 2C.3-A — Following Feed Ingestion Wiring ✅
+- Sprint 2C.3-B — Following Feed Real Smoke & Production Wiring ✅
 
 ## Current
 
-Scope:
+Sprint 2C is complete through the verified production wiring boundary:
 
-- Provider ID/model separation
-- OpenAI-compatible Responses API configuration
-- JSON Schema Structured Output portability
-- Provider capability validation
-- Deterministic provider-aware AnalysisSpec identity
-- Generic offline smoke and compatibility tests
+```text
+Manual Login
+→ Xueqiu Homepage Following Feed
+→ home_timeline
+→ FeedPostItem
+→ FeedIngestionService
+→ Investor + RawEvent
+```
 
-Sprint 2B.1 does not include Signal Engine, Scheduler, Dashboard, Portfolio, alerts, RAG, Agent,
-multi-model routing, fallback models, or Xueqiu verification bypass.
+The current runtime includes bounded batch capture, no-progress stopping, dry-run
+isolation, Investor identity reuse, RawEvent idempotency, and no Xueqiu
+verification bypass. Asset Resolution, LLM Analysis, Signal, Scheduler,
+Dashboard, Portfolio, alerts, RAG, and Agent workflows remain outside this
+completed boundary.
 
 ## Planned
 

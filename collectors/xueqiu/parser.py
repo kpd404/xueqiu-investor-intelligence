@@ -8,8 +8,9 @@ from zoneinfo import ZoneInfo
 
 from pydantic import JsonValue
 
-from collectors.xueqiu.contracts import ParsedXueqiuPost
+from collectors.xueqiu.contracts import FollowingFeedBatch, ParsedXueqiuPost
 from collectors.xueqiu.errors import ParseFailed
+from contracts import EventType, FeedPostItem, FeedPostKind
 
 XUEQIU_BASE_URL = "https://xueqiu.com"
 XUEQIU_TIMEZONE = ZoneInfo("Asia/Shanghai")
@@ -117,6 +118,157 @@ def extract_status_items(payload: Mapping[str, object]) -> list[Mapping[str, obj
             ):
                 items.append(candidate)
     return items
+
+
+class XueqiuFollowingFeedParser:
+    """Parse only the confirmed Following feed response container.
+
+    This parser intentionally does not perform recursive status discovery. The
+    browser/application layer must establish the Following UI context before
+    handing a response here.
+    """
+
+    def parse_payload(
+        self,
+        payload: Mapping[str, object],
+        *,
+        observed_at: datetime | None = None,
+        now: datetime | None = None,
+        batch_sequence: int | None = None,
+    ) -> FollowingFeedBatch:
+        raw_items = payload.get("home_timeline")
+        if not isinstance(raw_items, Sequence) or isinstance(raw_items, (str, bytes)):
+            raise ParseFailed("following feed payload is missing home_timeline")
+
+        observed_time = observed_at or datetime.now(UTC)
+        reference_time = now or observed_time
+        items: list[FeedPostItem] = []
+        for raw_item in raw_items:
+            if not isinstance(raw_item, Mapping):
+                raise ParseFailed("following feed item is not an object")
+            try:
+                items.append(self._parse_item(raw_item, now=reference_time))
+            except (KeyError, TypeError, ValueError, ParseFailed) as exc:
+                raise ParseFailed("invalid Following feed item") from exc
+
+        return FollowingFeedBatch(
+            items=tuple(items),
+            next_id=payload.get("next_id"),
+            next_max_id=payload.get("next_max_id"),
+            observed_at=observed_time,
+            batch_sequence=batch_sequence,
+        )
+
+    def parse_batch(
+        self,
+        payload: Mapping[str, object],
+        *,
+        observed_at: datetime | None = None,
+        now: datetime | None = None,
+        batch_sequence: int | None = None,
+    ) -> FollowingFeedBatch:
+        """Alias that makes the response-batch boundary explicit to callers."""
+
+        return self.parse_payload(
+            payload,
+            observed_at=observed_at,
+            now=now,
+            batch_sequence=batch_sequence,
+        )
+
+    @classmethod
+    def _parse_item(
+        cls,
+        item: Mapping[str, object],
+        *,
+        now: datetime,
+    ) -> FeedPostItem:
+        source_event_id = cls._required_identifier(item.get("id"), "status id")
+        author_id = cls._author_id(item)
+
+        source_text = item.get("text")
+        if not isinstance(source_text, str) or not source_text.strip():
+            source_text = item.get("description")
+        if not isinstance(source_text, str):
+            raise ParseFailed("following feed status has no top-level text")
+        content = html_to_text(source_text)
+        if not content:
+            raise ParseFailed("following feed status has blank content")
+
+        created_at = item.get("created_at")
+        if created_at is None:
+            created_at = item.get("timeBefore")
+        published_time = parse_xueqiu_time(created_at, now=now)
+
+        post_kind = cls._post_kind(item)
+        event_type = EventType.ARTICLE if post_kind is FeedPostKind.COLUMN else EventType.POST
+        target = item.get("target")
+        target_path = (
+            target if isinstance(target, str) and target else f"/{author_id}/{source_event_id}"
+        )
+
+        raw_data = dict(item)
+        raw_data["source_event_id"] = source_event_id
+        raw_data["post_kind"] = post_kind.value
+        raw_data["event_type"] = event_type.value
+
+        return FeedPostItem(
+            source_event_id=source_event_id,
+            author_id=author_id,
+            event_type=event_type,
+            post_kind=post_kind,
+            url=urljoin(XUEQIU_BASE_URL, target_path),
+            published_time=published_time,
+            content=content,
+            raw_data=raw_data,
+        )
+
+    @staticmethod
+    def _required_identifier(value: object, label: str) -> str:
+        if value is None or isinstance(value, bool):
+            raise ParseFailed(f"following feed item is missing {label}")
+        normalized = str(value).strip()
+        if not normalized:
+            raise ParseFailed(f"following feed item is missing {label}")
+        return normalized
+
+    @classmethod
+    def _author_id(cls, item: Mapping[str, object]) -> str:
+        value = item.get("user_id")
+        if value is None and isinstance(item.get("user"), Mapping):
+            value = item["user"].get("id")  # type: ignore[index,union-attr]
+        return cls._required_identifier(value, "author id")
+
+    @staticmethod
+    def _post_kind(item: Mapping[str, object]) -> FeedPostKind:
+        if item.get("is_column") is True:
+            return FeedPostKind.COLUMN
+
+        retweet_id = item.get("retweet_status_id")
+        has_retweet_id = retweet_id is not None and str(retweet_id).strip() not in {"", "0"}
+        if has_retweet_id or item.get("retweeted_status") is not None:
+            return FeedPostKind.REPOST
+
+        if retweet_id in {0, "0"} and item.get("retweeted_status") is None:
+            return FeedPostKind.ORIGINAL
+        return FeedPostKind.UNKNOWN
+
+
+def parse_following_feed_payload(
+    payload: Mapping[str, object],
+    *,
+    observed_at: datetime | None = None,
+    now: datetime | None = None,
+    batch_sequence: int | None = None,
+) -> FollowingFeedBatch:
+    """Functional entry point for the strict ``home_timeline`` parser."""
+
+    return XueqiuFollowingFeedParser().parse_payload(
+        payload,
+        observed_at=observed_at,
+        now=now,
+        batch_sequence=batch_sequence,
+    )
 
 
 class XueqiuPostParser:

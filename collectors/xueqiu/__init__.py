@@ -1,7 +1,7 @@
-from collectors.xueqiu.adapter import XueqiuAdapter
+from collectors.xueqiu.adapter import XueqiuAdapter, XueqiuFeedAdapter
 from collectors.xueqiu.auth import XueqiuAuthenticator
 from collectors.xueqiu.browser import PlaywrightXueqiuBrowser
-from collectors.xueqiu.contracts import ParsedXueqiuPost, XueqiuBrowserConfig
+from collectors.xueqiu.contracts import FollowingFeedBatch, ParsedXueqiuPost, XueqiuBrowserConfig
 from collectors.xueqiu.errors import (
     AuthenticationRequired,
     BrowserDependencyMissing,
@@ -11,11 +11,17 @@ from collectors.xueqiu.errors import (
     RateLimitedOrBlocked,
     XueqiuCollectorError,
 )
-from collectors.xueqiu.parser import XueqiuPostParser, parse_xueqiu_time
+from collectors.xueqiu.parser import (
+    XueqiuFollowingFeedParser,
+    XueqiuPostParser,
+    parse_following_feed_payload,
+    parse_xueqiu_time,
+)
 
 __all__ = [
     "AuthenticationRequired",
     "BrowserDependencyMissing",
+    "FollowingFeedBatch",
     "NavigationFailed",
     "NoContent",
     "ParseFailed",
@@ -23,9 +29,12 @@ __all__ = [
     "PlaywrightXueqiuBrowser",
     "RateLimitedOrBlocked",
     "XueqiuAdapter",
+    "XueqiuFeedAdapter",
     "XueqiuAuthenticator",
     "XueqiuBrowserConfig",
     "XueqiuCollectorError",
+    "XueqiuFollowingFeedParser",
     "XueqiuPostParser",
     "parse_xueqiu_time",
+    "parse_following_feed_payload",
 ]

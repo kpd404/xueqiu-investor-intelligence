@@ -10,7 +10,13 @@ from contracts.analysis import (
     StateChangeCreate,
     StateChangeView,
 )
-from contracts.collection import CollectionRequest
+from contracts.collection import (
+    CollectionRequest,
+    FeedCollectionRequest,
+    FeedPostItem,
+    FeedPostKind,
+    PostKind,
+)
 from contracts.enums import (
     AttentionLevel,
     ConsensusDirection,
@@ -69,6 +75,9 @@ __all__ = [
     "AssetIntelligenceSnapshot",
     "AttentionLevel",
     "CollectionRequest",
+    "FeedCollectionRequest",
+    "FeedPostItem",
+    "FeedPostKind",
     "ConsensusDirection",
     "LLMApiStyle",
     "LLMProviderConfig",
@@ -90,6 +99,7 @@ __all__ = [
     "OpinionTimelineEntry",
     "OpinionWriteResult",
     "PositionStatus",
+    "PostKind",
     "InvestorStateAggregationInput",
     "InvestorStateContribution",
     "ProcessRawEventCommand",

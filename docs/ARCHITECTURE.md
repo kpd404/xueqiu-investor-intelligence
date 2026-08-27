@@ -2,7 +2,7 @@
 
 ## System Architecture Specification
 
-Version: 1.1
+Version: 1.3
 
 ---
 
@@ -135,7 +135,82 @@ Xueqiu Adapter 只负责：
 - 投资判断
 - Signal 计算
 
-## 4.4 Browser Automation Rules
+## 4.4 Following Feed Architecture (Sprint 2C.1)
+
+The formal Xueqiu collection path is the authenticated user's homepage and its
+exact `关注` (Following) Feed tab. A profile URL, the `关注97` management page,
+`关注精选`, recommendations, hot lists, and watchlists are different contexts
+and must not enter this ingestion path.
+
+```text
+XueqiuAuthenticator
+        ↓
+PlaywrightXueqiuBrowser
+        ↓
+Following UI Context
+        ↓
+Following Feed Response Capture
+        ↓
+GET /v4/statuses/home_timeline.json
+        ↓
+payload["home_timeline"]
+        ↓
+XueqiuFollowingFeedParser
+        ↓
+FeedPostItem
+        ↓
+FeedIngestionService
+        ↓
+Investor + RawEvent
+```
+
+Only the conjunction of the following three observations permits a response to
+enter Following Feed ingestion:
+
+1. the browser is in the Following UI context;
+2. the response is the confirmed `home_timeline` endpoint; and
+3. the payload contains the `home_timeline` container.
+
+The parser reads only `payload["home_timeline"]`; it must not recursively scan
+other top-level arrays for status-like objects. Recommendation cards, hot-feed
+items, watchlist items, and `关注精选` content are excluded by context, not by
+guessing from an individual item's shape.
+
+Following responses are consumed as batches. A batch limit counts valid response
+batches, not scroll gestures or page numbers. Pagination is driven by the
+observed response cursor fields (for example `next_max_id` and a subsequent
+`max_id` request), and a scroll is not assumed to produce exactly one batch.
+
+Every feed item is retained as a fact. Original posts, reposts, and columns are
+not filtered in the Collector layer. `FeedPostItem.content` contains only the
+current top-level status text. When a repost contains a nested
+`retweeted_status`, that provenance remains in `RawEvent.raw_data`; the nested
+text must never be concatenated into the current author's content.
+
+## 4.4.1 Following Feed Runtime and Ingestion Boundary (Sprint 2C.3)
+
+`PlaywrightXueqiuBrowser` and `XueqiuFeedAdapter` remain persistence-free. They
+return bounded, de-duplicated `FeedPostItem` values to the application-layer
+`FeedIngestionService`. Only that service may resolve
+`platform + platform_user_id` to an `Investor`, build a `RawEventDTO`, and call
+the database repositories.
+
+```text
+PlaywrightXueqiuBrowser
+        ↓
+XueqiuFeedAdapter
+        ↓
+FeedIngestionService  (application boundary)
+        ↓
+InvestorRepository + RawEventRepository
+```
+
+The smoke runner supports a real browser dry-run. Dry-run executes the full
+Following UI, response capture, parser, and adapter path but does not open a
+database session or commit. Normal mode performs only a bounded ingestion run;
+the same source event remains idempotent through the existing RawEvent hash.
+
+## 4.5 Browser Automation Rules
 
 Playwright 相关代码必须限制在：
 

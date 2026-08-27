@@ -1,8 +1,30 @@
 from datetime import datetime
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, field_validator
 
-from contracts import EventType
+from contracts import EventType, FeedPostItem
+
+
+class FollowingFeedBatch(BaseModel):
+    """A validated response batch from the Xueqiu Following feed."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: tuple[FeedPostItem, ...] = ()
+    next_id: str | None = None
+    next_max_id: str | None = None
+    observed_at: AwareDatetime
+    batch_sequence: int | None = Field(default=None, ge=1)
+
+    @field_validator("next_id", "next_max_id", mode="before")
+    @classmethod
+    def normalize_cursor(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            raise ValueError("feed cursor must not be boolean")
+        normalized = str(value).strip()
+        return normalized or None
 
 
 class ParsedXueqiuPost(BaseModel):
@@ -27,6 +49,7 @@ class XueqiuBrowserConfig(BaseModel):
     headless: bool = False
     navigation_timeout_ms: int = Field(default=30_000, ge=1_000)
     response_wait_ms: int = Field(default=5_000, ge=0)
+    max_scroll_attempts_without_progress: int = Field(default=3, ge=1)
 
 
 def utc_now() -> datetime:

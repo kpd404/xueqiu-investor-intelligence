@@ -66,6 +66,7 @@ def test_database_configuration_does_not_depend_on_backend(database_module: str)
         "config",
         "contracts",
         "intelligence",
+        "ingestion",
         "pipeline",
         "signal_engine",
     ],
@@ -97,6 +98,7 @@ def test_pyproject_discovers_layer_packages() -> None:
         "contracts*",
         "database*",
         "intelligence*",
+        "ingestion*",
         "pipeline*",
         "prompts*",
         "signal_engine*",
@@ -117,6 +119,12 @@ def test_xueqiu_adapter_does_not_cross_service_boundaries() -> None:
     assert imports.isdisjoint(
         {"ai", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"}
     )
+
+
+def test_feed_ingestion_is_the_persistence_application_boundary() -> None:
+    imports = imported_roots("ingestion/following_feed.py")
+    assert {"database", "sqlalchemy"} <= imports
+    assert imports.isdisjoint({"ai", "intelligence", "signal", "signal_engine"})
 
 
 @pytest.mark.parametrize(

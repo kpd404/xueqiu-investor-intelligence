@@ -2,7 +2,7 @@
 
 ## Data Model Specification
 
-Version: 1.1
+Version: 1.2
 
 ---
 
@@ -238,6 +238,16 @@ NEWS_REFERENCE
 
 - 错误：更新原文。
 - 正确：新增事件。
+
+### Following Feed provenance
+
+For the Xueqiu Following Feed, the top-level status `id` is retained as
+`RawEvent.raw_data["source_event_id"]`; it is the current feed event identity,
+not `retweet_status_id`. A repost keeps its nested `retweet_status_id` and
+`retweeted_status` object in `raw_data`. The current author's top-level status
+text remains the only `RawEvent.content`; the nested repost text is not merged
+into it. No dedicated database column is required for this source identity in
+the current MVP.
 
 ## 3.4 Opinion
 

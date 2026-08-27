@@ -1,10 +1,51 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
 
-from collectors.xueqiu.browser import XueqiuPageDataSource
+from collectors.xueqiu.browser import XueqiuFollowingFeedDataSource, XueqiuPageDataSource
+from collectors.xueqiu.contracts import FollowingFeedBatch
 from collectors.xueqiu.errors import NoContent
 from collectors.xueqiu.parser import XueqiuPostParser
-from contracts import CollectionRequest, RawEventDTO
+from contracts import CollectionRequest, FeedCollectionRequest, FeedPostItem, RawEventDTO
+
+
+class XueqiuFeedAdapter:
+    """Expose Following Feed items without persistence or business processing."""
+
+    source = "xueqiu"
+
+    def __init__(self, browser: XueqiuFollowingFeedDataSource) -> None:
+        self._browser = browser
+
+    async def collect(self, request: FeedCollectionRequest) -> AsyncIterator[FeedPostItem]:
+        batches = await self._browser.fetch_following_feed_batches(request)
+        async for item in self.collect_batches(batches, request):
+            yield item
+
+    async def collect_batches(
+        self,
+        batches: Sequence[FollowingFeedBatch],
+        request: FeedCollectionRequest,
+    ) -> AsyncIterator[FeedPostItem]:
+        """Consume already captured batches without performing another browser call."""
+
+        seen_source_event_ids: set[str] = set()
+        for batch in batches[: request.max_batches]:
+            for item in batch.items:
+                if item.source_event_id in seen_source_event_ids:
+                    continue
+                if request.only_author_ids and item.author_id not in request.only_author_ids:
+                    continue
+                if not self._within_window(item.published_time, request):
+                    continue
+                seen_source_event_ids.add(item.source_event_id)
+                yield item
+
+    @staticmethod
+    def _within_window(published_time: datetime, request: FeedCollectionRequest) -> bool:
+        normalized = published_time.astimezone(UTC)
+        if request.since is not None and normalized < request.since.astimezone(UTC):
+            return False
+        return request.until is None or normalized <= request.until.astimezone(UTC)
 
 
 class XueqiuAdapter:

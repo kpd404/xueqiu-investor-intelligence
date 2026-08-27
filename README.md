@@ -25,7 +25,7 @@ ruff check .
 API 启动后可访问 `GET /health` 检查应用与数据库连通性。
 
 
-## Xueqiu post collector smoke test
+## Xueqiu Following Feed collector
 
 首次使用时启动可见浏览器，并在浏览器中手动完成登录：
 
@@ -33,22 +33,48 @@ API 启动后可访问 `GET /health` 检查应用与数据库连通性。
 python -m collectors.xueqiu.smoke --authenticate
 ```
 
-确认数据库中已存在对应 Investor 后，采集最多 5 条原创公开帖子：
+Following Feed 运行路径固定为：
+
+```text
+用户本人登录
+→ https://xueqiu.com/
+→ 首页精确「关注」Tab
+→ /v4/statuses/home_timeline.json
+→ home_timeline
+→ FeedPostItem
+→ Investor + RawEvent
+```
+
+先执行真实 dry-run（会启动 Playwright，但不会打开数据库或写入任何数据）：
+
+```powershell
+python -m collectors.xueqiu.smoke --feed --headless --max-batches 1 --dry-run
+```
+
+确认 dry-run 输出正常后，再执行小批量入库：
+
+```powershell
+python -m collectors.xueqiu.smoke --feed --headless --max-batches 1
+```
+
+只采集指定雪球作者时，使用 Following Feed 返回的 platform user ID：
 
 ```powershell
 python -m collectors.xueqiu.smoke `
-  --investor-id <INVESTOR_UUID> `
-  --platform-user-id <XUEQIU_USER_ID> `
-  --homepage-url https://xueqiu.com/u/<XUEQIU_USER_ID> `
-  --limit 5
+  --feed `
+  --headless `
+  --max-batches 1 `
+  --only-investor-ids <XUEQIU_AUTHOR_ID_1> <XUEQIU_AUTHOR_ID_2> `
+  --dry-run
 ```
 
-Collector 默认通过 Playwright `channel="msedge"` 启动系统 Edge，无需配置固定路径。
-如显式设置 `XUEQIU_BROWSER_EXECUTABLE_PATH`，该路径会覆盖
-`XUEQIU_BROWSER_CHANNEL`。
-认证状态默认保存在已被 Git 忽略的 `.local/xueqiu/storage_state.json`。
+`max-batches` 表示最多接收的有效 response batch，不表示滚动次数。
+dry-run 会输出 batch、received、unique、duplicates 和少量脱敏帖子摘要；正式模式才会
+创建或复用 Investor 并写入 RawEvent。认证状态默认保存在已被 Git 忽略的
+`.local/xueqiu/storage_state.json`。
 
-如果雪球显示登录、滑动验证或访问限制页面，Collector 会停止并返回明确错误，
+Collector 默认通过 Playwright `channel="msedge"` 启动系统 Edge，无需配置固定路径。
+如雪球显示登录失效、滑动验证或访问限制页面，Collector 会停止并返回明确错误，
 不会尝试绕过。
 
 ## Core intelligence pipeline demo
