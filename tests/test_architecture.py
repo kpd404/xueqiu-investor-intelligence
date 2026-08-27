@@ -98,6 +98,7 @@ def test_pyproject_discovers_layer_packages() -> None:
         "database*",
         "intelligence*",
         "pipeline*",
+        "prompts*",
         "signal_engine*",
     } <= includes
 
@@ -177,6 +178,60 @@ def test_extractor_package_boundaries_are_provider_neutral() -> None:
         "ai/extractors",
         {"database", "intelligence", "signal", "signal_engine", "sqlalchemy"},
     )
+
+
+def test_openai_sdk_is_confined_to_provider_adapter() -> None:
+    forbidden = {"openai"}
+    checked_packages = (
+        "ai/services",
+        "contracts",
+        "intelligence",
+        "signal_engine",
+        "pipeline",
+        "database/models",
+    )
+    violations = {
+        module: sorted(imported_roots(module) & forbidden)
+        for package in checked_packages
+        for module in package_modules(package)
+        if imported_roots(module) & forbidden
+    }
+    assert violations == {}
+
+
+def test_openai_provider_adapter_is_the_only_sdk_boundary() -> None:
+    assert "openai" in imported_roots("ai/extractors/openai_compatible.py")
+
+
+def test_core_layers_have_no_provider_name_special_cases() -> None:
+    forbidden_tokens = {
+        "volcengine",
+        "deepseek",
+        "glm",
+        "openrouter",
+        "siliconflow",
+    }
+    checked_packages = (
+        "ai/services",
+        "contracts",
+        "intelligence",
+        "pipeline",
+        "database/models",
+    )
+    violations = {
+        module: sorted(
+            token
+            for token in forbidden_tokens
+            if token in (PROJECT_ROOT / module).read_text(encoding="utf-8").lower()
+        )
+        for package in checked_packages
+        for module in package_modules(package)
+        if any(
+            token in (PROJECT_ROOT / module).read_text(encoding="utf-8").lower()
+            for token in forbidden_tokens
+        )
+    }
+    assert violations == {}
 
 
 def test_ai_service_package_does_not_cross_state_or_signal_boundaries() -> None:

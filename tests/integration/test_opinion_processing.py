@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ai import MockOpinionExtractor, OpinionProcessingService
 from collectors import ManualImportAdapter
-from contracts import CollectionRequest, OpinionDirection, OpinionProcessingStatus
+from contracts import (
+    CollectionRequest,
+    OpinionDirection,
+    OpinionExtractionResult,
+    OpinionProcessingStatus,
+    UnresolvedAssetHint,
+)
 from database.models import Asset, Investor, Opinion, RawEvent
 from database.repositories import OpinionRepository, RawEventRepository
 from database.unit_of_work import SqlAlchemyOpinionUnitOfWork
@@ -52,6 +58,17 @@ def seed_raw_event(
         raw_pipeline = DataPipeline(RawEventRepository(session), session)
         raw_result = asyncio.run(raw_pipeline.run(adapter, request))
         return investor.id, raw_result.events[0].event_id, asset_id
+
+
+class AmbiguousAssetExtractor:
+    async def extract(self, _event: object) -> OpinionExtractionResult:
+        return OpinionExtractionResult(
+            investment_related=True,
+            model_version=MODEL_VERSION,
+            unresolved_assets=(
+                UnresolvedAssetHint(asset_name="这家AI应用公司", reason="AMBIGUOUS_ASSET"),
+            ),
+        )
 
 
 def build_service(
@@ -132,6 +149,33 @@ def test_unresolved_asset_is_reported_and_not_created(
     assert len(result.unresolved_assets) == 1
     assert result.unresolved_assets[0].symbol == "00700"
     assert result.unresolved_assets[0].market == "HK"
+
+    with db_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Asset)) == 0
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 0
+
+
+def test_ambiguous_asset_hint_is_retained_without_creating_asset(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    _, event_id, _ = seed_raw_event(
+        db_session_factory,
+        content="这家AI应用公司的商业化速度比我预期快很多。",
+        create_asset=False,
+    )
+    service = OpinionProcessingService(
+        extractor=AmbiguousAssetExtractor(),
+        unit_of_work_factory=lambda: SqlAlchemyOpinionUnitOfWork(db_session_factory),
+    )
+
+    result = asyncio.run(service.process(event_id, MODEL_VERSION))
+
+    assert result.status == OpinionProcessingStatus.PARTIALLY_RESOLVED
+    assert result.opinion_ids == ()
+    assert len(result.unresolved_assets) == 1
+    assert result.unresolved_assets[0].asset_name == "这家AI应用公司"
+    assert result.unresolved_assets[0].symbol is None
+    assert result.unresolved_assets[0].market is None
 
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Asset)) == 0

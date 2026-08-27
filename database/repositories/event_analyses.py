@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -38,6 +39,7 @@ class EventAnalysisRepository:
                 calculated_at=command.calculated_at,
                 confidence=command.confidence,
                 structured_output=dict(command.structured_output),
+                provider_metadata=dict(command.provider_metadata),
                 error_code=command.error_code,
             )
             try:
@@ -62,6 +64,7 @@ class EventAnalysisRepository:
         entity.confidence = command.confidence
         entity.structured_output = dict(command.structured_output)
         entity.error_code = command.error_code
+        entity.provider_metadata = dict(command.provider_metadata)
         self._session.flush()
         return self._to_view(entity)
 
@@ -74,6 +77,21 @@ class EventAnalysisRepository:
 
     @classmethod
     def _to_view(cls, entity: EventAnalysis) -> EventAnalysisView:
+        stored_spec = entity.structured_output.get("analysis_spec")
+        provider_metadata = entity.provider_metadata or {}
+        provider_id = cls._string_value(
+            stored_spec,
+            "provider_id",
+            provider_metadata.get("provider"),
+            "legacy",
+        )
+        analysis_policy_version = cls._string_value(
+            stored_spec,
+            "analysis_policy_version",
+            None,
+            "legacy:unspecified",
+        )
+
         return EventAnalysisView(
             id=entity.id,
             event_id=entity.event_id,
@@ -82,6 +100,8 @@ class EventAnalysisRepository:
                 "model_version": entity.model_version,
                 "prompt_version": entity.prompt_version,
                 "schema_version": entity.schema_version,
+                "provider_id": provider_id,
+                "analysis_policy_version": analysis_policy_version,
             },
             status=entity.status,
             investment_related=entity.investment_related,
@@ -90,7 +110,23 @@ class EventAnalysisRepository:
             confidence=entity.confidence,
             structured_output=entity.structured_output,
             error_code=entity.error_code,
+            provider_metadata=provider_metadata,
         )
+
+    @staticmethod
+    def _string_value(
+        source: object,
+        key: str,
+        fallback: object,
+        default: str,
+    ) -> str:
+        if isinstance(source, Mapping):
+            value = source.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        if isinstance(fallback, str) and fallback.strip():
+            return fallback.strip()
+        return default
 
     @staticmethod
     def _as_utc(value: datetime) -> datetime:

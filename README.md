@@ -1,6 +1,6 @@
 # Xueqiu Investor Intelligence System
 
-面向投资者行为变化的、数据源无关的研究情报系统。本仓库当前处于 Sprint 1F：Temporal & Processing Hardening。
+面向投资者行为变化的、数据源无关的研究情报系统。本仓库当前处于 Sprint 2B.1：Generic OpenAI-Compatible Provider。
 
 ## Local setup
 
@@ -59,7 +59,45 @@ Collector 默认通过 Playwright `channel="msedge"` 启动系统 Edge，无需�
 python -m pipeline.demo
 ```
 
-## Sprint 1F status
+## Generic LLM opinion extraction smoke test
+
+系统支持 OpenAI-compatible Responses API providers。离线测试使用 Fake Client，不会访问公网或消耗
+token。真实 smoke test 只从通用环境配置读取，不会回退到 Mock：
+
+```powershell
+$env:LLM_PROVIDER_ID="example-provider"
+$env:LLM_BASE_URL="https://llm.example.com/v1"
+$env:LLM_API_KEY="<secret>"
+$env:LLM_MODEL="<provider-model-id>"
+$env:LLM_API_STYLE="responses"
+$env:LLM_STRUCTURED_OUTPUT="json_schema"
+$env:LLM_TIMEOUT_SECONDS="60"
+$env:LLM_MAX_RETRIES="2"
+python -m ai.smoke
+```
+
+例如可以将 `LLM_PROVIDER_ID`、`LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL` 替换为任意兼容服务，
+不需要修改 Python 代码。缺少必填配置时命令会返回 `CONFIGURATION_ERROR`，不会打印、保存或提交
+API Key。建议使用本地 `.env` 时确认该文件已被 `.gitignore` 忽略。
+
+Provider 使用版本化 Prompt `opinion-extraction-v1` 和结构化
+`OpinionExtractionResult`，只抽取 RawEvent 文本中的事件级观点；State、Consensus、
+Signal 等仍由确定性领域层计算。Provider 错误会区分认证、限流、超时、不可用和结构化
+输出失败，并标记是否可重试。
+
+当前核心链路：
+
+```text
+RawEvent
+→ EventAnalysis
+→ Opinion
+→ InvestorAssetState
+→ InvestorAssetStateChange
+→ Historical / Current AssetIntelligenceSnapshot
+```
+
+
+## Project status (Sprint 2B.1)
 
 当前核心链路已离线跑通：
 
@@ -72,4 +110,6 @@ RawEvent
 → Historical / Current AssetIntelligenceSnapshot
 ```
 
-Sprint 1F focuses on traceability, deterministic replay, retry-safe processing, and short database transactions. It does not enable a live LLM provider, Signal Engine, Scheduler, Dashboard, or Xueqiu verification bypass.
+Sprint 2B.1 keeps traceability, deterministic replay, retry-safe processing, and short database transactions. The
+generic OpenAI-compatible Provider requires explicit configuration; Signal Engine, Scheduler, Dashboard, and
+Xueqiu verification bypass remain out of scope.

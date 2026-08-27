@@ -488,3 +488,27 @@ The application Pipeline returns a stable `ProcessingOutcome`: `SUCCEEDED`, `PAR
 ### Explicit non-goals
 
 Sprint 1F does not implement Real LLM providers, Prompt Registry, Signal Score, Research Candidate, Scheduler, Job/Lease/Heartbeat, Dashboard, Portfolio, Alerts, RAG, Backtesting, or Xueqiu verification bypass.
+
+## Sprint 2B.1 Generic LLM Provider Boundary
+
+The Investment Understanding layer uses one provider-neutral adapter:
+
+```text
+OpinionExtractor
+├── MockOpinionExtractor
+└── OpenAICompatibleOpinionExtractor
+```
+
+The adapter treats the OpenAI Python SDK as a protocol client. `LLMProviderConfig` supplies the
+provider ID, public base URL, API key, model, Responses API style, JSON Schema mode, timeout, retry
+limit, and the small capability profile. Provider names and model names are never special-cased in
+business code.
+
+Structured output uses the standard Responses `text.format.type=json_schema` request and validates the
+returned JSON with the shared Pydantic `OpinionExtractionResult`. The adapter does not use Chat
+Completions, free-text JSON fallback, tool calling, or provider-specific reasoning fields.
+
+`AnalysisSpec.analysis_version` is a deterministic identity derived from provider ID, model, prompt
+version, schema version, and analysis policy version. Runtime credentials and transport settings are
+excluded. `EventAnalysis.provider_metadata` remains the only persistence extension for provider/base
+URL/response/usage metadata; no new provider table is introduced.

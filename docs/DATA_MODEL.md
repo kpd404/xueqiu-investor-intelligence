@@ -526,3 +526,21 @@ Historical Asset Intelligence replays effective Opinion timelines through the de
 ### Signal boundary
 
 Signal remains outside Sprint 1F. When implemented, it must be an immutable derived snapshot with explicit `as_of`, `calculated_at`, engine version, confidence, and input identity. Existing Signal storage is not changed in this Sprint.
+
+## Sprint 2B.1 Provider-aware analysis identity
+
+`AnalysisSpec` now distinguishes the configured `provider_id` from the requested `model_version` and
+also carries `analysis_policy_version`. For the generic Responses + JSON Schema adapter, the
+`analysis_version` is derived from a canonical JSON payload containing:
+
+```text
+provider_id + model + prompt_version + schema_version + analysis_policy_version
+```
+
+The digest excludes API keys, base URL, timeout, retry count, timestamps, response IDs, and random
+values. This keeps `event_id + analysis_version` idempotent while allowing multiple providers or models
+to produce separate `EventAnalysis` rows for one RawEvent.
+
+Provider response identity and usage are stored in the existing nullable
+`event_analyses.provider_metadata` JSON field. No provider-specific table is introduced. A generic
+`unresolved_assets` hint may preserve an ambiguous textual asset reference without creating an `Asset`.

@@ -41,6 +41,7 @@ class EventAnalysis(Base):
     )
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     structured_output: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    provider_metadata: Mapped[dict[str, object] | None] = mapped_column(JSON)
     error_code: Mapped[str | None] = mapped_column(String(255))
 
     event: Mapped["RawEvent"] = relationship(back_populates="analyses")

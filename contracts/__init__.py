@@ -1,6 +1,8 @@
 """Layer-neutral data contracts shared across the pipeline."""
 
 from contracts.analysis import (
+    ANALYSIS_POLICY_VERSION,
+    LEGACY_PROVIDER_ID,
     AnalysisSpec,
     EventAnalysisCreate,
     EventAnalysisStatus,
@@ -29,6 +31,7 @@ from contracts.opinion import (
     OpinionProcessingStatus,
     OpinionWriteResult,
     UnresolvedAsset,
+    UnresolvedAssetHint,
 )
 from contracts.processing import (
     AnalysisProcessingError,
@@ -39,6 +42,14 @@ from contracts.processing import (
     ProcessingStage,
     ProcessRawEventCommand,
     RawEventNotFoundError,
+)
+from contracts.provider import (
+    LLMApiStyle,
+    LLMProviderConfig,
+    LLMProviderError,
+    ProviderCapabilities,
+    ProviderErrorCode,
+    StructuredOutputMode,
 )
 from contracts.raw_event import RawEventDTO, RawEventView, RawEventWriteResult
 from contracts.state import (
@@ -51,6 +62,7 @@ from contracts.state import (
 )
 
 __all__ = [
+    "ANALYSIS_POLICY_VERSION",
     "AnalysisProcessingError",
     "AnalysisSpec",
     "AssetOpinionExtraction",
@@ -58,6 +70,11 @@ __all__ = [
     "AttentionLevel",
     "CollectionRequest",
     "ConsensusDirection",
+    "LLMApiStyle",
+    "LLMProviderConfig",
+    "LLMProviderError",
+    "ProviderCapabilities",
+    "ProviderErrorCode",
     "CoreProcessingFailureCode",
     "CoreProcessingResult",
     "CoreProcessingWarning",
@@ -89,5 +106,8 @@ __all__ = [
     "StateTransitionType",
     "StateUpdateResult",
     "InvestorAssetStateSnapshot",
+    "LEGACY_PROVIDER_ID",
     "UnresolvedAsset",
+    "UnresolvedAssetHint",
+    "StructuredOutputMode",
 ]

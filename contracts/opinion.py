@@ -8,6 +8,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     field_validator,
     model_validator,
 )
@@ -50,6 +51,17 @@ class AssetOpinionExtraction(BaseModel):
         return value.upper()
 
 
+class UnresolvedAssetHint(BaseModel):
+    """Textual asset reference that is not safe to resolve to an Asset yet."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    asset_name: str = Field(min_length=1, max_length=255)
+    symbol: str | None = Field(default=None, max_length=64)
+    market: str | None = Field(default=None, max_length=32)
+    reason: str = Field(default="NOT_FOUND_OR_AMBIGUOUS", min_length=1, max_length=255)
+
+
 class OpinionExtractionResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -57,11 +69,17 @@ class OpinionExtractionResult(BaseModel):
     opinions: tuple[AssetOpinionExtraction, ...] = ()
     model_version: str = Field(min_length=1, max_length=255)
     analysis_spec: AnalysisSpec | None = None
+    # Provider metadata is attached after model parsing; keep the model schema closed.
+    provider_metadata: dict[str, JsonValue] = Field(
+        default_factory=dict,
+        json_schema_extra={"additionalProperties": False},
+    )
+    unresolved_assets: tuple[UnresolvedAssetHint, ...] = ()
 
     @model_validator(mode="after")
     def validate_opinion_consistency(self) -> Self:
-        if self.investment_related != bool(self.opinions):
-            raise ValueError("investment_related must match whether opinions are present")
+        if self.investment_related != bool(self.opinions or self.unresolved_assets):
+            raise ValueError("investment_related must match opinions or unresolved assets")
         identities = [(opinion.market, opinion.symbol) for opinion in self.opinions]
         if len(identities) != len(set(identities)):
             raise ValueError("duplicate market/symbol opinions are not allowed")
@@ -103,10 +121,10 @@ class OpinionWriteResult(BaseModel):
 class UnresolvedAsset(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    asset_name: str
-    symbol: str
-    market: str
-    reason: str = "NOT_FOUND_OR_AMBIGUOUS"
+    asset_name: str = Field(min_length=1, max_length=255)
+    symbol: str | None = Field(default=None, max_length=64)
+    market: str | None = Field(default=None, max_length=32)
+    reason: str = Field(default="NOT_FOUND_OR_AMBIGUOUS", min_length=1, max_length=255)
 
 
 class OpinionProcessingStatus(StrEnum):

@@ -121,13 +121,28 @@ class OpinionProcessingService:
                 )
         except Exception as exc:
             self._persist_failure(event.id, spec, exc)
+            retryable = getattr(
+                exc,
+                "retryable",
+                not isinstance(exc, ExtractorModelVersionMismatchError),
+            )
+            error_code = getattr(exc, "code", type(exc).__name__)
             raise AnalysisProcessingError(
                 f"analysis failed: {type(exc).__name__}: {exc}",
-                retryable=not isinstance(exc, ExtractorModelVersionMismatchError),
+                retryable=retryable,
+                error_code=str(error_code),
             ) from exc
 
         now = utc_now()
-        unresolved_assets: list[UnresolvedAsset] = []
+        unresolved_assets: list[UnresolvedAsset] = [
+            UnresolvedAsset(
+                asset_name=hint.asset_name,
+                symbol=hint.symbol,
+                market=hint.market,
+                reason=hint.reason,
+            )
+            for hint in getattr(extraction, "unresolved_assets", ())
+        ]
         commands: list[OpinionCreate] = []
         with self._unit_of_work_factory() as write_unit_of_work:
             persisted_event = write_unit_of_work.raw_events.get_view(event_id)
@@ -168,7 +183,8 @@ class OpinionProcessingService:
                 )
 
             status = self._analysis_status(extraction.investment_related, unresolved_assets)
-            structured_output = extraction.model_dump(mode="json")
+            structured_output = extraction.model_dump(mode="json", exclude={"provider_metadata"})
+            structured_output["analysis_spec"] = spec.model_dump(mode="json")
             structured_output["unresolved_assets"] = [
                 item.model_dump(mode="json") for item in unresolved_assets
             ]
@@ -182,6 +198,7 @@ class OpinionProcessingService:
                     calculated_at=now,
                     confidence=self._analysis_confidence(extraction),
                     structured_output=structured_output,
+                    provider_metadata=extraction.provider_metadata,
                 )
             )
             commands = [
@@ -218,9 +235,12 @@ class OpinionProcessingService:
                     confidence=0.0,
                     structured_output={
                         "error_type": type(error).__name__,
+                        "analysis_spec": spec.model_dump(mode="json"),
+                        "error_code": str(getattr(error, "code", type(error).__name__)),
                         "error_message": str(error),
+                        "retryable": bool(getattr(error, "retryable", False)),
                     },
-                    error_code=type(error).__name__,
+                    error_code=str(getattr(error, "code", type(error).__name__)),
                 )
             )
             unit_of_work.commit()

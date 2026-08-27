@@ -76,9 +76,16 @@ class RawEventNotFoundError(LookupError):
 
 
 class AnalysisProcessingError(RuntimeError):
-    def __init__(self, message: str, *, retryable: bool = True) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = True,
+        error_code: str = "ANALYSIS_FAILED",
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.error_code = error_code
 
 
 class CoreProcessingWarning(BaseModel):

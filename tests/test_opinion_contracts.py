@@ -7,6 +7,7 @@ from contracts import (
     AssetOpinionExtraction,
     OpinionDirection,
     OpinionExtractionResult,
+    UnresolvedAssetHint,
 )
 
 
@@ -55,3 +56,22 @@ def test_no_investment_opinion_is_a_valid_result() -> None:
     )
 
     assert result.opinions == ()
+
+
+def test_ambiguous_investment_asset_is_preserved_as_unresolved_hint() -> None:
+    result = OpinionExtractionResult(
+        investment_related=True,
+        opinions=(),
+        unresolved_assets=(
+            UnresolvedAssetHint(
+                asset_name="这家AI应用公司",
+                symbol=None,
+                market=None,
+                reason="AMBIGUOUS_ASSET",
+            ),
+        ),
+        model_version="mock-opinion-v1",
+    )
+
+    assert result.unresolved_assets[0].symbol is None
+    assert result.unresolved_assets[0].market is None
