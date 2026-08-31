@@ -2,7 +2,7 @@
 
 ## Data Model Specification
 
-Version: 1.2
+Version: 1.3
 
 ---
 
@@ -189,6 +189,34 @@ Signal
 }
 ```
 
+### Asset identity aliases
+
+`Asset` stores one canonical `(market, symbol, name)` identity. It does not have
+enough structure to store alternate names, display formats, or multiple
+candidate matches. `AssetAlias` is therefore the minimal separate identity
+table for deterministic resolution.
+
+### AssetAlias
+
+### Table
+
+`asset_aliases`
+
+### Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | UUID | Primary Key |
+| `asset_id` | UUID | Canonical Asset |
+| `alias` | string | Original alternate identity |
+| `normalized_alias` | string | Deterministically normalized identity |
+| `alias_type` | string | `NAME`, `SYMBOL`, or future explicit type |
+| `market` | string nullable | Optional canonical market scope |
+
+The unique identity is `(asset_id, normalized_alias)`. The same alias may
+intentionally point to multiple assets so a future Resolver can return
+`AMBIGUOUS` candidates instead of guessing.
+
 ## 3.3 RawEvent
 
 ### Purpose
@@ -254,6 +282,18 @@ the current MVP.
 ### Purpose
 
 来源于 `RawEvent` 的 AI 结构化投资观点。
+
+### Asset resolution boundary
+
+The extraction layer produces provider-neutral identity hints. A deterministic
+resolution layer may normalize those hints and consult canonical Assets and
+AssetAliases, but it must never create an Asset from an unverified mention.
+
+Resolution outcomes are `RESOLVED`, `UNRESOLVED`, `AMBIGUOUS`, and `INVALID`.
+When identity resolution fails, the full extracted opinion semantics (direction,
+strength, confidence, thesis, catalysts, risks, and time horizon) remain in the
+unresolved record so a later resolution can create an Opinion without rerunning
+the LLM.
 
 ### Table
 

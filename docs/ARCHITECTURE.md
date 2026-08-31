@@ -2,7 +2,7 @@
 
 ## System Architecture Specification
 
-Version: 1.3
+Version: 1.5
 
 ---
 
@@ -299,6 +299,31 @@ AI 不负责：
 - 状态判断
 - 数学评分
 - 业务规则
+
+## 6.4 Asset Resolution Boundary (Sprint 2D.1–2D.2)
+
+Asset identity is resolved after language extraction and before Opinion
+persistence by the source-neutral deterministic `AssetResolver`:
+
+```text
+LLM asset mention
+        ↓
+AssetReference (name/symbol/market hints)
+        ↓
+AssetResolver
+        ├── deterministic normalization
+        ├── Canonical Asset + AssetAlias lookup
+        └── AssetResolutionResult
+                ↓
+        Opinion or preserved unresolved semantics
+```
+
+`AssetReference` is source-neutral and contains no platform-specific identity.
+The Resolver must use explicit canonical and alias matches; it must not infer a
+market from symbol length, use external model knowledge, or create an Asset.
+Multiple matches produce `AMBIGUOUS`, while missing matches produce
+`UNRESOLVED` and retain the complete extracted opinion semantics for later
+reprocessing.
 
 ---
 

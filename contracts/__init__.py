@@ -10,6 +10,16 @@ from contracts.analysis import (
     StateChangeCreate,
     StateChangeView,
 )
+from contracts.asset_resolution import (
+    AssetReference,
+    AssetResolutionResult,
+    AssetResolutionStatus,
+    NormalizedAssetReference,
+    normalize_asset_reference,
+    normalize_market_hint,
+    normalize_name_hint,
+    normalize_symbol_hint,
+)
 from contracts.collection import (
     CollectionRequest,
     FeedCollectionRequest,
@@ -71,6 +81,9 @@ __all__ = [
     "ANALYSIS_POLICY_VERSION",
     "AnalysisProcessingError",
     "AnalysisSpec",
+    "AssetReference",
+    "AssetResolutionResult",
+    "AssetResolutionStatus",
     "AssetOpinionExtraction",
     "AssetIntelligenceSnapshot",
     "AttentionLevel",
@@ -98,6 +111,7 @@ __all__ = [
     "OpinionProcessingStatus",
     "OpinionTimelineEntry",
     "OpinionWriteResult",
+    "NormalizedAssetReference",
     "PositionStatus",
     "PostKind",
     "InvestorStateAggregationInput",
@@ -120,4 +134,8 @@ __all__ = [
     "UnresolvedAsset",
     "UnresolvedAssetHint",
     "StructuredOutputMode",
+    "normalize_asset_reference",
+    "normalize_market_hint",
+    "normalize_name_hint",
+    "normalize_symbol_hint",
 ]

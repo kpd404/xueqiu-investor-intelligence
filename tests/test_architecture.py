@@ -68,6 +68,7 @@ def test_database_configuration_does_not_depend_on_backend(database_module: str)
         "intelligence",
         "ingestion",
         "pipeline",
+        "resolution",
         "signal_engine",
     ],
 )
@@ -100,6 +101,7 @@ def test_pyproject_discovers_layer_packages() -> None:
         "intelligence*",
         "ingestion*",
         "pipeline*",
+        "resolution*",
         "prompts*",
         "signal_engine*",
     } <= includes
@@ -125,6 +127,11 @@ def test_feed_ingestion_is_the_persistence_application_boundary() -> None:
     imports = imported_roots("ingestion/following_feed.py")
     assert {"database", "sqlalchemy"} <= imports
     assert imports.isdisjoint({"ai", "intelligence", "signal", "signal_engine"})
+
+
+def test_asset_resolver_is_source_and_persistence_independent() -> None:
+    imports = imported_roots("resolution/asset_resolver.py")
+    assert imports.isdisjoint({"ai", "collectors", "database", "sqlalchemy"})
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai import MockOpinionExtractor, OpinionProcessingService
 from collectors import ManualImportAdapter
 from contracts import (
+    AssetOpinionExtraction,
     CollectionRequest,
     OpinionDirection,
     OpinionExtractionResult,
@@ -67,6 +68,25 @@ class AmbiguousAssetExtractor:
             model_version=MODEL_VERSION,
             unresolved_assets=(
                 UnresolvedAssetHint(asset_name="这家AI应用公司", reason="AMBIGUOUS_ASSET"),
+            ),
+        )
+
+
+class NameOnlyOpinionExtractor:
+    async def extract(self, _event: object) -> OpinionExtractionResult:
+        return OpinionExtractionResult(
+            investment_related=True,
+            model_version=MODEL_VERSION,
+            opinions=(
+                AssetOpinionExtraction(
+                    asset_name="一家未命名 AI 公司",
+                    symbol=None,
+                    market=None,
+                    direction=OpinionDirection.BULLISH,
+                    strength=65,
+                    confidence=0.6,
+                    thesis=("商业化速度",),
+                ),
             ),
         )
 
@@ -149,6 +169,11 @@ def test_unresolved_asset_is_reported_and_not_created(
     assert len(result.unresolved_assets) == 1
     assert result.unresolved_assets[0].symbol == "00700"
     assert result.unresolved_assets[0].market == "HK"
+    assert result.unresolved_assets[0].direction == OpinionDirection.BULLISH
+    assert result.unresolved_assets[0].strength == 80
+    assert result.unresolved_assets[0].confidence == 0.9
+    assert result.unresolved_assets[0].thesis == ("AI商业化", "广告恢复")
+    assert result.unresolved_assets[0].catalysts == ("广告恢复",)
 
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Asset)) == 0
@@ -180,6 +205,31 @@ def test_ambiguous_asset_hint_is_retained_without_creating_asset(
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Asset)) == 0
         assert session.scalar(select(func.count()).select_from(Opinion)) == 0
+
+
+def test_name_only_opinion_preserves_semantics_without_asset_lookup(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    _, event_id, _ = seed_raw_event(
+        db_session_factory,
+        content="这家AI应用公司的商业化速度比我预期快很多。",
+        create_asset=False,
+    )
+    service = OpinionProcessingService(
+        extractor=NameOnlyOpinionExtractor(),
+        unit_of_work_factory=lambda: SqlAlchemyOpinionUnitOfWork(db_session_factory),
+    )
+
+    result = asyncio.run(service.process(event_id, MODEL_VERSION))
+
+    assert result.status == OpinionProcessingStatus.PARTIALLY_RESOLVED
+    assert result.opinion_ids == ()
+    assert len(result.unresolved_assets) == 1
+    unresolved = result.unresolved_assets[0]
+    assert unresolved.direction == OpinionDirection.BULLISH
+    assert unresolved.strength == 65
+    assert unresolved.confidence == 0.6
+    assert unresolved.thesis == ("商业化速度",)
 
 
 def test_non_investment_content_returns_no_opinion(

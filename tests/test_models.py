@@ -2,11 +2,13 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.base import Base
 from database.models import (
     Asset,
+    AssetAlias,
     EventAnalysis,
     Investor,
     Opinion,
@@ -19,6 +21,7 @@ from database.models.enums import EventType, OpinionDirection
 def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
     assert set(Base.metadata.tables) == {
         "assets",
+        "asset_aliases",
         "investors",
         "investor_asset_states",
         "investor_asset_state_changes",
@@ -100,3 +103,50 @@ def test_opinion_schema_has_ai_provenance_fields() -> None:
     assert {"event_id", "analysis_version", "status", "structured_output"} <= {
         column.name for column in inspect(EventAnalysis).columns
     }
+
+
+def test_asset_alias_is_scoped_to_asset_and_normalized_identity(db_session: Session) -> None:
+    asset = Asset(name="Tencent Holdings", symbol="00700", market="HK")
+    db_session.add(asset)
+    db_session.flush()
+    db_session.add(
+        AssetAlias(
+            asset_id=asset.id,
+            alias="Tencent",
+            normalized_alias="TENCENT",
+            alias_type="NAME",
+            market="HK",
+        )
+    )
+    db_session.commit()
+
+    assert asset.aliases[0].normalized_alias == "TENCENT"
+
+    db_session.add(
+        AssetAlias(
+            asset_id=asset.id,
+            alias="Tencent Holdings",
+            normalized_alias="TENCENT",
+            alias_type="NAME",
+            market="SH",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+    second_asset = Asset(name="Another Tencent", symbol="TENCENT-ALT", market="HK")
+    db_session.add(second_asset)
+    db_session.flush()
+    db_session.add(
+        AssetAlias(
+            asset_id=second_asset.id,
+            alias="Tencent",
+            normalized_alias="TENCENT",
+            alias_type="NAME",
+            market="HK",
+        )
+    )
+    db_session.commit()
+
+    assert len(db_session.query(AssetAlias).filter_by(normalized_alias="TENCENT").all()) == 2

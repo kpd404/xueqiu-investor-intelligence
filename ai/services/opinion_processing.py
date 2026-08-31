@@ -8,6 +8,9 @@ from ai.extractors.base import OpinionExtractor
 from contracts import (
     AnalysisProcessingError,
     AnalysisSpec,
+    AssetReference,
+    AssetResolutionResult,
+    AssetResolutionStatus,
     EventAnalysisCreate,
     EventAnalysisStatus,
     EventAnalysisView,
@@ -37,6 +40,10 @@ class AssetReader(Protocol):
     def get_by_market_symbol(self, market: str, symbol: str) -> AssetView | None: ...
 
 
+class AssetResolverPort(Protocol):
+    def resolve(self, reference: AssetReference) -> AssetResolutionResult: ...
+
+
 class EventAnalysisReader(Protocol):
     def get_by_identity(
         self, event_id: UUID, analysis_version: str
@@ -56,6 +63,7 @@ class OpinionWriter(Protocol):
 class OpinionUnitOfWork(Protocol):
     raw_events: RawEventReader
     assets: AssetReader
+    asset_resolver: AssetResolverPort
     analyses: EventAnalysisWriter
     opinions: OpinionWriter
 
@@ -135,13 +143,7 @@ class OpinionProcessingService:
 
         now = utc_now()
         unresolved_assets: list[UnresolvedAsset] = [
-            UnresolvedAsset(
-                asset_name=hint.asset_name,
-                symbol=hint.symbol,
-                market=hint.market,
-                reason=hint.reason,
-            )
-            for hint in getattr(extraction, "unresolved_assets", ())
+            UnresolvedAsset.from_hint(hint) for hint in getattr(extraction, "unresolved_assets", ())
         ]
         commands: list[OpinionCreate] = []
         with self._unit_of_work_factory() as write_unit_of_work:
@@ -150,26 +152,29 @@ class OpinionProcessingService:
                 raise RawEventNotFoundError(f"raw event not found: {event_id}")
 
             for extracted_opinion in extraction.opinions:
-                asset = write_unit_of_work.assets.get_by_market_symbol(
-                    extracted_opinion.market,
-                    extracted_opinion.symbol,
+                resolution = write_unit_of_work.asset_resolver.resolve(
+                    extracted_opinion.to_asset_reference()
                 )
-                if asset is None:
+                if resolution.status is not AssetResolutionStatus.RESOLVED:
                     unresolved_assets.append(
-                        UnresolvedAsset(
-                            asset_name=extracted_opinion.asset_name,
-                            symbol=extracted_opinion.symbol,
-                            market=extracted_opinion.market,
+                        UnresolvedAsset.from_extraction(
+                            extracted_opinion,
+                            reason=resolution.reason or resolution.status.value,
+                            candidate_asset_ids=resolution.candidate_asset_ids,
                         )
                     )
                     continue
+
+                asset_id = resolution.asset_id
+                if asset_id is None:
+                    raise RuntimeError("resolved Asset result did not include asset_id")
 
                 commands.append(
                     OpinionCreate(
                         event_id=persisted_event.id,
                         analysis_id=None,
                         investor_id=persisted_event.investor_id,
-                        asset_id=asset.id,
+                        asset_id=asset_id,
                         direction=extracted_opinion.direction,
                         strength=extracted_opinion.strength,
                         confidence=extracted_opinion.confidence,

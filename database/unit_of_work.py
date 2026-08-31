@@ -12,6 +12,7 @@ from database.repositories import (
     OpinionRepository,
     RawEventRepository,
 )
+from resolution import AssetResolver
 
 
 class SqlAlchemyOpinionUnitOfWork:
@@ -27,6 +28,7 @@ class SqlAlchemyOpinionUnitOfWork:
         self._committed = False
         self.raw_events = RawEventRepository(self._session)
         self.assets = AssetRepository(self._session)
+        self.asset_resolver = AssetResolver(self.assets)
         self.analyses = EventAnalysisRepository(self._session)
         self.opinions = OpinionRepository(self._session)
         return self

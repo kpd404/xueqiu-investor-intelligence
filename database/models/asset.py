@@ -9,6 +9,7 @@ from database.base import Base
 from database.models._types import utc_now
 
 if TYPE_CHECKING:
+    from database.models.asset_alias import AssetAlias
     from database.models.investor_asset_state import InvestorAssetState
     from database.models.opinion import Opinion
     from database.models.signal import Signal
@@ -31,3 +32,4 @@ class Asset(Base):
     opinions: Mapped[list["Opinion"]] = relationship(back_populates="asset")
     investor_states: Mapped[list["InvestorAssetState"]] = relationship(back_populates="asset")
     signals: Mapped[list["Signal"]] = relationship(back_populates="asset")
+    aliases: Mapped[list["AssetAlias"]] = relationship(back_populates="asset")

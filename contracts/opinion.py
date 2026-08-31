@@ -14,6 +14,7 @@ from pydantic import (
 )
 
 from contracts.analysis import AnalysisSpec, EventAnalysisStatus
+from contracts.asset_resolution import AssetReference
 from contracts.enums import OpinionDirection
 
 
@@ -27,8 +28,8 @@ class AssetOpinionExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     asset_name: str = Field(min_length=1, max_length=255)
-    symbol: str = Field(min_length=1, max_length=64)
-    market: str = Field(min_length=1, max_length=32)
+    symbol: str | None = Field(default=None, max_length=64)
+    market: str | None = Field(default=None, max_length=32)
     direction: OpinionDirection
     strength: float = Field(ge=0, le=100)
     confidence: float = Field(ge=0, le=1)
@@ -39,7 +40,9 @@ class AssetOpinionExtraction(BaseModel):
 
     @field_validator("asset_name", "symbol", "market")
     @classmethod
-    def normalize_identity_text(cls, value: str) -> str:
+    def normalize_identity_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         normalized = value.strip()
         if not normalized:
             raise ValueError("asset identity fields must not be blank")
@@ -47,8 +50,15 @@ class AssetOpinionExtraction(BaseModel):
 
     @field_validator("symbol", "market")
     @classmethod
-    def normalize_market_identity(cls, value: str) -> str:
-        return value.upper()
+    def normalize_market_identity(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
+
+    def to_asset_reference(self) -> AssetReference:
+        return AssetReference(
+            name_hint=self.asset_name,
+            symbol_hint=self.symbol,
+            market_hint=self.market,
+        )
 
 
 class UnresolvedAssetHint(BaseModel):
@@ -60,6 +70,13 @@ class UnresolvedAssetHint(BaseModel):
     symbol: str | None = Field(default=None, max_length=64)
     market: str | None = Field(default=None, max_length=32)
     reason: str = Field(default="NOT_FOUND_OR_AMBIGUOUS", min_length=1, max_length=255)
+    direction: OpinionDirection | None = None
+    strength: float | None = Field(default=None, ge=0, le=100)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    thesis: tuple[str, ...] = ()
+    catalysts: tuple[str, ...] = ()
+    risks: tuple[str, ...] = ()
+    time_horizon: str | None = Field(default=None, max_length=64)
 
 
 class OpinionExtractionResult(BaseModel):
@@ -80,7 +97,12 @@ class OpinionExtractionResult(BaseModel):
     def validate_opinion_consistency(self) -> Self:
         if self.investment_related != bool(self.opinions or self.unresolved_assets):
             raise ValueError("investment_related must match opinions or unresolved assets")
-        identities = [(opinion.market, opinion.symbol) for opinion in self.opinions]
+        identities = [
+            (opinion.market, opinion.symbol)
+            if opinion.market is not None or opinion.symbol is not None
+            else ("name", opinion.asset_name)
+            for opinion in self.opinions
+        ]
         if len(identities) != len(set(identities)):
             raise ValueError("duplicate market/symbol opinions are not allowed")
         if (
@@ -125,6 +147,48 @@ class UnresolvedAsset(BaseModel):
     symbol: str | None = Field(default=None, max_length=64)
     market: str | None = Field(default=None, max_length=32)
     reason: str = Field(default="NOT_FOUND_OR_AMBIGUOUS", min_length=1, max_length=255)
+    candidate_asset_ids: tuple[UUID, ...] = ()
+    direction: OpinionDirection | None = None
+    strength: float | None = Field(default=None, ge=0, le=100)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    thesis: tuple[str, ...] = ()
+    catalysts: tuple[str, ...] = ()
+    risks: tuple[str, ...] = ()
+    time_horizon: str | None = Field(default=None, max_length=64)
+
+    @classmethod
+    def from_extraction(
+        cls,
+        extraction: AssetOpinionExtraction,
+        *,
+        reason: str = "NOT_FOUND_OR_AMBIGUOUS",
+        candidate_asset_ids: tuple[UUID, ...] = (),
+    ) -> "UnresolvedAsset":
+        return cls(
+            asset_name=extraction.asset_name,
+            symbol=extraction.symbol,
+            market=extraction.market,
+            reason=reason,
+            candidate_asset_ids=candidate_asset_ids,
+            direction=extraction.direction,
+            strength=extraction.strength,
+            confidence=extraction.confidence,
+            thesis=extraction.thesis,
+            catalysts=extraction.catalysts,
+            risks=extraction.risks,
+            time_horizon=extraction.time_horizon,
+        )
+
+    @classmethod
+    def from_hint(cls, hint: UnresolvedAssetHint) -> "UnresolvedAsset":
+        return cls(**hint.model_dump())
+
+    def to_asset_reference(self) -> AssetReference:
+        return AssetReference(
+            name_hint=self.asset_name,
+            symbol_hint=self.symbol,
+            market_hint=self.market,
+        )
 
 
 class OpinionProcessingStatus(StrEnum):
