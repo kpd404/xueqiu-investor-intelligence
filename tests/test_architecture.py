@@ -139,6 +139,20 @@ def test_asset_recovery_is_source_and_provider_independent() -> None:
     assert imports.isdisjoint({"ai", "collectors", "database", "sqlalchemy"})
 
 
+def test_attention_matcher_is_pure_and_source_independent() -> None:
+    imports = imported_roots("intelligence/policies/mention_matcher.py")
+    assert imports.isdisjoint(
+        {"ai", "collectors", "database", "signal", "signal_engine", "sqlalchemy"}
+    )
+
+
+def test_attention_occurrence_service_is_application_only() -> None:
+    imports = imported_roots("intelligence/services/attention_occurrence.py")
+    assert imports.isdisjoint(
+        {"ai", "collectors", "database", "signal", "signal_engine", "sqlalchemy"}
+    )
+
+
 @pytest.mark.parametrize(
     "extractor_module",
     ["ai/extractors/base.py", "ai/extractors/mock.py"],

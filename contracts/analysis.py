@@ -108,6 +108,28 @@ class EventAnalysisStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class EffectiveAnalysisPolicy(BaseModel):
+    """Select one active Opinion AnalysisSpec without temporal fallback."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    active_spec: AnalysisSpec
+
+    @property
+    def active_analysis_version(self) -> str:
+        return self.active_spec.analysis_version
+
+    def is_effective(
+        self,
+        analysis_version: str,
+        status: EventAnalysisStatus,
+    ) -> bool:
+        return analysis_version == self.active_analysis_version and status in {
+            EventAnalysisStatus.SUCCESS,
+            EventAnalysisStatus.PARTIALLY_RESOLVED,
+        }
+
+
 class EventAnalysisCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

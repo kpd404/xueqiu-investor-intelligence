@@ -22,6 +22,7 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
     assert set(Base.metadata.tables) == {
         "assets",
         "asset_aliases",
+        "attention_occurrences",
         "investors",
         "investor_asset_states",
         "investor_asset_state_changes",

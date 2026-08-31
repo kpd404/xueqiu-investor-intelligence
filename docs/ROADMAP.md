@@ -22,6 +22,7 @@
 - Sprint 2D.3.1 — Asset Mention Fidelity Hardening ✅
 - Sprint 2D.4 — Unresolved Asset Recovery ✅
 - Sprint 2D.4.1 — Analysis-scoped Opinion Correctness ✅
+- Sprint 2E.0 — Behavior Evidence Foundation ✅
 
 ## Current
 
@@ -36,6 +37,9 @@ Identify deterministic attention changes from Investor × Asset historical fact-
 - DORMANT attention
 
 The guiding principle is: **change matters more than popularity**.
+
+Sprint 2E.1 builds on the completed effective-analysis and AttentionOccurrence evidence foundation; it does not
+redefine Opinion or evidence identity.
 
 ## Planned
 

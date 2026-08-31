@@ -6,7 +6,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import OpinionCreate, OpinionTimelineEntry, OpinionWriteResult
+from contracts import (
+    EffectiveAnalysisPolicy,
+    EventAnalysisStatus,
+    OpinionCreate,
+    OpinionTimelineEntry,
+    OpinionWriteResult,
+)
+from database.models.event_analysis import EventAnalysis
 from database.models.opinion import Opinion
 from database.models.raw_event import RawEvent
 
@@ -37,6 +44,25 @@ class OpinionRepository:
             return None
         return self._timeline_entry(row[0], row[1])
 
+    def get_effective_view(
+        self,
+        opinion_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> OpinionTimelineEntry | None:
+        statement = (
+            select(Opinion, RawEvent.published_time)
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.id == opinion_id,
+                *self._effective_analysis_predicates(policy),
+            )
+        )
+        row = self._session.execute(statement).one_or_none()
+        if row is None:
+            return None
+        return self._timeline_entry(row[0], row[1])
+
     def list_timeline(self, investor_id: UUID, asset_id: UUID) -> list[OpinionTimelineEntry]:
         statement = (
             select(Opinion, RawEvent.published_time)
@@ -44,6 +70,25 @@ class OpinionRepository:
             .where(
                 Opinion.investor_id == investor_id,
                 Opinion.asset_id == asset_id,
+            )
+            .order_by(RawEvent.published_time, RawEvent.id, Opinion.id)
+        )
+        return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
+
+    def list_effective_timeline(
+        self,
+        investor_id: UUID,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[OpinionTimelineEntry]:
+        statement = (
+            select(Opinion, RawEvent.published_time)
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.investor_id == investor_id,
+                Opinion.asset_id == asset_id,
+                *self._effective_analysis_predicates(policy),
             )
             .order_by(RawEvent.published_time, RawEvent.id, Opinion.id)
         )
@@ -57,6 +102,39 @@ class OpinionRepository:
             .order_by(Opinion.investor_id, RawEvent.published_time, RawEvent.id, Opinion.id)
         )
         return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
+
+    def list_effective_timeline_by_asset(
+        self,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[OpinionTimelineEntry]:
+        statement = (
+            select(Opinion, RawEvent.published_time)
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.asset_id == asset_id,
+                *self._effective_analysis_predicates(policy),
+            )
+            .order_by(Opinion.investor_id, RawEvent.published_time, RawEvent.id, Opinion.id)
+        )
+        return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
+
+    def list_effective_by_event(
+        self,
+        event_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[Opinion]:
+        statement = (
+            select(Opinion)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.event_id == event_id,
+                *self._effective_analysis_predicates(policy),
+            )
+            .order_by(Opinion.id)
+        )
+        return list(self._session.scalars(statement))
 
     def exists(self, event_id: UUID, asset_id: UUID, model_version: str) -> bool:
         statement = select(Opinion.id).where(
@@ -139,6 +217,15 @@ class OpinionRepository:
         else:
             predicates.append(Opinion.analysis_id == analysis_id)
         return self._session.scalar(select(Opinion).where(*predicates))
+
+    @staticmethod
+    def _effective_analysis_predicates(policy: EffectiveAnalysisPolicy) -> tuple[object, ...]:
+        return (
+            EventAnalysis.analysis_version == policy.active_analysis_version,
+            EventAnalysis.status.in_(
+                [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+            ),
+        )
 
     @classmethod
     def _timeline_entry(

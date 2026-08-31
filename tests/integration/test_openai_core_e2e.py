@@ -12,6 +12,7 @@ from contracts import (
     AnalysisSpec,
     AssetOpinionExtraction,
     CollectionRequest,
+    EffectiveAnalysisPolicy,
     LLMProviderConfig,
     OpinionDirection,
     OpinionExtractionResult,
@@ -142,6 +143,7 @@ def build_core_pipeline(
     config: LLMProviderConfig = CONFIG,
     responses: FakeResponses | None = None,
 ) -> tuple[IntelligencePipeline, FakeResponses]:
+    effective_policy = EffectiveAnalysisPolicy(active_spec=analysis_spec(config))
     fake_responses = responses or FakeResponses(output_payload(config.model))
     extractor = OpenAICompatibleOpinionExtractor(
         config,
@@ -161,8 +163,8 @@ def build_core_pipeline(
     return (
         IntelligencePipeline(
             OpinionProcessingService(extractor, opinion_uow),
-            StateUpdateService(state_uow),
-            AssetIntelligenceService(intelligence_uow),
+            StateUpdateService(state_uow, effective_policy),
+            AssetIntelligenceService(intelligence_uow, effective_policy),
         ),
         fake_responses,
     )

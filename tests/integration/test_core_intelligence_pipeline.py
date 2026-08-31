@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai import MockOpinionExtractor, OpinionProcessingService
 from collectors import ManualImportAdapter
 from contracts import (
+    AnalysisSpec,
     AssetOpinionExtraction,
     CollectionRequest,
     ConsensusDirection,
+    EffectiveAnalysisPolicy,
     OpinionDirection,
     OpinionExtractionResult,
     OpinionProcessingStatus,
@@ -42,6 +44,8 @@ AS_OF = datetime(2026, 8, 25, tzinfo=UTC)
 
 
 class DirectionalFixtureExtractor:
+    model_version = FIXTURE_VERSION
+
     async def extract(self, event: RawEventView) -> OpinionExtractionResult:
         direction = (
             OpinionDirection.NEUTRAL
@@ -81,6 +85,9 @@ def build_pipeline(
     factory: sessionmaker[Session],
     extractor: object,
 ) -> IntelligencePipeline:
+    spec = AnalysisSpec.from_model_version(extractor.model_version)  # type: ignore[attr-defined]
+    effective_policy = EffectiveAnalysisPolicy(active_spec=spec)
+
     def opinion_unit_of_work() -> SqlAlchemyOpinionUnitOfWork:
         return SqlAlchemyOpinionUnitOfWork(factory)
 
@@ -92,8 +99,8 @@ def build_pipeline(
 
     return IntelligencePipeline(
         OpinionProcessingService(extractor, opinion_unit_of_work),  # type: ignore[arg-type]
-        StateUpdateService(state_unit_of_work),
-        AssetIntelligenceService(intelligence_unit_of_work),
+        StateUpdateService(state_unit_of_work, effective_policy),
+        AssetIntelligenceService(intelligence_unit_of_work, effective_policy),
     )
 
 

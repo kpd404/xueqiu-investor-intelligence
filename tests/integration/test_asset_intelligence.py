@@ -6,14 +6,17 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from collectors import ManualImportAdapter
 from contracts import (
+    AnalysisSpec,
     AttentionLevel,
     CollectionRequest,
     ConsensusDirection,
+    EffectiveAnalysisPolicy,
+    EventAnalysisStatus,
     OpinionCreate,
     OpinionDirection,
     PositionStatus,
 )
-from database.models import Asset, Investor, InvestorAssetState
+from database.models import Asset, EventAnalysis, Investor, InvestorAssetState
 from database.repositories import OpinionRepository, RawEventRepository
 from database.unit_of_work import (
     SqlAlchemyIntelligenceUnitOfWork,
@@ -23,6 +26,8 @@ from intelligence import AssetIntelligenceService, StateUpdateService
 from pipeline import DataPipeline
 
 AS_OF = datetime(2026, 8, 25, tzinfo=UTC)
+ACTIVE_SPEC = AnalysisSpec.from_model_version("intelligence-fixture-v1")
+EFFECTIVE_POLICY = EffectiveAnalysisPolicy(active_spec=ACTIVE_SPEC)
 
 
 def seed_asset(factory: sessionmaker[Session]) -> UUID:
@@ -64,17 +69,35 @@ def add_investor_state(
         raw_pipeline = DataPipeline(RawEventRepository(session), session)
         event_id = asyncio.run(raw_pipeline.run(adapter, request)).events[0].event_id
 
+        analysis = EventAnalysis(
+            event_id=event_id,
+            analysis_version=ACTIVE_SPEC.analysis_version,
+            model_version=ACTIVE_SPEC.model_version,
+            prompt_version=ACTIVE_SPEC.prompt_version,
+            schema_version=ACTIVE_SPEC.schema_version,
+            status=EventAnalysisStatus.SUCCESS,
+            investment_related=True,
+            generated_time=published_time + timedelta(hours=1),
+            calculated_at=published_time + timedelta(hours=1),
+            confidence=0.9,
+            structured_output={"analysis_spec": ACTIVE_SPEC.model_dump(mode="json")},
+            provider_metadata={},
+        )
+        session.add(analysis)
+        session.flush()
+
         write_result = OpinionRepository(session).add_many(
             [
                 OpinionCreate(
                     event_id=event_id,
+                    analysis_id=analysis.id,
                     investor_id=investor.id,
                     asset_id=asset_id,
                     direction=direction,
                     strength=80,
                     confidence=0.9,
                     generated_time=published_time + timedelta(hours=1),
-                    model_version="intelligence-fixture-v1",
+                    model_version=ACTIVE_SPEC.model_version,
                 )
             ]
         )
@@ -84,7 +107,7 @@ def add_investor_state(
     def state_unit_of_work_factory() -> SqlAlchemyStateUnitOfWork:
         return SqlAlchemyStateUnitOfWork(factory)
 
-    StateUpdateService(state_unit_of_work_factory).update(opinion_id)
+    StateUpdateService(state_unit_of_work_factory, EFFECTIVE_POLICY).update(opinion_id)
     return event_id
 
 
@@ -92,7 +115,7 @@ def build_service(factory: sessionmaker[Session]) -> AssetIntelligenceService:
     def unit_of_work_factory() -> SqlAlchemyIntelligenceUnitOfWork:
         return SqlAlchemyIntelligenceUnitOfWork(factory)
 
-    return AssetIntelligenceService(unit_of_work_factory)
+    return AssetIntelligenceService(unit_of_work_factory, EFFECTIVE_POLICY)
 
 
 def test_one_bullish_investor_is_insufficient_data(

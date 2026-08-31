@@ -6,14 +6,17 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from collectors import ManualImportAdapter
 from contracts import (
+    AnalysisSpec,
     AttentionLevel,
     CollectionRequest,
+    EffectiveAnalysisPolicy,
+    EventAnalysisStatus,
     OpinionCreate,
     OpinionDirection,
     PositionStatus,
     StateTransitionType,
 )
-from database.models import Asset, Investor, InvestorAssetState
+from database.models import Asset, EventAnalysis, Investor, InvestorAssetState
 from database.repositories import (
     InvestorAssetStateRepository,
     OpinionRepository,
@@ -22,6 +25,9 @@ from database.repositories import (
 from database.unit_of_work import SqlAlchemyStateUnitOfWork
 from intelligence import StateUpdateService
 from pipeline import DataPipeline
+
+ACTIVE_SPEC = AnalysisSpec.from_model_version("state-fixture-v1")
+EFFECTIVE_POLICY = EffectiveAnalysisPolicy(active_spec=ACTIVE_SPEC)
 
 
 def seed_investor_asset(factory: sessionmaker[Session]) -> tuple[UUID, UUID]:
@@ -60,16 +66,34 @@ def add_opinion(
         raw_pipeline = DataPipeline(RawEventRepository(session), session)
         event_id = asyncio.run(raw_pipeline.run(adapter, request)).events[0].event_id
 
+        analysis = EventAnalysis(
+            event_id=event_id,
+            analysis_version=ACTIVE_SPEC.analysis_version,
+            model_version=ACTIVE_SPEC.model_version,
+            prompt_version=ACTIVE_SPEC.prompt_version,
+            schema_version=ACTIVE_SPEC.schema_version,
+            status=EventAnalysisStatus.SUCCESS,
+            investment_related=True,
+            generated_time=published_time + timedelta(hours=1),
+            calculated_at=published_time + timedelta(hours=1),
+            confidence=confidence,
+            structured_output={"analysis_spec": ACTIVE_SPEC.model_dump(mode="json")},
+            provider_metadata={},
+        )
+        session.add(analysis)
+        session.flush()
+
         opinion_result = OpinionRepository(session).add_many(
             [
                 OpinionCreate(
                     event_id=event_id,
+                    analysis_id=analysis.id,
                     investor_id=investor_id,
                     asset_id=asset_id,
                     direction=direction,
                     strength=strength,
                     confidence=confidence,
-                    model_version="state-fixture-v1",
+                    model_version=ACTIVE_SPEC.model_version,
                     generated_time=published_time + timedelta(hours=1),
                 )
             ]
@@ -82,7 +106,7 @@ def build_state_service(factory: sessionmaker[Session]) -> StateUpdateService:
     def unit_of_work_factory() -> SqlAlchemyStateUnitOfWork:
         return SqlAlchemyStateUnitOfWork(factory)
 
-    return StateUpdateService(unit_of_work_factory)
+    return StateUpdateService(unit_of_work_factory, EFFECTIVE_POLICY)
 
 
 def test_first_asset_opinion_creates_new_attention(

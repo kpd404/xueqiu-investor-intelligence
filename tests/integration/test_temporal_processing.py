@@ -12,6 +12,7 @@ from contracts import (
     AnalysisSpec,
     AssetOpinionExtraction,
     CollectionRequest,
+    EffectiveAnalysisPolicy,
     EventAnalysisStatus,
     EventType,
     OpinionDirection,
@@ -44,6 +45,7 @@ ANALYSIS_SPEC = AnalysisSpec(
     prompt_version="mock-prompt-v1",
     schema_version="opinion-schema-v1",
 )
+EFFECTIVE_POLICY = EffectiveAnalysisPolicy(active_spec=ANALYSIS_SPEC)
 
 
 class CountingNoOpinionExtractor:
@@ -150,14 +152,29 @@ def add_legacy_opinion(
             raw_data={},
             hash=uuid4().hex + uuid4().hex,
         )
+        analysis = EventAnalysis(
+            event=event,
+            analysis_version=ANALYSIS_SPEC.analysis_version,
+            model_version=ANALYSIS_SPEC.model_version,
+            prompt_version=ANALYSIS_SPEC.prompt_version,
+            schema_version=ANALYSIS_SPEC.schema_version,
+            status=EventAnalysisStatus.SUCCESS,
+            investment_related=True,
+            generated_time=published_time + timedelta(hours=1),
+            calculated_at=published_time + timedelta(hours=1),
+            confidence=0.9,
+            structured_output={"analysis_spec": ANALYSIS_SPEC.model_dump(mode="json")},
+            provider_metadata={},
+        )
         opinion = Opinion(
             event=event,
+            analysis=analysis,
             investor_id=investor_id,
             asset_id=asset_id,
             direction=direction,
             strength=80,
             confidence=0.9,
-            model_version="legacy-fixture-v1",
+            model_version=ANALYSIS_SPEC.model_version,
             generated_time=published_time + timedelta(hours=1),
         )
         session.add(opinion)
@@ -166,7 +183,10 @@ def add_legacy_opinion(
 
 
 def build_state_service(factory: sessionmaker[Session]) -> StateUpdateService:
-    return StateUpdateService(lambda: SqlAlchemyStateUnitOfWork(factory))
+    return StateUpdateService(
+        lambda: SqlAlchemyStateUnitOfWork(factory),
+        EFFECTIVE_POLICY,
+    )
 
 
 def test_no_opinion_is_persisted_and_extractor_is_not_called_again(
@@ -339,7 +359,8 @@ def test_historical_as_of_replays_opinions_instead_of_current_state(
     state_service.update(bearish_id)
 
     intelligence = AssetIntelligenceService(
-        lambda: SqlAlchemyIntelligenceUnitOfWork(db_session_factory)
+        lambda: SqlAlchemyIntelligenceUnitOfWork(db_session_factory),
+        EFFECTIVE_POLICY,
     )
     snapshot = intelligence.build(asset_id, datetime(2026, 8, 10, tzinfo=UTC))
 

@@ -4,6 +4,7 @@ from contracts.analysis import (
     ANALYSIS_POLICY_VERSION,
     LEGACY_PROVIDER_ID,
     AnalysisSpec,
+    EffectiveAnalysisPolicy,
     EventAnalysisCreate,
     EventAnalysisStatus,
     EventAnalysisView,
@@ -19,6 +20,19 @@ from contracts.asset_resolution import (
     normalize_market_hint,
     normalize_name_hint,
     normalize_symbol_hint,
+)
+from contracts.attention import (
+    ATTENTION_POLICY_VERSION,
+    AssetMentionAlias,
+    AssetMentionCandidate,
+    AssetMentionMatch,
+    AssetTextMatch,
+    AttentionEvidence,
+    AttentionEvidenceType,
+    AttentionOccurrenceCreate,
+    AttentionOccurrenceRebuildResult,
+    AttentionOccurrenceView,
+    AttentionOccurrenceWriteResult,
 )
 from contracts.collection import (
     CollectionRequest,
@@ -68,6 +82,7 @@ from contracts.provider import (
     StructuredOutputMode,
 )
 from contracts.raw_event import RawEventDTO, RawEventView, RawEventWriteResult
+from contracts.reconciliation import BehaviorReconciliationResult
 from contracts.recovery import (
     ASSET_RECOVERY_POLICY_VERSION,
     AssetRecoveryResult,
@@ -84,10 +99,23 @@ from contracts.state import (
 
 __all__ = [
     "ANALYSIS_POLICY_VERSION",
+    "ATTENTION_POLICY_VERSION",
     "AnalysisProcessingError",
     "AnalysisSpec",
+    "EffectiveAnalysisPolicy",
     "ASSET_RECOVERY_POLICY_VERSION",
     "AssetReference",
+    "AssetMentionAlias",
+    "AssetMentionCandidate",
+    "AssetMentionMatch",
+    "AssetTextMatch",
+    "AttentionEvidence",
+    "AttentionEvidenceType",
+    "AttentionOccurrenceCreate",
+    "AttentionOccurrenceRebuildResult",
+    "AttentionOccurrenceView",
+    "AttentionOccurrenceWriteResult",
+    "BehaviorReconciliationResult",
     "AssetRecoveryResult",
     "AssetRecoveryStatus",
     "AssetResolutionResult",

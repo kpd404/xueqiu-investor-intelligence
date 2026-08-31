@@ -6,6 +6,7 @@ from uuid import UUID
 
 from contracts import (
     STATE_POLICY_VERSION,
+    EffectiveAnalysisPolicy,
     InvestorAssetStateSnapshot,
     OpinionTimelineEntry,
     StateChangeCreate,
@@ -27,9 +28,18 @@ class OpinionEntity(Protocol):
 
 
 class OpinionHistoryReader(Protocol):
-    def get_view(self, opinion_id: UUID) -> OpinionTimelineEntry | None: ...
+    def get_effective_view(
+        self,
+        opinion_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> OpinionTimelineEntry | None: ...
 
-    def list_timeline(self, investor_id: UUID, asset_id: UUID) -> list[OpinionTimelineEntry]: ...
+    def list_effective_timeline(
+        self,
+        investor_id: UUID,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[OpinionTimelineEntry]: ...
 
 
 class StateWriter(Protocol):
@@ -76,14 +86,19 @@ class StateUpdateService:
     def __init__(
         self,
         unit_of_work_factory: StateUnitOfWorkFactory,
+        effective_analysis_policy: EffectiveAnalysisPolicy,
         state_policy_version: str = STATE_POLICY_VERSION,
     ) -> None:
         self._unit_of_work_factory = unit_of_work_factory
+        self._effective_analysis_policy = effective_analysis_policy
         self._state_policy_version = state_policy_version
 
     def update(self, opinion_id: UUID) -> StateUpdateResult:
         with self._unit_of_work_factory() as unit_of_work:
-            triggering_opinion = unit_of_work.opinions.get_view(opinion_id)
+            triggering_opinion = unit_of_work.opinions.get_effective_view(
+                opinion_id,
+                self._effective_analysis_policy,
+            )
             if triggering_opinion is None:
                 raise OpinionNotFoundError(f"opinion not found: {opinion_id}")
 
@@ -92,9 +107,10 @@ class StateUpdateService:
                 triggering_opinion.asset_id,
             )
             before = unit_of_work.states.to_snapshot(current) if current is not None else None
-            history = unit_of_work.opinions.list_timeline(
+            history = unit_of_work.opinions.list_effective_timeline(
                 triggering_opinion.investor_id,
                 triggering_opinion.asset_id,
+                self._effective_analysis_policy,
             )
             reduction = reduce_investor_asset_state(history, before)
 

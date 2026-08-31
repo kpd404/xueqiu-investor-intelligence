@@ -331,6 +331,22 @@ Multiple matches produce `AMBIGUOUS`, while missing matches produce
 `UNRESOLVED` and retain the complete extracted opinion semantics for later
 reprocessing.
 
+## 6.5 Behavior Evidence Boundary (Sprint 2E.0)
+
+Interpretation-based State, historical replay, Asset Intelligence, and Opinion attention consume only the configured
+active Opinion AnalysisSpec. Selection is exact by `analysis_version`; there is no generated-time selection or
+fallback to older analyses when the active result is missing or failed.
+
+```text
+RawEvent + effective Opinion + deterministic mention/repost evidence
+        ↓
+AttentionOccurrence
+```
+
+One Investor × Asset × RawEvent creates at most one occurrence per attention policy version. `OPINION`,
+`EXPLICIT_MENTION`, and `REPOST` are merged evidence types. Mention matching and attention policies are pure; ORM and
+transaction orchestration remain in repositories and application services.
+
 ---
 
 # 7. Investor Asset State Layer

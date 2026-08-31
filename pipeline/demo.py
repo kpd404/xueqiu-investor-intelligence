@@ -6,7 +6,12 @@ from sqlalchemy import select
 
 from ai import MockOpinionExtractor, OpinionProcessingService
 from collectors import ManualImportAdapter
-from contracts import CollectionRequest, ProcessRawEventCommand
+from contracts import (
+    AnalysisSpec,
+    CollectionRequest,
+    EffectiveAnalysisPolicy,
+    ProcessRawEventCommand,
+)
 from database.models import Asset, Investor, Opinion
 from database.repositories import RawEventRepository
 from database.session import SessionFactory
@@ -22,6 +27,10 @@ MODEL_VERSION = "mock-opinion-v1"
 
 
 def build_intelligence_pipeline() -> IntelligencePipeline:
+    effective_policy = EffectiveAnalysisPolicy(
+        active_spec=AnalysisSpec.from_model_version(MODEL_VERSION)
+    )
+
     def opinion_unit_of_work() -> SqlAlchemyOpinionUnitOfWork:
         return SqlAlchemyOpinionUnitOfWork(SessionFactory)
 
@@ -33,8 +42,8 @@ def build_intelligence_pipeline() -> IntelligencePipeline:
 
     return IntelligencePipeline(
         OpinionProcessingService(MockOpinionExtractor(MODEL_VERSION), opinion_unit_of_work),
-        StateUpdateService(state_unit_of_work),
-        AssetIntelligenceService(intelligence_unit_of_work),
+        StateUpdateService(state_unit_of_work, effective_policy),
+        AssetIntelligenceService(intelligence_unit_of_work, effective_policy),
     )
 
 

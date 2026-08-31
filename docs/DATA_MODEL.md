@@ -596,3 +596,15 @@ to produce separate `EventAnalysis` rows for one RawEvent.
 Provider response identity and usage are stored in the existing nullable
 `event_analyses.provider_metadata` JSON field. No provider-specific table is introduced. A generic
 `unresolved_assets` hint may preserve an ambiguous textual asset reference without creating an `Asset`.
+
+## Sprint 2E.0 Behavior Evidence Foundation
+
+`AttentionOccurrence` is a recomputable derived record for one Investor × Asset × RawEvent behavior occurrence.
+Attention is not the same as Opinion: `OPINION`, `EXPLICIT_MENTION`, and `REPOST` are evidence types that may support
+the same occurrence, not three separate behaviors. Identity is `event_id + asset_id + attention_policy_version`.
+
+Interpretation-based downstream reads only the single active `AnalysisSpec.analysis_version`. It never chooses an
+analysis by `generated_time`, and a missing or failed active analysis does not fall back to older analyses.
+
+Time semantics remain distinct: `published_time` is behavior effective time, `generated_time` is AI interpretation
+time, and `calculated_at` is derived calculation or reconciliation time.

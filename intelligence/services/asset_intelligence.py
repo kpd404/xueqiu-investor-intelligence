@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from contracts import (
     AssetIntelligenceSnapshot,
+    EffectiveAnalysisPolicy,
     InvestorStateAggregationInput,
     OpinionTimelineEntry,
 )
@@ -48,7 +49,11 @@ class StateReader(Protocol):
 
 
 class OpinionEvidenceReader(Protocol):
-    def list_timeline_by_asset(self, asset_id: UUID) -> list[OpinionTimelineEntry]: ...
+    def list_effective_timeline_by_asset(
+        self,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[OpinionTimelineEntry]: ...
 
 
 class IntelligenceUnitOfWork(Protocol):
@@ -73,8 +78,13 @@ IntelligenceUnitOfWorkFactory = Callable[[], IntelligenceUnitOfWork]
 class AssetIntelligenceService:
     """Build a point-in-time derived snapshot by replaying effective Opinions."""
 
-    def __init__(self, unit_of_work_factory: IntelligenceUnitOfWorkFactory) -> None:
+    def __init__(
+        self,
+        unit_of_work_factory: IntelligenceUnitOfWorkFactory,
+        effective_analysis_policy: EffectiveAnalysisPolicy,
+    ) -> None:
         self._unit_of_work_factory = unit_of_work_factory
+        self._effective_analysis_policy = effective_analysis_policy
 
     def build(self, asset_id: UUID, as_of: datetime) -> AssetIntelligenceSnapshot:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
@@ -90,7 +100,10 @@ class AssetIntelligenceService:
                 state.investor_id: state for state in unit_of_work.states.list_by_asset(asset_id)
             }
             timelines: dict[UUID, list[OpinionTimelineEntry]] = defaultdict(list)
-            for opinion in unit_of_work.opinions.list_timeline_by_asset(asset_id):
+            for opinion in unit_of_work.opinions.list_effective_timeline_by_asset(
+                asset_id,
+                self._effective_analysis_policy,
+            ):
                 timelines[opinion.investor_id].append(opinion)
 
             for investor_id, timeline in timelines.items():
