@@ -34,6 +34,12 @@ Version: 1.5
 - 财报数据
 - 用户手工输入
 
+## 1.3 Delivery Status
+
+Sprint 2D Asset Resolution is complete, including deterministic resolution, AssetAlias, and unresolved recovery.
+The next planned increment is Sprint 2E Investor Behavior Intelligence, beginning with Attention Momentum. Current
+Asset Intelligence remains a basic aggregation / Consensus foundation rather than a complete Intelligence Engine.
+
 ---
 
 # 2. High-Level Architecture

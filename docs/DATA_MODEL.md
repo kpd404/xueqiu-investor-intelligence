@@ -553,6 +553,8 @@ EventAnalysis
 
 `EventAnalysis.status` is one of `SUCCESS`, `NO_OPINION`, `PARTIALLY_RESOLVED`, or `FAILED`. `NO_OPINION`, unresolved assets, and failures are persisted. Failed results are retryable and may be updated by a later attempt; this Sprint intentionally does not create an attempt-history table.
 
+`PARTIALLY_RESOLVED` and `SUCCESS` describe the current resolution completeness of that analysis. Deterministic recovery may update the resolution status and `calculated_at`, but never changes the original LLM `generated_time` or extraction provenance.
+
 New Opinions reference `EventAnalysis.id` through nullable `analysis_id`. The column remains nullable for legacy Opinions created before Sprint 1F; no synthetic historical EventAnalysis rows are created. All new Opinions written by `OpinionProcessingService` have a non-null `analysis_id`.
 
 ### State projection and change ledger

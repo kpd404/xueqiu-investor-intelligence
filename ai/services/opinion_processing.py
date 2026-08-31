@@ -59,6 +59,8 @@ class OpinionWriter(Protocol):
 
     def list_by_event(self, event_id: UUID) -> list[object]: ...
 
+    def list_by_analysis(self, analysis_id: UUID) -> list[object]: ...
+
 
 class OpinionUnitOfWork(Protocol):
     raw_events: RawEventReader
@@ -111,8 +113,13 @@ class OpinionProcessingService:
         with self._unit_of_work_factory() as read_unit_of_work:
             event = read_unit_of_work.raw_events.get_view(event_id)
             existing = read_unit_of_work.analyses.get_by_identity(event_id, spec.analysis_version)
-            existing_opinion_ids = tuple(
-                opinion.id for opinion in read_unit_of_work.opinions.list_by_event(event_id)
+            existing_opinion_ids = (
+                tuple(
+                    opinion.id
+                    for opinion in read_unit_of_work.opinions.list_by_analysis(existing.id)
+                )
+                if existing is not None
+                else ()
             )
         if event is None:
             raise RawEventNotFoundError(f"raw event not found: {event_id}")

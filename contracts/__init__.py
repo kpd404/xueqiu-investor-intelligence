@@ -68,6 +68,11 @@ from contracts.provider import (
     StructuredOutputMode,
 )
 from contracts.raw_event import RawEventDTO, RawEventView, RawEventWriteResult
+from contracts.recovery import (
+    ASSET_RECOVERY_POLICY_VERSION,
+    AssetRecoveryResult,
+    AssetRecoveryStatus,
+)
 from contracts.state import (
     STATE_POLICY_VERSION,
     InvestorAssetStateSnapshot,
@@ -81,7 +86,10 @@ __all__ = [
     "ANALYSIS_POLICY_VERSION",
     "AnalysisProcessingError",
     "AnalysisSpec",
+    "ASSET_RECOVERY_POLICY_VERSION",
     "AssetReference",
+    "AssetRecoveryResult",
+    "AssetRecoveryStatus",
     "AssetResolutionResult",
     "AssetResolutionStatus",
     "AssetOpinionExtraction",

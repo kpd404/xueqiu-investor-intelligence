@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import EventAnalysisCreate, EventAnalysisView
+from contracts import EventAnalysisCreate, EventAnalysisStatus, EventAnalysisView, UnresolvedAsset
 from database.models.event_analysis import EventAnalysis
 
 
@@ -22,6 +22,10 @@ class EventAnalysisRepository:
             EventAnalysis.analysis_version == analysis_version,
         )
         entity = self._session.scalar(statement)
+        return self._to_view(entity) if entity is not None else None
+
+    def get(self, analysis_id: UUID) -> EventAnalysisView | None:
+        entity = self._session.get(EventAnalysis, analysis_id)
         return self._to_view(entity) if entity is not None else None
 
     def save(self, command: EventAnalysisCreate) -> EventAnalysisView:
@@ -65,6 +69,44 @@ class EventAnalysisRepository:
         entity.structured_output = dict(command.structured_output)
         entity.error_code = command.error_code
         entity.provider_metadata = dict(command.provider_metadata)
+        self._session.flush()
+        return self._to_view(entity)
+
+    def update_recovery(
+        self,
+        analysis_id: UUID,
+        *,
+        status: EventAnalysisStatus,
+        calculated_at: datetime,
+        original_unresolved_assets: Sequence[UnresolvedAsset],
+        remaining_unresolved_assets: Sequence[UnresolvedAsset],
+        resolved_asset_ids: Sequence[UUID],
+        policy_version: str,
+    ) -> EventAnalysisView:
+        """Persist derived resolution state without replacing LLM provenance."""
+
+        entity = self._session.get(EventAnalysis, analysis_id)
+        if entity is None:
+            raise LookupError(f"event analysis not found: {analysis_id}")
+
+        structured_output = dict(entity.structured_output)
+        structured_output["unresolved_assets"] = [
+            item.model_dump(mode="json") for item in remaining_unresolved_assets
+        ]
+        structured_output["resolution_recovery"] = {
+            "policy_version": policy_version,
+            "calculated_at": calculated_at.astimezone(UTC).isoformat(),
+            "original_unresolved_assets": [
+                item.model_dump(mode="json") for item in original_unresolved_assets
+            ],
+            "remaining_unresolved_assets": [
+                item.model_dump(mode="json") for item in remaining_unresolved_assets
+            ],
+            "resolved_asset_ids": [str(asset_id) for asset_id in resolved_asset_ids],
+        }
+        entity.status = status
+        entity.calculated_at = calculated_at
+        entity.structured_output = structured_output
         self._session.flush()
         return self._to_view(entity)
 

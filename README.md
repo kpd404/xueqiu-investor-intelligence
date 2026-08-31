@@ -1,6 +1,6 @@
 # Xueqiu Investor Intelligence System
 
-面向投资者行为变化的、数据源无关的研究情报系统。本仓库当前处于 Sprint 2B.1：Generic OpenAI-Compatible Provider。
+面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2D Asset Resolution 主线，当前路线为 Sprint 2E.1：Attention Momentum MVP。
 
 ## Local setup
 
@@ -106,7 +106,7 @@ python -m ai.smoke
 不需要修改 Python 代码。缺少必填配置时命令会返回 `CONFIGURATION_ERROR`，不会打印、保存或提交
 API Key。建议使用本地 `.env` 时确认该文件已被 `.gitignore` 忽略。
 
-Provider 使用版本化 Prompt `opinion-extraction-v1` 和结构化
+Provider 使用版本化 Prompt `opinion-extraction-v4` 和结构化
 `OpinionExtractionResult`，只抽取 RawEvent 文本中的事件级观点；State、Consensus、
 Signal 等仍由确定性领域层计算。Provider 错误会区分认证、限流、超时、不可用和结构化
 输出失败，并标记是否可重试。
@@ -123,7 +123,7 @@ RawEvent
 ```
 
 
-## Project status (Sprint 2B.1)
+## Project status (Sprint 2D completed)
 
 当前核心链路已离线跑通：
 
@@ -136,6 +136,68 @@ RawEvent
 → Historical / Current AssetIntelligenceSnapshot
 ```
 
-Sprint 2B.1 keeps traceability, deterministic replay, retry-safe processing, and short database transactions. The
-generic OpenAI-compatible Provider requires explicit configuration; Signal Engine, Scheduler, Dashboard, and
-Xueqiu verification bypass remain out of scope.
+Sprint 2D keeps traceability, deterministic replay, retry-safe processing, analysis-scoped Opinions, and short
+database transactions. The current Asset Intelligence implementation is a basic Asset Intelligence / Consensus
+foundation, not a complete Intelligence Engine. Signal storage and evidence contracts exist, but there is no formal
+Signal scoring engine; PositionStatus exists, but there is no Portfolio Fact Pipeline.
+
+## Current capability boundary
+
+已实现：
+
+- Xueqiu Following Feed collection
+- RawEvent persistence
+- EventAnalysis lifecycle
+- OpenAI-compatible real LLM extraction
+- deterministic Asset Resolution
+- AssetAlias
+- unresolved semantics preservation
+- unresolved recovery without rerunning LLM
+- Opinion
+- InvestorAssetState
+- StateChange
+- historical replay
+- basic Asset Intelligence / Consensus
+
+当前核心链路：
+
+```text
+Xueqiu Following Feed
+→ RawEvent
+→ EventAnalysis
+→ structured Opinion Extraction
+→ AssetReference
+→ deterministic AssetResolver
+→ Canonical Asset / AssetAlias
+→ Opinion
+→ InvestorAssetState
+→ StateChange
+→ AssetIntelligenceSnapshot
+```
+
+历史 unresolved analysis 可以在补充可信 Asset / Alias 后重新执行确定性 recovery：
+
+```text
+unresolved EventAnalysis
+→ Asset / Alias added explicitly
+→ deterministic recovery
+→ Opinion
+```
+
+Recovery 不重新调用 LLM。
+
+尚未完整实现：
+
+- Attention Momentum
+- Thesis Change
+- Portfolio Fact Pipeline
+- Position Change
+- Opinion × Action Consistency
+- Divergence Engine
+- Industry / Theme Trend
+- Research Signal / Research Candidate
+- Scheduler
+- Dashboard / Product API
+
+本项目不是 Xueqiu crawler product、stock recommendation system、auto trading system 或 price prediction system；
+它是 Investor Behavior Intelligence System，关注谁在关注什么、为什么关注、何时改变观点、是否采取行动，以及多位投资者是否形成共识或分歧。

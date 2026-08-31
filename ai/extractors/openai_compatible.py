@@ -19,9 +19,9 @@ from contracts import (
     StructuredOutputMode,
 )
 
-PROMPT_VERSION = "opinion-extraction-v1"
+PROMPT_VERSION = "opinion-extraction-v4"
 SCHEMA_VERSION = "opinion-extraction-result-v2"
-PROMPT_RESOURCE = Path("prompts/opinion_extraction/v1.md")
+PROMPT_RESOURCE = Path("prompts/opinion_extraction/v4.md")
 
 
 class ResponsesResource(Protocol):

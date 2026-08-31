@@ -131,7 +131,7 @@ def analysis_spec(config: LLMProviderConfig) -> AnalysisSpec:
     return AnalysisSpec.for_provider(
         provider_id=config.provider_id,
         model_version=config.model,
-        prompt_version="opinion-extraction-v1",
+        prompt_version="opinion-extraction-v4",
         schema_version="opinion-extraction-result-v2",
     )
 

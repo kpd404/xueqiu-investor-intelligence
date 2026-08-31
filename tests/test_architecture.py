@@ -134,6 +134,11 @@ def test_asset_resolver_is_source_and_persistence_independent() -> None:
     assert imports.isdisjoint({"ai", "collectors", "database", "sqlalchemy"})
 
 
+def test_asset_recovery_is_source_and_provider_independent() -> None:
+    imports = imported_roots("resolution/recovery.py")
+    assert imports.isdisjoint({"ai", "collectors", "database", "sqlalchemy"})
+
+
 @pytest.mark.parametrize(
     "extractor_module",
     ["ai/extractors/base.py", "ai/extractors/mock.py"],
