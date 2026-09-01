@@ -112,7 +112,7 @@ def test_one_event_with_three_evidence_types_is_one_occurrence(
             source="xueqiu",
             url="https://example.test/attention/one",
             published_time=published_time,
-            content="比音勒芬值得持续关注，比音勒芬再次出现。",
+            content="比音勒芬值得持续关注。//@原作者:比音勒芬原文",
             raw_data={
                 "post_kind": "REPOST",
                 "retweet_status_id": "nested-1",
@@ -253,3 +253,53 @@ def test_repost_without_top_level_mention_is_repost_only(
         assert occurrence.evidence_types == (AttentionEvidenceType.REPOST,)
         assert occurrence.analysis_id is None
         assert occurrence.opinion_id is None
+
+
+def test_nested_repost_text_does_not_create_explicit_mention(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    published_time = datetime(2026, 8, 4, tzinfo=UTC)
+    with db_session_factory() as session:
+        investor = Investor(name="Investor", platform="xueqiu", platform_user_id="four")
+        asset = Asset(name="山西焦煤", symbol="000983", market="SZ")
+        session.add_all([investor, asset])
+        session.flush()
+        session.add(
+            AssetAlias(
+                asset_id=asset.id,
+                alias="山西焦煤",
+                normalized_alias="山西焦煤",
+                alias_type="NAME",
+                market=None,
+            )
+        )
+        event = RawEvent(
+            investor_id=investor.id,
+            event_type="POST",
+            source="xueqiu",
+            url="https://example.test/attention/four",
+            published_time=published_time,
+            content="转发观点。//@原作者:山西焦煤值得关注",
+            raw_data={
+                "post_kind": "REPOST",
+                "retweet_status_id": "nested-3",
+                "retweeted_status": {
+                    "id": "nested-3",
+                    "symbol_id": "SZ000983",
+                    "text": "山西焦煤看多内容",
+                },
+            },
+            hash=uuid4().hex + uuid4().hex,
+            collected_time=published_time,
+        )
+        session.add(event)
+        session.commit()
+        event_id = event.id
+
+    service(db_session_factory).rebuild_event(event_id)
+
+    with db_session_factory() as session:
+        occurrence = AttentionOccurrenceRepository(session).list_by_event(
+            event_id, "attention-occurrence-v1"
+        )[0]
+        assert occurrence.evidence_types == (AttentionEvidenceType.REPOST,)

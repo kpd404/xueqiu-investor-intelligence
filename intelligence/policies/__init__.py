@@ -1,5 +1,6 @@
 from intelligence.policies.asset_aggregation import aggregate_asset_intelligence
 from intelligence.policies.attention import classify_attention
+from intelligence.policies.attribution import current_author_text
 from intelligence.policies.consensus import calculate_consensus
 from intelligence.policies.investor_weight import investor_weight
 from intelligence.policies.mention_matcher import match_asset_mentions
@@ -14,6 +15,7 @@ __all__ = [
     "calculate_consensus",
     "investor_weight",
     "match_asset_mentions",
+    "current_author_text",
     "classify_attention",
     "classify_transition",
     "reduce_investor_asset_state",

@@ -72,7 +72,7 @@ def test_market_symbol_resolution_normalizes_embedded_market(db_session: Session
 
 def test_unique_name_alias_resolves(db_session: Session) -> None:
     asset = add_asset(session=db_session, name="Tencent Holdings", symbol="00700", market="HK")
-    add_alias(db_session, asset, alias="腾讯", normalized_alias="腾讯", market="HK")
+    add_alias(db_session, asset, alias="腾讯", normalized_alias="腾讯", market=None)
 
     result = resolver(db_session).resolve(AssetReference(name_hint="腾讯"))
 
@@ -81,11 +81,39 @@ def test_unique_name_alias_resolves(db_session: Session) -> None:
     assert result.matched_by == "NAME_ALIAS"
 
 
+def test_market_scoped_name_alias_requires_matching_market(db_session: Session) -> None:
+    asset = add_asset(
+        session=db_session,
+        name="中国神华",
+        symbol="601088",
+        market="SH",
+    )
+    add_alias(
+        db_session,
+        asset,
+        alias="中国神华",
+        normalized_alias="中国神华",
+        market="SH",
+    )
+
+    matching = resolver(db_session).resolve(AssetReference(name_hint="中国神华", market_hint="SH"))
+    missing_market = resolver(db_session).resolve(AssetReference(name_hint="中国神华"))
+    wrong_market = resolver(db_session).resolve(
+        AssetReference(name_hint="中国神华", market_hint="HK")
+    )
+
+    assert matching.status is AssetResolutionStatus.RESOLVED
+    assert matching.asset_id == asset.id
+    assert matching.matched_by == "NAME_ALIAS_WITH_MARKET"
+    assert missing_market.status is AssetResolutionStatus.UNRESOLVED
+    assert wrong_market.status is AssetResolutionStatus.UNRESOLVED
+
+
 def test_duplicate_name_alias_is_ambiguous_without_market(db_session: Session) -> None:
     first = add_asset(session=db_session, name="Alpha HK", symbol="A1", market="HK")
     second = add_asset(session=db_session, name="Alpha SH", symbol="A2", market="SH")
-    add_alias(db_session, first, alias="腾讯", normalized_alias="腾讯", market="HK")
-    add_alias(db_session, second, alias="腾讯", normalized_alias="腾讯", market="SH")
+    add_alias(db_session, first, alias="腾讯", normalized_alias="腾讯", market=None)
+    add_alias(db_session, second, alias="腾讯", normalized_alias="腾讯", market=None)
 
     result = resolver(db_session).resolve(AssetReference(name_hint="腾讯"))
 

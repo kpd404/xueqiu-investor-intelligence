@@ -19,6 +19,7 @@ from contracts import (
     EffectiveAnalysisPolicy,
     RawEventView,
 )
+from intelligence.policies.attribution import current_author_text
 from intelligence.policies.mention_matcher import match_asset_mentions
 
 _EVIDENCE_ORDER = {
@@ -117,7 +118,7 @@ class AttentionOccurrenceService:
             opinion_identity: dict[UUID, tuple[UUID, UUID]] = {}
 
             for match in match_asset_mentions(
-                event.content,
+                current_author_text(event.content, event.raw_data),
                 unit_of_work.assets.list_mention_candidates(),
             ):
                 self._add_evidence(

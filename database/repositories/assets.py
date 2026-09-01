@@ -41,24 +41,15 @@ class AssetRepository:
         statement = select(AssetAlias.asset_id).where(
             func.upper(AssetAlias.normalized_alias) == normalized_alias.strip().upper()
         )
-        if market is not None:
+        if market is None:
+            statement = statement.where(AssetAlias.market.is_(None))
+        else:
             statement = statement.where(
                 AssetAlias.market.is_(None)
                 | (func.upper(AssetAlias.market) == market.strip().upper())
             )
         statement = statement.order_by(AssetAlias.asset_id)
         return tuple(sorted(set(self._session.scalars(statement)), key=lambda value: value.int))
-
-    def list_ids_by_normalized_name(
-        self, normalized_name: str, market: str | None = None
-    ) -> tuple[UUID, ...]:
-        statement = select(Asset.id).where(
-            func.upper(Asset.name) == normalized_name.strip().upper()
-        )
-        if market is not None:
-            statement = statement.where(func.upper(Asset.market) == market.strip().upper())
-        statement = statement.order_by(Asset.id)
-        return tuple(self._session.scalars(statement))
 
     def list_mention_candidates(self) -> tuple[AssetMentionCandidate, ...]:
         aliases_by_asset: dict[UUID, list[AssetMentionAlias]] = defaultdict(list)

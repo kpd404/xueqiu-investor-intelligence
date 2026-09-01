@@ -21,10 +21,6 @@ class AssetLookup(Protocol):
         self, normalized_alias: str, market: str | None = None
     ) -> Iterable[UUID]: ...
 
-    def list_ids_by_normalized_name(
-        self, normalized_name: str, market: str | None = None
-    ) -> Iterable[UUID]: ...
-
 
 class AssetResolver:
     """Resolve AssetReference hints deterministically without creating Assets."""
@@ -69,7 +65,7 @@ class AssetResolver:
             if len(strong_candidates) == 1:
                 strong_id = strong_candidates[0]
                 if normalized.name:
-                    name_candidates = self._name_candidates(normalized.name, None)
+                    name_candidates = self._name_candidates(normalized.name, normalized.market)
                     conflicting = tuple(
                         candidate for candidate in name_candidates if candidate != strong_id
                     )
@@ -160,9 +156,14 @@ class AssetResolver:
         )
 
     def _name_candidates(self, name: str, market: str | None) -> tuple[UUID, ...]:
-        candidates = set(self._lookup.list_ids_by_normalized_name(name, market))
-        candidates.update(self._lookup.list_ids_by_normalized_alias(name, market))
-        return self._sorted_ids(candidates)
+        """Return name candidates through the explicit Alias policy only.
+
+        Canonical ``Asset.name`` is a display identity, not an implicit global
+        alias.  Requiring an explicit Alias keeps market-scoped aliases from
+        being bypassed by a direct canonical-name query.
+        """
+
+        return self._sorted_ids(self._lookup.list_ids_by_normalized_alias(name, market))
 
     @staticmethod
     def _invalid_reason(reference: AssetReference) -> str | None:

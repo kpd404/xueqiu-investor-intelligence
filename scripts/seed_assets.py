@@ -78,6 +78,72 @@ SEED_ASSETS: tuple[AssetSeed, ...] = (
             "retweeted_status.symbol_id=SZ002832"
         ),
     ),
+    AssetSeed(
+        name="特变电工",
+        market="SH",
+        symbol="600089",
+        aliases=(
+            AliasSeed("特变电工", "NAME"),
+            AliasSeed("SH600089", "SYMBOL", "SH"),
+        ),
+        evidence=(
+            "RawEvent event_id=2748576f-1e25-46eb-b96d-d614b29f55fa; "
+            "content contains 特变电工(SH600089)"
+        ),
+    ),
+    AssetSeed(
+        name="紫金矿业",
+        market="SH",
+        symbol="601899",
+        aliases=(
+            AliasSeed("紫金矿业", "NAME"),
+            AliasSeed("SH601899", "SYMBOL", "SH"),
+        ),
+        evidence=(
+            "RawEvent event_id=0176863d-f0b4-4042-a3a6-c5fc93044220; "
+            "content contains 紫金矿业(SH601899)"
+        ),
+    ),
+    AssetSeed(
+        name="中国神华",
+        market="SH",
+        symbol="601088",
+        aliases=(
+            AliasSeed("中国神华", "NAME", "SH"),
+            AliasSeed("SH601088", "SYMBOL", "SH"),
+        ),
+        evidence=(
+            "RawEvent event_id=77e19211-c9a1-4ce6-b3d2-36e7c7a7b991; "
+            "quoted content contains 中国神华(SH601088); "
+            "separate 01088 evidence is retained as a cross-listing caution"
+        ),
+    ),
+    AssetSeed(
+        name="中远海能",
+        market="SH",
+        symbol="600026",
+        aliases=(
+            AliasSeed("中远海能", "NAME"),
+            AliasSeed("SH600026", "SYMBOL", "SH"),
+        ),
+        evidence=(
+            "RawEvent event_id=c0b8c3f9-f2a4-4163-b49c-bddd0b7fef53; "
+            "content contains 中远海能(SH600026)"
+        ),
+    ),
+    AssetSeed(
+        name="招商轮船",
+        market="SH",
+        symbol="601872",
+        aliases=(
+            AliasSeed("招商轮船", "NAME"),
+            AliasSeed("SH601872", "SYMBOL", "SH"),
+        ),
+        evidence=(
+            "RawEvent event_id=c0b8c3f9-f2a4-4163-b49c-bddd0b7fef53; "
+            "content contains 招商轮船(SH601872)"
+        ),
+    ),
 )
 
 

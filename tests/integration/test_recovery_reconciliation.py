@@ -66,7 +66,7 @@ def test_recovery_reconciliation_uses_original_fact_time_and_is_idempotent(
                 alias="腾讯",
                 normalized_alias="腾讯",
                 alias_type="NAME",
-                market="HK",
+                market=None,
             )
         )
         event = RawEvent(
