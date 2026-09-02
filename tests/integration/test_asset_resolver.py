@@ -109,6 +109,37 @@ def test_market_scoped_name_alias_requires_matching_market(db_session: Session) 
     assert wrong_market.status is AssetResolutionStatus.UNRESOLVED
 
 
+def test_cross_listing_name_alias_does_not_resolve_without_market(db_session: Session) -> None:
+    asset = add_asset(
+        session=db_session,
+        name="中远海能",
+        symbol="600026",
+        market="SH",
+    )
+    add_alias(
+        db_session,
+        asset,
+        alias="中远海能",
+        normalized_alias="中远海能",
+        market="SH",
+    )
+
+    name_only = resolver(db_session).resolve(AssetReference(name_hint="中远海能"))
+    matching = resolver(db_session).resolve(AssetReference(name_hint="中远海能", market_hint="SH"))
+    wrong_market = resolver(db_session).resolve(
+        AssetReference(name_hint="中远海能", market_hint="HK")
+    )
+    foreign_symbol = resolver(db_session).resolve(
+        AssetReference(name_hint="中远海能", symbol_hint="01138")
+    )
+
+    assert name_only.status is AssetResolutionStatus.UNRESOLVED
+    assert matching.status is AssetResolutionStatus.RESOLVED
+    assert matching.asset_id == asset.id
+    assert wrong_market.status is AssetResolutionStatus.UNRESOLVED
+    assert foreign_symbol.status is AssetResolutionStatus.UNRESOLVED
+
+
 def test_duplicate_name_alias_is_ambiguous_without_market(db_session: Session) -> None:
     first = add_asset(session=db_session, name="Alpha HK", symbol="A1", market="HK")
     second = add_asset(session=db_session, name="Alpha SH", symbol="A2", market="SH")

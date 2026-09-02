@@ -644,3 +644,36 @@ Completions, free-text JSON fallback, tool calling, or provider-specific reasoni
 version, schema version, and analysis policy version. Runtime credentials and transport settings are
 excluded. `EventAnalysis.provider_metadata` remains the only persistence extension for provider/base
 URL/response/usage metadata; no new provider table is introduced.
+
+## Sprint 2E.2-B Production Analysis Policy
+
+Normal application composition obtains the active Opinion interpretation from
+the neutral `ProductionAnalysisPolicy` source (`analysis_type =
+OPINION_EXTRACTION`). The approved `analysis_version` is checked against the
+semantic identity derived from the configured provider and model; provider
+defaults alone do not switch production behavior. Historical or experimental
+callers may pass an explicit `EffectiveAnalysisPolicy`.
+
+State projections, effective StateChange queries, AttentionOccurrence queries,
+historical replay, and Asset Intelligence all consume the same active
+`analysis_version`. A database-present Analysis is not automatically effective,
+and a failed active Analysis never falls back to an older one.
+
+StateChange provenance is resolved through
+`triggering_opinion_id → Opinion.analysis_id → EventAnalysis.analysis_version`.
+The active-ledger repository query applies this join; v4 ledger rows remain
+append-only historical data and are excluded from the production view.
+
+## Sprint 2E.2-A Opinion Attribution Boundary
+
+The OpinionExtractor receives a minimal current-author analysis view from the
+contracts layer. Original events use their author text; repost and quote-chain
+events exclude text after the first `//@` marker and all nested
+`retweeted_status` content. The RawEvent fact remains unchanged. Quoted or
+nested speakers cannot supply the current author's asset, thesis, catalysts,
+risks, time horizon, direction, or strength. Repost evidence remains owned by
+the Attention layer.
+
+`opinion-analysis-v3` and `opinion-extraction-v5` identify this attribution
+policy. Missing catalysts, risks, or time horizon are
+`UNKNOWN`/`NOT_EXTRACTED`, not thesis removal or weakening.

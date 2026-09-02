@@ -597,6 +597,22 @@ Provider response identity and usage are stored in the existing nullable
 `event_analyses.provider_metadata` JSON field. No provider-specific table is introduced. A generic
 `unresolved_assets` hint may preserve an ambiguous textual asset reference without creating an `Asset`.
 
+### Production Analysis Policy
+
+`ProductionAnalysisPolicy` is the single source for the normal
+`OPINION_EXTRACTION` interpretation policy. It explicitly approves one
+`AnalysisSpec`; provider runtime defaults do not implicitly activate a new
+model or prompt. A database-present `EventAnalysis` is not necessarily
+production-effective. State, historical replay, Attention, and Asset
+Intelligence use the exact active `analysis_version` and never fall back to
+older or failed analyses.
+
+StateChange interpretation provenance is recoverable through
+`triggering_opinion_id → Opinion.analysis_id → EventAnalysis.analysis_version`.
+The production repository query follows this chain and excludes inactive or
+failed analyses; the append-only v4 ledger remains available only to explicit
+historical queries.
+
 ## Sprint 2E.0 Behavior Evidence Foundation
 
 `AttentionOccurrence` is a recomputable derived record for one Investor × Asset × RawEvent behavior occurrence.
@@ -608,3 +624,14 @@ analysis by `generated_time`, and a missing or failed active analysis does not f
 
 Time semantics remain distinct: `published_time` is behavior effective time, `generated_time` is AI interpretation
 time, and `calculated_at` is derived calculation or reconciliation time.
+
+### Current-author opinion attribution
+
+Opinion extraction uses a minimal, provider-neutral current-author view. For an
+original event this is the author's text; for a repost or quote chain it stops
+at the first `//@` marker and never includes nested
+`retweeted_status` text. Quoted speakers are not evidence for the current author's asset, direction,
+thesis, catalysts, risks, or time horizon. Repost attention may still be
+recorded separately. Missing catalysts, risks, or time horizon mean
+UNKNOWN/NOT_EXTRACTED and must not be interpreted as removed, weakened, or
+invalidated in future thesis comparisons.

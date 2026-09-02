@@ -3,11 +3,18 @@
 from contracts.analysis import (
     ANALYSIS_POLICY_VERSION,
     LEGACY_PROVIDER_ID,
+    OPINION_ANALYSIS_POLICY_VERSION,
+    OPINION_EXTRACTION_PROMPT_VERSION,
+    OPINION_EXTRACTION_SCHEMA_VERSION,
+    PRODUCTION_OPINION_ANALYSIS_VERSION,
     AnalysisSpec,
+    AnalysisType,
     EffectiveAnalysisPolicy,
+    EffectiveStateChangeView,
     EventAnalysisCreate,
     EventAnalysisStatus,
     EventAnalysisView,
+    ProductionAnalysisPolicy,
     StateChangeCreate,
     StateChangeView,
 )
@@ -81,7 +88,14 @@ from contracts.provider import (
     ProviderErrorCode,
     StructuredOutputMode,
 )
-from contracts.raw_event import RawEventDTO, RawEventView, RawEventWriteResult
+from contracts.raw_event import (
+    CurrentAuthorEventView,
+    RawEventDTO,
+    RawEventView,
+    RawEventWriteResult,
+    current_author_analysis_view,
+    current_author_text,
+)
 from contracts.reconciliation import BehaviorReconciliationResult
 from contracts.recovery import (
     ASSET_RECOVERY_POLICY_VERSION,
@@ -99,10 +113,17 @@ from contracts.state import (
 
 __all__ = [
     "ANALYSIS_POLICY_VERSION",
+    "AnalysisType",
+    "OPINION_ANALYSIS_POLICY_VERSION",
+    "OPINION_EXTRACTION_PROMPT_VERSION",
+    "OPINION_EXTRACTION_SCHEMA_VERSION",
+    "PRODUCTION_OPINION_ANALYSIS_VERSION",
     "ATTENTION_POLICY_VERSION",
     "AnalysisProcessingError",
     "AnalysisSpec",
     "EffectiveAnalysisPolicy",
+    "EffectiveStateChangeView",
+    "ProductionAnalysisPolicy",
     "ASSET_RECOVERY_POLICY_VERSION",
     "AssetReference",
     "AssetMentionAlias",
@@ -124,6 +145,7 @@ __all__ = [
     "AssetIntelligenceSnapshot",
     "AttentionLevel",
     "CollectionRequest",
+    "CurrentAuthorEventView",
     "FeedCollectionRequest",
     "FeedPostItem",
     "FeedPostKind",
@@ -159,6 +181,8 @@ __all__ = [
     "RawEventNotFoundError",
     "RawEventView",
     "RawEventWriteResult",
+    "current_author_analysis_view",
+    "current_author_text",
     "STATE_POLICY_VERSION",
     "StateChangeCreate",
     "StateChangeView",

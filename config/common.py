@@ -3,6 +3,8 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from contracts.analysis import PRODUCTION_OPINION_ANALYSIS_VERSION
+
 
 class Settings(BaseSettings):
     """Runtime settings shared by every application layer."""
@@ -20,6 +22,7 @@ class Settings(BaseSettings):
     llm_structured_output: str = "json_schema"
     llm_timeout_seconds: float = Field(default=60.0, gt=0)
     llm_max_retries: int = Field(default=2, ge=0, le=10)
+    production_opinion_analysis_version: str = PRODUCTION_OPINION_ANALYSIS_VERSION
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

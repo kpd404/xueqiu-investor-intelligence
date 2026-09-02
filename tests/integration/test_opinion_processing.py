@@ -10,6 +10,7 @@ from collectors import ManualImportAdapter
 from contracts import (
     AssetOpinionExtraction,
     CollectionRequest,
+    CurrentAuthorEventView,
     OpinionDirection,
     OpinionExtractionResult,
     OpinionProcessingStatus,
@@ -29,6 +30,7 @@ def seed_raw_event(
     *,
     content: str,
     create_asset: bool,
+    raw_data: dict[str, object] | None = None,
 ) -> tuple[UUID, UUID, UUID | None]:
     with factory() as session:
         investor = Investor(
@@ -51,6 +53,7 @@ def seed_raw_event(
             content=content,
             published_time=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
             url="https://example.test/manual/opinion-event",
+            raw_data=raw_data or {},
         )
         request = CollectionRequest(
             investor_id=investor.id,
@@ -86,6 +89,37 @@ class NameOnlyOpinionExtractor:
                     strength=65,
                     confidence=0.6,
                     thesis=("商业化速度",),
+                ),
+            ),
+        )
+
+
+class AttributionBoundaryExtractor:
+    model_version = "attribution-boundary-v1"
+
+    def __init__(self) -> None:
+        self.seen_content: list[str] = []
+
+    async def extract(self, event: CurrentAuthorEventView) -> OpinionExtractionResult:
+        content = event.content
+        self.seen_content.append(content)
+        if "腾讯" not in content:
+            return OpinionExtractionResult(
+                investment_related=False,
+                model_version=self.model_version,
+            )
+        return OpinionExtractionResult(
+            investment_related=True,
+            model_version=self.model_version,
+            opinions=(
+                AssetOpinionExtraction(
+                    asset_name="Tencent",
+                    symbol="00700",
+                    market="HK",
+                    direction=OpinionDirection.BULLISH,
+                    strength=80,
+                    confidence=0.9,
+                    thesis=("作者自己的AI商业化判断",),
                 ),
             ),
         )
@@ -247,6 +281,68 @@ def test_non_investment_content_returns_no_opinion(
     assert result.opinion_ids == ()
     assert result.unresolved_assets == ()
 
+    with db_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 0
+
+
+def test_repost_opinion_extractor_receives_current_author_text_only(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    extractor = AttributionBoundaryExtractor()
+    _, event_id, asset_id = seed_raw_event(
+        db_session_factory,
+        content="我继续看好腾讯的AI商业化。//@原作者:腾讯看空",
+        create_asset=True,
+        raw_data={
+            "post_kind": "REPOST",
+            "retweeted_status": {"id": "nested-1", "text": "腾讯看空"},
+        },
+    )
+
+    result = asyncio.run(
+        OpinionProcessingService(
+            extractor=extractor,
+            unit_of_work_factory=lambda: SqlAlchemyOpinionUnitOfWork(db_session_factory),
+        ).process(event_id, extractor.model_version)
+    )
+
+    assert result.status is OpinionProcessingStatus.PROCESSED
+    assert result.opinion_ids
+    assert extractor.seen_content == ["我继续看好腾讯的AI商业化。"]
+    with db_session_factory() as session:
+        raw_event = session.get(RawEvent, event_id)
+        opinion = session.get(Opinion, result.opinion_ids[0])
+        assert raw_event is not None
+        assert raw_event.content == "我继续看好腾讯的AI商业化。//@原作者:腾讯看空"
+        assert opinion is not None
+        assert opinion.asset_id == asset_id
+        assert opinion.thesis == ["作者自己的AI商业化判断"]
+
+
+def test_repost_only_quoted_opinion_is_no_opinion(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    extractor = AttributionBoundaryExtractor()
+    _, event_id, _ = seed_raw_event(
+        db_session_factory,
+        content="转发//@原作者:腾讯AI商业化值得关注",
+        create_asset=True,
+        raw_data={
+            "post_kind": "REPOST",
+            "retweeted_status": {"id": "nested-2", "text": "腾讯AI商业化值得关注"},
+        },
+    )
+
+    result = asyncio.run(
+        OpinionProcessingService(
+            extractor=extractor,
+            unit_of_work_factory=lambda: SqlAlchemyOpinionUnitOfWork(db_session_factory),
+        ).process(event_id, extractor.model_version)
+    )
+
+    assert result.status is OpinionProcessingStatus.NO_OPINION
+    assert result.opinion_ids == ()
+    assert extractor.seen_content == ["转发"]
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Opinion)) == 0
 

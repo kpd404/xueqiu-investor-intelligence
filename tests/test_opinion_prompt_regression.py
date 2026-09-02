@@ -7,7 +7,13 @@ from ai.extractors.openai_compatible import (
     PROMPT_VERSION,
     OpenAICompatibleOpinionExtractor,
 )
-from contracts import EventType, LLMProviderConfig, OpinionDirection, RawEventView
+from contracts import (
+    EventType,
+    LLMProviderConfig,
+    OpinionDirection,
+    RawEventView,
+    current_author_analysis_view,
+)
 
 
 class _Content:
@@ -49,7 +55,7 @@ class _Client:
         self.responses = responses
 
 
-def _event(content: str) -> RawEventView:
+def _event(content: str, raw_data: dict[str, object] | None = None) -> RawEventView:
     return RawEventView(
         id=uuid4(),
         investor_id=uuid4(),
@@ -58,7 +64,7 @@ def _event(content: str) -> RawEventView:
         url="https://example.test/event",
         published_time=datetime(2026, 8, 31, tzinfo=UTC),
         content=content,
-        raw_data={},
+        raw_data=raw_data or {},
         hash="a" * 64,
         collected_time=datetime(2026, 8, 31, tzinfo=UTC),
     )
@@ -76,7 +82,7 @@ def _extractor(responses: _Responses) -> OpenAICompatibleOpinionExtractor:
     )
 
 
-def test_prompt_v4_prioritizes_explicit_company_over_material_category() -> None:
+def test_prompt_v5_prioritizes_explicit_company_over_material_category() -> None:
     responses = _Responses(
         {
             "investment_related": True,
@@ -106,13 +112,16 @@ def test_prompt_v4_prioritizes_explicit_company_over_material_category() -> None
         extractor.extract(_event("比音勒芬的高价和增长值得关注，但传统布料可能长期承压。"))
     )
 
-    assert PROMPT_VERSION == "opinion-extraction-v4"
-    assert result.analysis_spec.prompt_version == "opinion-extraction-v4"
+    assert PROMPT_VERSION == "opinion-extraction-v5"
+    assert result.analysis_spec.prompt_version == "opinion-extraction-v5"
     assert result.opinions[0].asset_name == "比音勒芬"
     instructions = str(responses.calls[0]["instructions"])
     assert "company or security" in instructions
     assert "material" in instructions
     assert "category" in instructions
+    assert "current-author" in instructions
+    assert "quoted or nested speaker" in instructions
+    assert "Do not infer endorsement" in instructions
     assert "must not be placed in `unresolved_assets`" in instructions
 
 
@@ -134,3 +143,39 @@ def test_category_only_text_does_not_create_a_security_entity() -> None:
     assert result.investment_related is False
     assert result.opinions == ()
     assert result.unresolved_assets == ()
+
+
+def test_repost_input_excludes_quoted_asset_from_provider_request() -> None:
+    responses = _Responses(
+        {
+            "investment_related": False,
+            "opinions": [],
+            "model_version": "ignored",
+            "analysis_spec": None,
+            "provider_metadata": {},
+            "unresolved_assets": [],
+        }
+    )
+    extractor = _extractor(responses)
+
+    result = asyncio.run(
+        extractor.extract(
+            current_author_analysis_view(
+                _event(
+                    "转发//@原作者:腾讯AI商业化值得关注",
+                    {
+                        "post_kind": "REPOST",
+                        "retweeted_status": {
+                            "id": "nested-1",
+                            "text": "腾讯AI商业化值得关注",
+                        },
+                    },
+                )
+            )
+        )
+    )
+
+    assert result.investment_related is False
+    request_input = str(responses.calls[0]["input"])
+    assert "转发" in request_input
+    assert "腾讯AI商业化值得关注" not in request_input

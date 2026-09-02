@@ -2,15 +2,18 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from contracts import (
     AttentionOccurrenceCreate,
     AttentionOccurrenceView,
     AttentionOccurrenceWriteResult,
+    EffectiveAnalysisPolicy,
+    EventAnalysisStatus,
 )
 from database.models.attention_occurrence import AttentionOccurrence
+from database.models.event_analysis import EventAnalysis
 
 
 class AttentionOccurrenceRepository:
@@ -95,6 +98,35 @@ class AttentionOccurrenceRepository:
             updated_count=updated_count,
             deleted_count=deleted_count,
         )
+
+    def list_effective(
+        self,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[AttentionOccurrenceView]:
+        """Return occurrences whose interpretation evidence is active.
+
+        Occurrences with only explicit-mention or repost evidence have no
+        analysis_id and remain eligible; OPINION evidence must link to the
+        active successful/partially-resolved analysis.
+        """
+
+        statement = (
+            select(AttentionOccurrence)
+            .outerjoin(EventAnalysis, AttentionOccurrence.analysis_id == EventAnalysis.id)
+            .where(
+                or_(
+                    AttentionOccurrence.analysis_id.is_(None),
+                    and_(
+                        EventAnalysis.analysis_version == policy.active_analysis_version,
+                        EventAnalysis.status.in_(
+                            [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                        ),
+                    ),
+                )
+            )
+            .order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
+        )
+        return [self._to_view(entity) for entity in self._session.scalars(statement)]
 
     @classmethod
     def _to_view(cls, entity: AttentionOccurrence) -> AttentionOccurrenceView:

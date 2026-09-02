@@ -159,7 +159,8 @@ def test_generic_adapter_uses_standard_responses_json_schema() -> None:
     assert result.opinions[0].direction == OpinionDirection.BULLISH
     assert result.analysis_spec.provider_id == "test-provider"
     assert result.analysis_spec.model_version == "my-custom-model-v123"
-    assert result.analysis_spec.analysis_version.startswith("opinion-analysis-v2:")
+    assert result.analysis_spec.analysis_policy_version == "opinion-analysis-v3"
+    assert result.analysis_spec.analysis_version.startswith("opinion-analysis-v3:")
     assert result.provider_metadata == {
         "provider": "test-provider",
         "base_url": "https://gateway.example.test/v1",

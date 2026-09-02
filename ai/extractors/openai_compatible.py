@@ -9,19 +9,21 @@ from pydantic import ValidationError
 from ai.extractors.base import OpinionExtractor
 from config import Settings, get_settings
 from contracts import (
-    ANALYSIS_POLICY_VERSION,
+    OPINION_ANALYSIS_POLICY_VERSION,
+    OPINION_EXTRACTION_PROMPT_VERSION,
+    OPINION_EXTRACTION_SCHEMA_VERSION,
     AnalysisSpec,
+    CurrentAuthorEventView,
     LLMProviderConfig,
     LLMProviderError,
     OpinionExtractionResult,
     ProviderErrorCode,
-    RawEventView,
     StructuredOutputMode,
 )
 
-PROMPT_VERSION = "opinion-extraction-v4"
-SCHEMA_VERSION = "opinion-extraction-result-v2"
-PROMPT_RESOURCE = Path("prompts/opinion_extraction/v4.md")
+PROMPT_VERSION = OPINION_EXTRACTION_PROMPT_VERSION
+SCHEMA_VERSION = OPINION_EXTRACTION_SCHEMA_VERSION
+PROMPT_RESOURCE = Path("prompts/opinion_extraction/v5.md")
 
 
 class ResponsesResource(Protocol):
@@ -50,7 +52,7 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
             model_version=config.model,
             prompt_version=PROMPT_VERSION,
             schema_version=SCHEMA_VERSION,
-            analysis_policy_version=ANALYSIS_POLICY_VERSION,
+            analysis_policy_version=OPINION_ANALYSIS_POLICY_VERSION,
         )
         self._prompt_text = prompt_text if prompt_text is not None else self._load_prompt()
 
@@ -97,7 +99,7 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
     def analysis_spec(self) -> AnalysisSpec:
         return self._analysis_spec
 
-    async def extract(self, event: RawEventView) -> OpinionExtractionResult:
+    async def extract(self, event: CurrentAuthorEventView) -> OpinionExtractionResult:
         request_input = self._request_input(event)
         try:
             client = self._client or self._build_client()
@@ -169,7 +171,7 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
         return prompt
 
     @staticmethod
-    def _request_input(event: RawEventView) -> str:
+    def _request_input(event: CurrentAuthorEventView) -> str:
         return (
             "event_type="
             + event.event_type.value

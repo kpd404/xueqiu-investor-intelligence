@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Self
 from uuid import UUID
@@ -168,3 +169,45 @@ class RawEventView(BaseModel):
     raw_data: dict[str, JsonValue]
     hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     collected_time: AwareDatetime
+
+
+class CurrentAuthorEventView(BaseModel):
+    """Minimal event view used for author-attributed opinion extraction.
+
+    The view deliberately omits persistence identifiers and source payload
+    details. For repost facts, ``content`` contains only the current author's
+    text; quoted and nested repost text remains available only in the raw fact.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    event_type: EventType
+    source: str = Field(min_length=1, max_length=64)
+    published_time: AwareDatetime
+    content: str
+
+
+def current_author_text(content: str, raw_data: Mapping[str, object]) -> str:
+    """Return only current-author text from a normalized repost fact."""
+
+    is_repost = raw_data.get("post_kind") == "REPOST" or isinstance(
+        raw_data.get("retweeted_status"), Mapping
+    )
+    if not is_repost:
+        return content
+
+    # Xueqiu's normalized repost content uses the first ``//@`` marker to
+    # begin quoted status text. Keep RawEvent unchanged; this is a derived
+    # attribution boundary for downstream interpretation.
+    return content.split("//@", 1)[0].strip()
+
+
+def current_author_analysis_view(event: RawEventView) -> CurrentAuthorEventView:
+    """Build the provider-neutral, current-author-only analysis view."""
+
+    return CurrentAuthorEventView(
+        event_type=event.event_type,
+        source=event.source,
+        published_time=event.published_time,
+        content=current_author_text(event.content, event.raw_data),
+    )

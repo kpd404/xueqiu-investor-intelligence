@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from ai.extractors.openai_compatible import OpenAICompatibleOpinionExtractor
 from config import get_settings
-from contracts import EventType, LLMProviderError, RawEventDTO, RawEventView
+from contracts import CurrentAuthorEventView, EventType, LLMProviderError, RawEventDTO
 
 DEFAULT_TEXT = (
     "腾讯AI商业化空间正在扩大，广告恢复也可能推动盈利改善，"
@@ -13,7 +13,7 @@ DEFAULT_TEXT = (
 )
 
 
-def build_event_view(content: str) -> RawEventView:
+def build_event_view(content: str) -> CurrentAuthorEventView:
     investor_id = uuid4()
     dto = RawEventDTO.build(
         investor_id=investor_id,
@@ -23,17 +23,11 @@ def build_event_view(content: str) -> RawEventView:
         published_time=datetime.now(UTC),
         content=content,
     )
-    return RawEventView(
-        id=uuid4(),
-        investor_id=dto.investor_id,
+    return CurrentAuthorEventView(
         event_type=dto.event_type,
         source=dto.source,
-        url=dto.url,
         published_time=dto.published_time,
         content=dto.content,
-        raw_data=dto.raw_data,
-        hash=dto.hash,
-        collected_time=dto.collected_time,
     )
 
 

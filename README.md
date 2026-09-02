@@ -106,10 +106,17 @@ python -m ai.smoke
 不需要修改 Python 代码。缺少必填配置时命令会返回 `CONFIGURATION_ERROR`，不会打印、保存或提交
 API Key。建议使用本地 `.env` 时确认该文件已被 `.gitignore` 忽略。
 
-Provider 使用版本化 Prompt `opinion-extraction-v4` 和结构化
+Provider 使用版本化 Prompt `opinion-extraction-v5` 和结构化
 `OpinionExtractionResult`，只抽取 RawEvent 文本中的事件级观点；State、Consensus、
 Signal 等仍由确定性领域层计算。Provider 错误会区分认证、限流、超时、不可用和结构化
 输出失败，并标记是否可重试。
+
+Opinion extraction receives a minimal current-author analysis view. For reposts
+and quote chains, text after the first `//@` marker and nested repost content
+are excluded from the LLM input. Quoted speakers are never inherited as the
+current author's asset, thesis, catalyst, risk, or direction. Missing
+catalysts, risks, or time horizon are recorded as unknown/not extracted; they
+are not evidence of removal or weakening.
 
 当前核心链路：
 
@@ -140,6 +147,15 @@ Sprint 2D keeps traceability, deterministic replay, retry-safe processing, analy
 database transactions. The current Asset Intelligence implementation is a basic Asset Intelligence / Consensus
 foundation, not a complete Intelligence Engine. Signal storage and evidence contracts exist, but there is no formal
 Signal scoring engine; PositionStatus exists, but there is no Portfolio Fact Pipeline.
+
+## Production analysis policy
+
+Provider runtime defaults are not the production approval. Normal downstream
+processing uses the explicit `PRODUCTION_OPINION_ANALYSIS_VERSION` policy
+source; a provider or model change is rejected until that approved identity is
+updated. A database-present Analysis is not automatically production-effective:
+State, historical replay, Attention, and Asset Intelligence consume only the
+active policy version.
 
 ## Current capability boundary
 

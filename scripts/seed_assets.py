@@ -123,7 +123,7 @@ SEED_ASSETS: tuple[AssetSeed, ...] = (
         market="SH",
         symbol="600026",
         aliases=(
-            AliasSeed("中远海能", "NAME"),
+            AliasSeed("中远海能", "NAME", "SH"),
             AliasSeed("SH600026", "SYMBOL", "SH"),
         ),
         evidence=(

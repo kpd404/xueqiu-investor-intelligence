@@ -18,9 +18,11 @@ from contracts import (
     OpinionProcessingResult,
     OpinionProcessingStatus,
     OpinionWriteResult,
+    ProductionAnalysisPolicy,
     RawEventNotFoundError,
     RawEventView,
     UnresolvedAsset,
+    current_author_analysis_view,
 )
 
 
@@ -95,9 +97,11 @@ class OpinionProcessingService:
         self,
         extractor: OpinionExtractor,
         unit_of_work_factory: OpinionUnitOfWorkFactory,
+        production_policy: ProductionAnalysisPolicy | None = None,
     ) -> None:
         self._extractor = extractor
         self._unit_of_work_factory = unit_of_work_factory
+        self._production_policy = production_policy
 
     async def process(
         self,
@@ -106,7 +110,12 @@ class OpinionProcessingService:
         *,
         analysis_spec: AnalysisSpec | None = None,
     ) -> OpinionProcessingResult:
-        spec = analysis_spec or AnalysisSpec.from_model_version(model_version or "")
+        if analysis_spec is not None:
+            spec = analysis_spec
+        elif self._production_policy is not None:
+            spec = self._production_policy.active_spec
+        else:
+            spec = AnalysisSpec.from_model_version(model_version or "")
         if model_version is not None and model_version.strip() != spec.model_version:
             raise ValueError("model_version must match analysis_spec.model_version")
 
@@ -128,7 +137,7 @@ class OpinionProcessingService:
             return self._result_from_existing(existing, event.id, existing_opinion_ids)
 
         try:
-            extraction = await self._extractor.extract(event)
+            extraction = await self._extractor.extract(current_author_analysis_view(event))
             self._validate_extraction(extraction_model_version=extraction.model_version, spec=spec)
             if extraction.analysis_spec is not None and extraction.analysis_spec != spec:
                 raise ExtractorModelVersionMismatchError(

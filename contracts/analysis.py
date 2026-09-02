@@ -8,6 +8,16 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 ANALYSIS_POLICY_VERSION = "opinion-analysis-v2"
+# Opinion extraction semantics v3 enforce a current-author-only attribution
+# boundary. Keep the original default for legacy callers and fixtures.
+OPINION_ANALYSIS_POLICY_VERSION = "opinion-analysis-v3"
+OPINION_EXTRACTION_PROMPT_VERSION = "opinion-extraction-v5"
+OPINION_EXTRACTION_SCHEMA_VERSION = "opinion-extraction-result-v2"
+# Explicitly approved production identity. Provider defaults alone do not
+# activate an interpretation policy; the application must match this value.
+PRODUCTION_OPINION_ANALYSIS_VERSION = (
+    "opinion-analysis-v3:09ffeb296d9ff28099f3e746749eda14fc74b708efaf5ff59bcfc3c74fcada79"
+)
 LEGACY_PROVIDER_ID = "legacy"
 
 
@@ -108,6 +118,10 @@ class EventAnalysisStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class AnalysisType(StrEnum):
+    OPINION_EXTRACTION = "OPINION_EXTRACTION"
+
+
 class EffectiveAnalysisPolicy(BaseModel):
     """Select one active Opinion AnalysisSpec without temporal fallback."""
 
@@ -128,6 +142,24 @@ class EffectiveAnalysisPolicy(BaseModel):
             EventAnalysisStatus.SUCCESS,
             EventAnalysisStatus.PARTIALLY_RESOLVED,
         }
+
+
+class ProductionAnalysisPolicy(BaseModel):
+    """Explicitly approved interpretation policy for normal application use."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    analysis_type: AnalysisType = AnalysisType.OPINION_EXTRACTION
+    active_spec: AnalysisSpec
+
+    @property
+    def active_analysis_version(self) -> str:
+        return self.active_spec.analysis_version
+
+    def as_effective_policy(self) -> EffectiveAnalysisPolicy:
+        """Adapt the production source to existing downstream service ports."""
+
+        return EffectiveAnalysisPolicy(active_spec=self.active_spec)
 
 
 class EventAnalysisCreate(BaseModel):
@@ -170,3 +202,10 @@ class StateChangeView(StateChangeCreate):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: UUID
+
+
+class EffectiveStateChangeView(StateChangeView):
+    """State-change row plus the active interpretation provenance."""
+
+    analysis_id: UUID
+    analysis_version: str = Field(min_length=1, max_length=255)

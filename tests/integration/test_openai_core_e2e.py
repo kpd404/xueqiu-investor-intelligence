@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai import OpenAICompatibleOpinionExtractor, OpinionProcessingService
 from collectors import ManualImportAdapter
 from contracts import (
+    OPINION_ANALYSIS_POLICY_VERSION,
     AnalysisSpec,
     AssetOpinionExtraction,
     CollectionRequest,
@@ -132,8 +133,9 @@ def analysis_spec(config: LLMProviderConfig) -> AnalysisSpec:
     return AnalysisSpec.for_provider(
         provider_id=config.provider_id,
         model_version=config.model,
-        prompt_version="opinion-extraction-v4",
+        prompt_version="opinion-extraction-v5",
         schema_version="opinion-extraction-result-v2",
+        analysis_policy_version=OPINION_ANALYSIS_POLICY_VERSION,
     )
 
 

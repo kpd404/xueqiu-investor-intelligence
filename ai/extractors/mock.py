@@ -2,9 +2,9 @@ from dataclasses import dataclass
 
 from contracts import (
     AssetOpinionExtraction,
+    CurrentAuthorEventView,
     OpinionDirection,
     OpinionExtractionResult,
-    RawEventView,
 )
 
 
@@ -14,7 +14,7 @@ class MockOpinionExtractor:
 
     model_version: str = "mock-opinion-v1"
 
-    async def extract(self, event: RawEventView) -> OpinionExtractionResult:
+    async def extract(self, event: CurrentAuthorEventView) -> OpinionExtractionResult:
         content = "".join(event.content.split())
         fixture_matches = "腾讯AI商业化空间正在扩大" in content and (
             "广告恢复也可能推动盈利改善" in content or "广告恢复可能推动盈利改善" in content

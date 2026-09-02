@@ -5,8 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import InvestorAssetStateSnapshot
+from contracts import EffectiveAnalysisPolicy, EventAnalysisStatus, InvestorAssetStateSnapshot
+from database.models.event_analysis import EventAnalysis
 from database.models.investor_asset_state import InvestorAssetState
+from database.models.opinion import Opinion
 
 
 class InvestorAssetStateRepository:
@@ -27,6 +29,29 @@ class InvestorAssetStateRepository:
             select(InvestorAssetState)
             .where(InvestorAssetState.asset_id == asset_id)
             .order_by(InvestorAssetState.investor_id, InvestorAssetState.id)
+        )
+        return list(self._session.scalars(statement))
+
+    def list_effective(self, policy: EffectiveAnalysisPolicy) -> list[InvestorAssetState]:
+        """Return projections backed by at least one active interpretation."""
+
+        active_opinion = (
+            select(Opinion.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.investor_id == InvestorAssetState.investor_id,
+                Opinion.asset_id == InvestorAssetState.asset_id,
+                EventAnalysis.analysis_version == policy.active_analysis_version,
+                EventAnalysis.status.in_(
+                    [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                ),
+            )
+            .exists()
+        )
+        statement = (
+            select(InvestorAssetState)
+            .where(active_opinion)
+            .order_by(InvestorAssetState.investor_id, InvestorAssetState.asset_id)
         )
         return list(self._session.scalars(statement))
 

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from contracts.analysis import AnalysisSpec
+from contracts.analysis import AnalysisSpec, ProductionAnalysisPolicy
 from contracts.intelligence import AssetIntelligenceSnapshot
 from contracts.opinion import OpinionProcessingStatus, UnresolvedAsset
 from contracts.state import StateUpdateResult
@@ -16,6 +16,22 @@ class ProcessRawEventCommand(BaseModel):
     model_version: str | None = Field(default=None, min_length=1, max_length=255)
     analysis_spec: AnalysisSpec | None = None
     as_of: AwareDatetime
+
+    @classmethod
+    def for_production(
+        cls,
+        *,
+        event_id: UUID,
+        as_of: AwareDatetime,
+        policy: ProductionAnalysisPolicy,
+    ) -> "ProcessRawEventCommand":
+        """Create a command using the single approved production policy."""
+
+        return cls(
+            event_id=event_id,
+            analysis_spec=policy.active_spec,
+            as_of=as_of,
+        )
 
     @model_validator(mode="before")
     @classmethod
