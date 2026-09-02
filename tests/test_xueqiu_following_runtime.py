@@ -101,18 +101,46 @@ def test_max_batches_counts_valid_batches_and_duplicate_ids_are_not_progress() -
     duplicate_progress = FollowingBatchProgress(max_batches=4)
     assert duplicate_progress.add(make_batch("1"))
     assert not duplicate_progress.add(make_batch("1"))
-    assert duplicate_progress.no_progress_count == 1
+    assert duplicate_progress.no_progress_count == 0
 
 
-def test_no_progress_can_stop_after_bounded_scroll_attempts() -> None:
+def test_three_idle_scrolls_do_not_stop_with_default_idle_bound() -> None:
     progress = FollowingBatchProgress(max_batches=5)
     progress.add(make_batch("1"))
+    for _ in range(3):
+        progress.mark_no_progress()
+
+    assert progress.no_progress_count == 3
+    assert progress.no_progress_count < XueqiuBrowserConfig().max_idle_cycles_without_progress
+
+
+def test_cursor_advancement_resets_idle_progress_state() -> None:
+    progress = FollowingBatchProgress(max_batches=5)
     progress.add(make_batch("1"))
     progress.mark_no_progress()
     progress.mark_no_progress()
 
-    assert progress.no_progress_count == 3
-    assert progress.no_progress_count >= XueqiuBrowserConfig().max_scroll_attempts_without_progress
+    advanced_cursor = FollowingFeedBatch(
+        items=(make_post("1"),),
+        next_id="2",
+        next_max_id="2",
+        observed_at=OBSERVED_AT,
+    )
+
+    assert progress.add(advanced_cursor)
+    assert progress.no_progress_count == 0
+    assert progress.last_progress_reason == "CURSOR_ADVANCEMENT"
+
+
+def test_new_source_event_id_resets_idle_progress_state() -> None:
+    progress = FollowingBatchProgress(max_batches=5)
+    progress.add(make_batch("1"))
+    progress.mark_no_progress()
+    progress.mark_no_progress()
+
+    assert progress.add(make_batch("2"))
+    assert progress.no_progress_count == 0
+    assert progress.last_progress_reason == "NEW_SOURCE_EVENT_ID"
 
 
 class FixtureFollowingBrowser:
@@ -212,13 +240,14 @@ class FakeBodyLocator:
 
 
 class FakeMouse:
-    def __init__(self, page: "FakeFollowingPage") -> None:
+    def __init__(self, page: "FakeFollowingPage", response_on_wheel: int | None = 1) -> None:
         self.page = page
         self.wheel_calls = 0
+        self.response_on_wheel = response_on_wheel
 
     async def wheel(self, x: int, y: int) -> None:
         self.wheel_calls += 1
-        if self.wheel_calls == 1:
+        if self.response_on_wheel is not None and self.wheel_calls == self.response_on_wheel:
             request = FakeRequest(f"{self.page.feed_url}?max_id=opaque")
             self.page.emit_request(request)
             self.page.emit_response(FakeResponse(request, self.page.payload("scroll")))
@@ -227,10 +256,15 @@ class FakeMouse:
 class FakeFollowingPage:
     feed_url = f"https://xueqiu.com{FOLLOWING_FEED_PATH}"
 
-    def __init__(self, *, initial_following: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        initial_following: bool = False,
+        response_on_wheel: int | None = 1,
+    ) -> None:
         self.handlers: dict[str, list[object]] = {"request": [], "response": []}
         self.following_tab = FakeFollowingTab(self)
-        self.mouse = FakeMouse(self)
+        self.mouse = FakeMouse(self, response_on_wheel=response_on_wheel)
         self.initial_following = initial_following
         old_request = FakeRequest(f"{self.feed_url}?source=hot")
         self.late_hot_response = FakeResponse(old_request, self.payload("late-hot"))
@@ -384,3 +418,49 @@ def test_playwright_following_runtime_keeps_initial_batch_when_tab_is_already_ac
 
     assert [batch.items[0].source_event_id for batch in result] == ["initial"]
     assert page.mouse.wheel_calls == 0
+
+
+def test_playwright_runtime_waits_past_three_idle_scrolls_for_late_batch(
+    tmp_path: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import playwright.async_api as playwright_api
+
+    page = FakeFollowingPage(initial_following=True, response_on_wheel=4)
+    monkeypatch.setattr(playwright_api, "async_playwright", lambda: FakePlaywrightManager(page))
+    storage_state = tmp_path / "storage_state.json"  # type: ignore[union-attr]
+    storage_state.write_text("{}", encoding="utf-8")
+    config = XueqiuBrowserConfig(
+        storage_state_path=str(storage_state),
+        response_wait_ms=0,
+        max_idle_cycles_without_progress=5,
+    )
+    browser = PlaywrightXueqiuBrowser(config)
+
+    result = asyncio.run(browser.fetch_following_feed_batches(FeedCollectionRequest(max_batches=2)))
+
+    assert [batch.items[0].source_event_id for batch in result] == ["initial", "scroll"]
+    assert page.mouse.wheel_calls == 4
+    assert browser.last_following_stop_reason == "MAX_BATCHES"
+
+
+def test_playwright_runtime_has_bounded_idle_termination(
+    tmp_path: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import playwright.async_api as playwright_api
+
+    page = FakeFollowingPage(initial_following=True, response_on_wheel=None)
+    monkeypatch.setattr(playwright_api, "async_playwright", lambda: FakePlaywrightManager(page))
+    storage_state = tmp_path / "storage_state.json"  # type: ignore[union-attr]
+    storage_state.write_text("{}", encoding="utf-8")
+    config = XueqiuBrowserConfig(
+        storage_state_path=str(storage_state),
+        response_wait_ms=0,
+        max_idle_cycles_without_progress=4,
+    )
+    browser = PlaywrightXueqiuBrowser(config)
+
+    result = asyncio.run(browser.fetch_following_feed_batches(FeedCollectionRequest(max_batches=2)))
+
+    assert [batch.items[0].source_event_id for batch in result] == ["initial"]
+    assert page.mouse.wheel_calls == 4
+    assert browser.last_following_stop_reason == "NO_PROGRESS"

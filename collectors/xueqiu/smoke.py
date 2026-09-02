@@ -1,9 +1,10 @@
 import argparse
 import asyncio
+import hashlib
 import os
 from collections import Counter
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from collectors.xueqiu import (
@@ -69,6 +70,19 @@ def _author_name(item: FeedPostItem) -> str:
     return item.author_id
 
 
+def _cursor_digest(value: str | None) -> str:
+    if value is None:
+        return "none"
+    return f"str:{len(value)}:{hashlib.sha256(value.encode()).hexdigest()[:12]}"
+
+
+def _batch_time_bounds(batch: FollowingFeedBatch) -> tuple[str, str]:
+    if not batch.items:
+        return "none", "none"
+    values = [item.published_time.astimezone(UTC) for item in batch.items]
+    return min(values).isoformat(), max(values).isoformat()
+
+
 def _stop_reason(
     browser: PlaywrightXueqiuBrowser,
     batches: Sequence[FollowingFeedBatch],
@@ -104,6 +118,15 @@ def _print_feed_summary(
     print(f"duplicates_in_session={len(received_items) - len(unique_ids)}")
     print(f"allowlist_skipped={allowlist_skipped}")
     print(f"stop_reason={stop_reason}")
+    for index, batch in enumerate(batches, start=1):
+        published_min, published_max = _batch_time_bounds(batch)
+        print(
+            f"batch={index} items={len(batch.items) + len(batch.item_failures)} "
+            f"valid={len(batch.items)} skipped={len(batch.item_failures)} "
+            f"next_id={_cursor_digest(batch.next_id)} "
+            f"next_max_id={_cursor_digest(batch.next_max_id)} "
+            f"published_min={published_min} published_max={published_max}"
+        )
     if kind_counts:
         print(
             "post_kinds="

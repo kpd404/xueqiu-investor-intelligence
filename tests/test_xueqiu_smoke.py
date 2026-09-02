@@ -72,6 +72,7 @@ def test_dry_run_does_not_open_database(
     assert "inserted=0" in output
     assert "duplicates=0" in output
     assert "stop_reason=MAX_BATCHES" in output
+    assert "batch=1 items=1 valid=1 skipped=0" in output
 
 
 def test_normal_feed_mode_calls_ingestion(

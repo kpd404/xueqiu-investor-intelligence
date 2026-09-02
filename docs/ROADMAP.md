@@ -16,6 +16,7 @@
 - Sprint 2C.2 — Following Feed Browser Runtime ✅
 - Sprint 2C.3-A — Following Feed Ingestion Wiring ✅
 - Sprint 2C.3-B — Following Feed Real Smoke & Production Wiring ✅
+- Sprint 2C.4 — Historical Pagination Reliability Hardening ✅
 - Sprint 2D.1 — Asset Resolution Contracts & Design ✅
 - Sprint 2D.2 — Deterministic Asset Resolver MVP ✅
 - Sprint 2D.3 — Minimal Asset Master Data & Real Resolution Validation ✅

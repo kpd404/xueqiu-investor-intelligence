@@ -1,9 +1,11 @@
 import asyncio
+import hashlib
+import logging
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from collectors.xueqiu.contracts import FollowingFeedBatch, XueqiuBrowserConfig
 from collectors.xueqiu.errors import (
@@ -23,6 +25,26 @@ NO_CONTENT_MARKERS = ("暂无内容", "还没有发布", "暂无动态")
 XUEQIU_HOME_URL = "https://xueqiu.com/"
 FOLLOWING_FEED_PATH = "/v4/statuses/home_timeline.json"
 FOLLOWING_TAB_LABEL = "关注"
+_CURSOR_QUERY_KEYS = {"max_id", "next_id", "next_max_id", "since_id", "last_id", "cursor"}
+logger = logging.getLogger(__name__)
+
+
+def _safe_cursor_digest(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    value_type = "int" if text.isdigit() else type(value).__name__
+    return f"{value_type}:{len(text)}:{hashlib.sha256(text.encode()).hexdigest()[:12]}"
+
+
+def _safe_cursor_query(url: str) -> dict[str, str | None]:
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    return {
+        key: _safe_cursor_digest(values[0]) if values else None
+        for key, values in sorted(query.items())
+        if key in _CURSOR_QUERY_KEYS
+    }
 
 
 class XueqiuFollowingFeedDataSource(Protocol):
@@ -126,13 +148,16 @@ def is_accepted_following_response(
 
 
 class FollowingBatchProgress:
-    """Tracks valid batches, unique status IDs, and no-progress attempts."""
+    """Tracks response-driven progress and bounded idle cycles."""
 
     def __init__(self, max_batches: int) -> None:
         self._max_batches = max_batches
         self._batches: list[FollowingFeedBatch] = []
         self._seen_source_event_ids: set[str] = set()
         self._no_progress_count = 0
+        self._last_next_id: str | None = None
+        self._last_next_max_id: str | None = None
+        self._last_progress_reason: str | None = None
 
     @property
     def batches(self) -> tuple[FollowingFeedBatch, ...]:
@@ -151,6 +176,14 @@ class FollowingBatchProgress:
         return self._no_progress_count
 
     @property
+    def idle_cycles_without_progress(self) -> int:
+        return self._no_progress_count
+
+    @property
+    def last_progress_reason(self) -> str | None:
+        return self._last_progress_reason
+
+    @property
     def reached_max_batches(self) -> bool:
         return self.batch_count >= self._max_batches
 
@@ -160,12 +193,24 @@ class FollowingBatchProgress:
         self._batches.append(batch)
         before = len(self._seen_source_event_ids)
         self._seen_source_event_ids.update(item.source_event_id for item in batch.items)
-        progressed = len(self._seen_source_event_ids) > before
-        self._no_progress_count = 0 if progressed else self._no_progress_count + 1
-        return progressed
+        new_source_event_ids = len(self._seen_source_event_ids) > before
+        cursor_advanced = (
+            batch.next_id != self._last_next_id or batch.next_max_id != self._last_next_max_id
+        ) and (batch.next_id is not None or batch.next_max_id is not None)
+        self._last_next_id = batch.next_id
+        self._last_next_max_id = batch.next_max_id
+        self._no_progress_count = 0
+        if new_source_event_ids:
+            self._last_progress_reason = "NEW_SOURCE_EVENT_ID"
+        elif cursor_advanced:
+            self._last_progress_reason = "CURSOR_ADVANCEMENT"
+        else:
+            self._last_progress_reason = "RELEVANT_RESPONSE"
+        return new_source_event_ids or cursor_advanced
 
     def mark_no_progress(self) -> None:
         self._no_progress_count += 1
+        self._last_progress_reason = "IDLE"
 
 
 async def find_exact_following_tab(page: Any) -> Any:
@@ -272,6 +317,8 @@ class PlaywrightXueqiuBrowser:
         access_blocked = False
         body_text = ""
         title = ""
+        last_response_next_id: str | None = None
+        last_response_next_max_id: str | None = None
         browser = None
         context = None
 
@@ -290,7 +337,20 @@ class PlaywrightXueqiuBrowser:
                     observed_at=observed_at,
                     batch_sequence=progress.batch_count + 1,
                 )
-                progress.add(batch)
+                identity_progress = progress.add(batch)
+                logger.debug(
+                    "xueqiu following batch accepted sequence=%s item_count=%s item_failures=%s "
+                    "next_id=%s next_max_id=%s identity_progress=%s "
+                    "progress_reason=%s idle_cycles=%s",
+                    batch.batch_sequence,
+                    len(batch.items),
+                    len(batch.item_failures),
+                    _safe_cursor_digest(batch.next_id),
+                    _safe_cursor_digest(batch.next_max_id),
+                    identity_progress,
+                    progress.last_progress_reason,
+                    progress.idle_cycles_without_progress,
+                )
                 accepted_count += 1
             return accepted_count
 
@@ -320,10 +380,28 @@ class PlaywrightXueqiuBrowser:
                 page = await context.new_page()
 
                 def record_request(request_object: object) -> None:
-                    capture_context.record_request(request_object)
+                    parsed_request_url = urlparse(str(request_object.url))
+                    request_generation = capture_context.record_request(request_object)
+                    if (
+                        parsed_request_url.hostname in {"xueqiu.com", "www.xueqiu.com"}
+                        and parsed_request_url.path == FOLLOWING_FEED_PATH
+                        and str(request_object.method).upper() == "GET"
+                    ):
+                        query = _safe_cursor_query(str(request_object.url))
+                        request_max_id = query.get("max_id")
+                        prior_max_id = _safe_cursor_digest(last_response_next_max_id)
+                        logger.debug(
+                            "xueqiu following request generation=%s path=%s cursor=%s "
+                            "prior_next_max_id=%s cursor_matches_prior=%s",
+                            request_generation,
+                            parsed_request_url.path,
+                            query,
+                            prior_max_id,
+                            request_max_id is not None and request_max_id == prior_max_id,
+                        )
 
                 async def capture_response(response: object) -> None:
-                    nonlocal access_blocked
+                    nonlocal access_blocked, last_response_next_id, last_response_next_max_id
                     request_object = response.request
                     request_url = str(request_object.url or response.url)
                     parsed_url = urlparse(request_url)
@@ -376,6 +454,16 @@ class PlaywrightXueqiuBrowser:
                     ):
                         return
                     observed_at = datetime.now(UTC)
+                    last_response_next_id = batch_next_id = payload.get("next_id")
+                    last_response_next_max_id = batch_next_max_id = payload.get("next_max_id")
+                    logger.debug(
+                        "xueqiu following response status=%s item_count=%s "
+                        "next_id=%s next_max_id=%s",
+                        response_status,
+                        len(payload["home_timeline"]),
+                        _safe_cursor_digest(batch_next_id),
+                        _safe_cursor_digest(batch_next_max_id),
+                    )
                     if generation is None:
                         pre_context_responses.append((payload, observed_at))
                     else:
@@ -432,10 +520,14 @@ class PlaywrightXueqiuBrowser:
                     raise_for_page_state(body_text, title)
                     await drain_response_queue()
 
+                    idle_cycle_limit = (
+                        self._config.max_scroll_attempts_without_progress
+                        if self._config.max_scroll_attempts_without_progress is not None
+                        else self._config.max_idle_cycles_without_progress
+                    )
                     while (
                         not progress.reached_max_batches
-                        and progress.no_progress_count
-                        < self._config.max_scroll_attempts_without_progress
+                        and progress.idle_cycles_without_progress < idle_cycle_limit
                     ):
                         await page.mouse.wheel(0, 1600)
                         await page.wait_for_timeout(self._config.response_wait_ms)
@@ -468,8 +560,14 @@ class PlaywrightXueqiuBrowser:
 
         if progress.reached_max_batches:
             self._last_following_stop_reason = "MAX_BATCHES"
-        elif progress.no_progress_count >= self._config.max_scroll_attempts_without_progress:
-            self._last_following_stop_reason = "NO_PROGRESS"
+        else:
+            idle_cycle_limit = (
+                self._config.max_scroll_attempts_without_progress
+                if self._config.max_scroll_attempts_without_progress is not None
+                else self._config.max_idle_cycles_without_progress
+            )
+            if progress.idle_cycles_without_progress >= idle_cycle_limit:
+                self._last_following_stop_reason = "NO_PROGRESS"
 
         if not progress.batches:
             if any(marker in body_text for marker in NO_CONTENT_MARKERS):

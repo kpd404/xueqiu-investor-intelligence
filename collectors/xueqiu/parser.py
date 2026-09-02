@@ -8,13 +8,27 @@ from zoneinfo import ZoneInfo
 
 from pydantic import JsonValue
 
-from collectors.xueqiu.contracts import FollowingFeedBatch, ParsedXueqiuPost
+from collectors.xueqiu.contracts import FeedItemParseFailure, FollowingFeedBatch, ParsedXueqiuPost
 from collectors.xueqiu.errors import ParseFailed
 from contracts import EventType, FeedPostItem, FeedPostKind
 
 XUEQIU_BASE_URL = "https://xueqiu.com"
 XUEQIU_TIMEZONE = ZoneInfo("Asia/Shanghai")
 STATUS_REQUIRED_FIELDS = {"id", "created_at"}
+_ITEM_STRUCTURAL_FIELDS = (
+    "id",
+    "user_id",
+    "user",
+    "text",
+    "description",
+    "created_at",
+    "timeBefore",
+    "retweet_status_id",
+    "retweeted_status",
+    "is_column",
+    "type",
+    "target",
+)
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -143,21 +157,29 @@ class XueqiuFollowingFeedParser:
         observed_time = observed_at or datetime.now(UTC)
         reference_time = now or observed_time
         items: list[FeedPostItem] = []
-        for raw_item in raw_items:
+        item_failures: list[FeedItemParseFailure] = []
+        for item_index, raw_item in enumerate(raw_items):
             if not isinstance(raw_item, Mapping):
-                raise ParseFailed("following feed item is not an object")
+                item_failures.append(
+                    self._item_failure(item_index, raw_item, ParseFailed("item is not an object"))
+                )
+                continue
             try:
                 items.append(self._parse_item(raw_item, now=reference_time))
-            except (KeyError, TypeError, ValueError, ParseFailed) as exc:
-                raise ParseFailed("invalid Following feed item") from exc
+            except Exception as exc:
+                item_failures.append(self._item_failure(item_index, raw_item, exc))
 
-        return FollowingFeedBatch(
-            items=tuple(items),
-            next_id=payload.get("next_id"),
-            next_max_id=payload.get("next_max_id"),
-            observed_at=observed_time,
-            batch_sequence=batch_sequence,
-        )
+        try:
+            return FollowingFeedBatch(
+                items=tuple(items),
+                item_failures=tuple(item_failures),
+                next_id=payload.get("next_id"),
+                next_max_id=payload.get("next_max_id"),
+                observed_at=observed_time,
+                batch_sequence=batch_sequence,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ParseFailed("invalid Following feed batch cursor semantics") from exc
 
     def parse_batch(
         self,
@@ -187,12 +209,13 @@ class XueqiuFollowingFeedParser:
         author_id = cls._author_id(item)
 
         source_text = item.get("text")
-        if not isinstance(source_text, str) or not source_text.strip():
-            source_text = item.get("description")
-        if not isinstance(source_text, str):
-            raise ParseFailed("following feed status has no top-level text")
-        content = html_to_text(source_text)
+        content = html_to_text(source_text) if isinstance(source_text, str) else ""
         if not content:
+            description = item.get("description")
+            content = html_to_text(description) if isinstance(description, str) else ""
+        if not content:
+            if source_text is None and not isinstance(item.get("description"), str):
+                raise ParseFailed("following feed status has no top-level text")
             raise ParseFailed("following feed status has blank content")
 
         created_at = item.get("created_at")
@@ -223,9 +246,73 @@ class XueqiuFollowingFeedParser:
             raw_data=raw_data,
         )
 
+    @classmethod
+    def _item_failure(
+        cls,
+        item_index: int,
+        item: object,
+        error: Exception,
+    ) -> FeedItemParseFailure:
+        source_event_id = cls._safe_source_event_id(item)
+        error_code, reason = cls._classify_item_error(error)
+        return FeedItemParseFailure(
+            item_index=item_index,
+            source_event_id=source_event_id,
+            error_code=error_code,
+            reason=reason,
+            structural_context=cls._safe_structural_context(item),
+        )
+
+    @staticmethod
+    def _safe_source_event_id(item: object) -> str | None:
+        if not isinstance(item, Mapping):
+            return None
+        value = item.get("id")
+        if value is None or isinstance(value, bool) or not isinstance(value, str | int):
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @staticmethod
+    def _safe_structural_context(item: object) -> dict[str, JsonValue]:
+        if not isinstance(item, Mapping):
+            return {"item_type": type(item).__name__}
+
+        present_fields = [field for field in _ITEM_STRUCTURAL_FIELDS if field in item]
+        field_types = {field: type(item[field]).__name__ for field in present_fields}
+        text = item.get("text")
+        description = item.get("description")
+        return {
+            "present_fields": present_fields,
+            "field_types": field_types,
+            "text_length": len(text) if isinstance(text, str) else None,
+            "description_length": len(description) if isinstance(description, str) else None,
+            "has_user_object": isinstance(item.get("user"), Mapping),
+            "has_retweeted_status": isinstance(item.get("retweeted_status"), Mapping),
+        }
+
+    @staticmethod
+    def _classify_item_error(error: Exception) -> tuple[str, str]:
+        message = str(error)
+        if "blank content" in message:
+            return "EMPTY_CONTENT", "text and description render to empty content"
+        if "no top-level text" in message:
+            return "MISSING_TEXT", "text and description do not provide usable content"
+        if "missing status id" in message:
+            return "MISSING_STATUS_ID", "status id is missing or blank"
+        if "missing author id" in message:
+            return "MISSING_AUTHOR_ID", "author id is missing or blank"
+        if "missing Xueqiu published time" in message:
+            return "MISSING_PUBLISHED_TIME", "published time is missing"
+        if "unsupported Xueqiu time format" in message:
+            return "INVALID_PUBLISHED_TIME", "published time format is unsupported"
+        if "item is not an object" in message:
+            return "INVALID_ITEM_TYPE", "feed item is not an object"
+        return "ITEM_PARSE_ERROR", "feed item failed deterministic normalization"
+
     @staticmethod
     def _required_identifier(value: object, label: str) -> str:
-        if value is None or isinstance(value, bool):
+        if value is None or isinstance(value, bool) or not isinstance(value, str | int):
             raise ParseFailed(f"following feed item is missing {label}")
         normalized = str(value).strip()
         if not normalized:

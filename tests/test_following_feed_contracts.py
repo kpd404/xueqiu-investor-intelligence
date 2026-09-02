@@ -133,6 +133,71 @@ def test_following_parser_reads_only_home_timeline_and_preserves_repost_provenan
         )
 
 
+def test_following_parser_isolates_invalid_item_and_preserves_batch_cursor() -> None:
+    payload = {
+        "home_timeline": [
+            make_feed_item(id=1001, text="<p>valid</p>"),
+            make_feed_item(
+                id=1002,
+                text='<img src="https://example.test/image.png">',
+                description="",
+            ),
+        ],
+        "next_id": 2002,
+        "next_max_id": 2003,
+    }
+
+    batch = XueqiuFollowingFeedParser().parse_payload(payload, observed_at=OBSERVED_AT)
+
+    assert [item.source_event_id for item in batch.items] == ["1001"]
+    assert batch.next_id == "2002"
+    assert batch.next_max_id == "2003"
+    assert len(batch.item_failures) == 1
+    failure = batch.item_failures[0]
+    assert failure.item_index == 1
+    assert failure.source_event_id == "1002"
+    assert failure.error_code == "EMPTY_CONTENT"
+    assert failure.structural_context["description_length"] == 0
+    assert "image.png" not in failure.reason
+
+
+def test_empty_description_is_not_required_when_text_is_valid() -> None:
+    batch = XueqiuFollowingFeedParser().parse_payload(
+        {"home_timeline": [make_feed_item(text="<p>short</p>", description="")]},
+        observed_at=OBSERVED_AT,
+    )
+
+    assert len(batch.items) == 1
+    assert batch.items[0].content == "short"
+    assert batch.item_failures == ()
+
+
+def test_invalid_batch_container_or_cursor_is_a_batch_failure() -> None:
+    parser = XueqiuFollowingFeedParser()
+
+    with pytest.raises(ParseFailed):
+        parser.parse_payload({"home_timeline": {"id": 1}}, observed_at=OBSERVED_AT)
+
+    with pytest.raises(ParseFailed):
+        parser.parse_payload(
+            {"home_timeline": [make_feed_item()], "next_max_id": {"cursor": "bad"}},
+            observed_at=OBSERVED_AT,
+        )
+
+
+def test_non_object_item_isolated_with_structural_failure() -> None:
+    batch = XueqiuFollowingFeedParser().parse_payload(
+        {"home_timeline": [None, make_feed_item(id=1003)], "next_max_id": 2003},
+        observed_at=OBSERVED_AT,
+    )
+
+    assert [item.source_event_id for item in batch.items] == ["1003"]
+    assert len(batch.item_failures) == 1
+    assert batch.item_failures[0].error_code == "INVALID_ITEM_TYPE"
+    assert batch.item_failures[0].source_event_id is None
+    assert batch.next_max_id == "2003"
+
+
 @pytest.mark.parametrize(
     ("overrides", "expected_kind", "expected_event_type"),
     [

@@ -183,13 +183,23 @@ items, watchlist items, and `关注精选` content are excluded by context, not 
 guessing from an individual item's shape.
 
 Following responses are consumed as batches. A batch limit counts valid response
-batches, not scroll gestures or page numbers. Pagination is driven by the
-observed response cursor fields (for example `next_max_id` and a subsequent
-`max_id` request), and a scroll is not assumed to produce exactly one batch.
+batches, not scroll gestures or page numbers. Pagination remains browser-native:
+the Collector observes response-driven progress (new relevant batches, cursor
+advancement, and new source event IDs) while the page consumes the next cursor.
+Idle scrolling has a finite bound, but a few scrolls without a request do not
+imply that pagination has stopped. A scroll is never assumed to produce exactly
+one batch. Cursor progression is logged only as sanitized debug metadata.
 
-Every feed item is retained as a fact. Original posts, reposts, and columns are
-not filtered in the Collector layer. `FeedPostItem.content` contains only the
-current top-level status text. When a repost contains a nested
+Following batch parsing is item-isolated. Valid items are retained even when a
+single item cannot be normalized. Such item failures carry an index, optional
+source event ID, stable error code, and safe structural context; the batch
+cursor is still preserved. Only an unrecognizable `home_timeline` container or
+invalid batch cursor semantics fail the whole batch.
+
+Every valid feed item is retained as a fact; unnormalizable items remain
+represented by batch-level diagnostics. Original posts, reposts, and columns
+are not filtered in the Collector layer. `FeedPostItem.content` contains only
+the current top-level status text. When a repost contains a nested
 `retweeted_status`, that provenance remains in `RawEvent.raw_data`; the nested
 text must never be concatenated into the current author's content.
 

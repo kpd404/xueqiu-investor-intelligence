@@ -1,7 +1,12 @@
 from collectors.xueqiu.adapter import XueqiuAdapter, XueqiuFeedAdapter
 from collectors.xueqiu.auth import XueqiuAuthenticator
 from collectors.xueqiu.browser import PlaywrightXueqiuBrowser
-from collectors.xueqiu.contracts import FollowingFeedBatch, ParsedXueqiuPost, XueqiuBrowserConfig
+from collectors.xueqiu.contracts import (
+    FeedItemParseFailure,
+    FollowingFeedBatch,
+    ParsedXueqiuPost,
+    XueqiuBrowserConfig,
+)
 from collectors.xueqiu.errors import (
     AuthenticationRequired,
     BrowserDependencyMissing,
@@ -22,6 +27,7 @@ __all__ = [
     "AuthenticationRequired",
     "BrowserDependencyMissing",
     "FollowingFeedBatch",
+    "FeedItemParseFailure",
     "NavigationFailed",
     "NoContent",
     "ParseFailed",
