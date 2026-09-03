@@ -1,6 +1,6 @@
 # Xueqiu Investor Intelligence System
 
-面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2D Asset Resolution 主线，当前路线为 Sprint 2E.1：Attention Momentum MVP。
+面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening 和 Sprint 2E.2-B Production Analysis Policy & Projection Provenance。Attention Momentum 当前进入数据校准暂停阶段，下一项设计工作是 Sprint 2E.2：Thesis Change V0。
 
 ## Local setup
 
@@ -106,10 +106,9 @@ python -m ai.smoke
 不需要修改 Python 代码。缺少必填配置时命令会返回 `CONFIGURATION_ERROR`，不会打印、保存或提交
 API Key。建议使用本地 `.env` 时确认该文件已被 `.gitignore` 忽略。
 
-Provider 使用版本化 Prompt `opinion-extraction-v5` 和结构化
-`OpinionExtractionResult`，只抽取 RawEvent 文本中的事件级观点；State、Consensus、
-Signal 等仍由确定性领域层计算。Provider 错误会区分认证、限流、超时、不可用和结构化
-输出失败，并标记是否可重试。
+Provider 使用版本化 Prompt `opinion-extraction-v5`、`analysis_policy_version = opinion-analysis-v3` 和结构化 `OpinionExtractionResult`，只抽取 RawEvent 文本中的事件级观点；State、
+Consensus、Signal 等仍由确定性领域层计算。Provider 错误会区分认证、限流、超时、不可用和结构化输出失败，
+并标记是否可重试。
 
 Opinion extraction receives a minimal current-author analysis view. For reposts
 and quote chains, text after the first `//@` marker and nested repost content
@@ -122,74 +121,70 @@ are not evidence of removal or weakening.
 
 ```text
 RawEvent
+→ CurrentAuthorEventView
 → EventAnalysis
 → Opinion
 → InvestorAssetState
 → InvestorAssetStateChange
+→ AttentionOccurrence
 → Historical / Current AssetIntelligenceSnapshot
 ```
 
 
-## Project status (Sprint 2D completed)
+## Project status
 
-当前核心链路已离线跑通：
+当前已完成的核心链路可以离线重放，并且生产解释使用显式批准的 AnalysisSpec：
 
 ```text
 RawEvent
-→ EventAnalysis
+→ CurrentAuthorEventView
+→ opinion-extraction-v5 / opinion-analysis-v3
+→ AssetReference
+→ deterministic AssetResolver
+→ Canonical Asset / AssetAlias
 → Opinion
-→ InvestorAssetState
-→ InvestorAssetStateChange
-→ Historical / Current AssetIntelligenceSnapshot
+→ InvestorAssetState / StateChange
+→ AttentionOccurrence
+→ AssetIntelligenceSnapshot
 ```
-
-Sprint 2D keeps traceability, deterministic replay, retry-safe processing, analysis-scoped Opinions, and short
-database transactions. The current Asset Intelligence implementation is a basic Asset Intelligence / Consensus
-foundation, not a complete Intelligence Engine. Signal storage and evidence contracts exist, but there is no formal
-Signal scoring engine; PositionStatus exists, but there is no Portfolio Fact Pipeline.
 
 ## Production analysis policy
 
-Provider runtime defaults are not the production approval. Normal downstream
-processing uses the explicit `PRODUCTION_OPINION_ANALYSIS_VERSION` policy
-source; a provider or model change is rejected until that approved identity is
-updated. A database-present Analysis is not automatically production-effective:
-State, historical replay, Attention, and Asset Intelligence consume only the
-active policy version.
+当前 production interpretation 明确使用：
+
+- `prompt_version = opinion-extraction-v5`
+- `analysis_policy_version = opinion-analysis-v3`
+- explicit production `AnalysisSpec`
+
+Provider runtime defaults 不等于 production approval。Provider 或 model 变化不会自动切换生产解释，必须显式更新批准的
+production identity。`database-present Analysis` 也不等于 `production-effective Analysis`：State、StateChange、
+historical replay、Attention 和 Asset Intelligence 只消费 active analysis policy；v4/v5 policy 彼此隔离。
 
 ## Current capability boundary
 
 已实现：
 
 - Xueqiu Following Feed collection
+- Following Feed historical pagination reliability hardening
 - RawEvent persistence
 - EventAnalysis lifecycle
 - OpenAI-compatible real LLM extraction
+- `opinion-extraction-v5` current-author-only Opinion extraction
+- quote/repost attribution isolation：首个 `//@` 之后的内容及 nested repost 不进入当前作者 Opinion
 - deterministic Asset Resolution
 - AssetAlias
+- evidence-backed Asset Master
+- cross-listing / alias safety hardening
 - unresolved semantics preservation
 - unresolved recovery without rerunning LLM
 - Opinion
 - InvestorAssetState
 - StateChange
 - historical replay
+- effective State / StateChange / Attention queries
+- Behavior Evidence Foundation / AttentionOccurrence
+- `OPINION` / `EXPLICIT_MENTION` / `REPOST` evidence attribution
 - basic Asset Intelligence / Consensus
-
-当前核心链路：
-
-```text
-Xueqiu Following Feed
-→ RawEvent
-→ EventAnalysis
-→ structured Opinion Extraction
-→ AssetReference
-→ deterministic AssetResolver
-→ Canonical Asset / AssetAlias
-→ Opinion
-→ InvestorAssetState
-→ StateChange
-→ AssetIntelligenceSnapshot
-```
 
 历史 unresolved analysis 可以在补充可信 Asset / Alias 后重新执行确定性 recovery：
 
@@ -202,18 +197,61 @@ unresolved EventAnalysis
 
 Recovery 不重新调用 LLM。
 
-尚未完整实现：
+## Current / Next
 
-- Attention Momentum
-- Thesis Change
+### Sprint 2E.2 — Thesis Change V0
+
+Status: `DESIGN / NEXT`
+
+2E.2-A attribution prerequisite 和 2E.2-B production policy prerequisite 已完成。Thesis Change comparator 与
+persistence 尚未实现。
+
+当前 V0 设计候选：
+
+- `NEW_THESIS`
+- `THESIS_UNCHANGED`
+- `THESIS_REINFORCED`
+- `THESIS_EXTENDED`
+- `THESIS_CHANGED`
+- `INSUFFICIENT_EVIDENCE`
+
+`missing catalysts / risks / time_horizon = UNKNOWN / NOT_EXTRACTED`，不能安全解释为 removed、weakened 或
+invalidated。`THESIS_WEAKENED`、`THESIS_INVALIDATED` 和 `thesis removed` 可留作 Future / Later semantics。
+
+### Sprint 2E.1 — Attention Momentum
+
+Status: `PAUSED / DATA CALIBRATION / WAITING FOR TEMPORAL COVERAGE`
+
+Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本的跨日 / 跨周时间跨度仍不足，14d/28d baseline
+尚未定稿。Momentum 需要等待自然积累更多时间序列数据，不是架构失败或工程阻塞。
+
+产品目标保持为：
+
+- recency
+- frequency
+- acceleration
+- decay
+- `NEW` / `RISING` / `STABLE` / `COOLING` / `DORMANT`
+
+计算时必须区分 `occurrence_count` / `occurrence frequency`、`distinct active days` 和 `recency`。例如 `3 occurrences / 1 active day`
+不能与 `3 occurrences / 3 active days` 视为相同的持续关注强度。当前不定义具体 7d / 14d / 28d 阈值。
+
+2E.1 Momentum 数据校准与 2E.2 Thesis Change 设计可以并行推进；不要求 2E.1 先于 2E.2 完成。
+
+## Remaining planned capabilities
+
+- Attention Momentum production logic
+- Thesis Change comparator / persistence
 - Portfolio Fact Pipeline
 - Position Change
 - Opinion × Action Consistency
-- Divergence Engine
+- enhanced Consensus / Divergence
+- Multi-investor warming
 - Industry / Theme Trend
 - Research Signal / Research Candidate
 - Scheduler
 - Dashboard / Product API
 
 本项目不是 Xueqiu crawler product、stock recommendation system、auto trading system 或 price prediction system；
-它是 Investor Behavior Intelligence System，关注谁在关注什么、为什么关注、何时改变观点、是否采取行动，以及多位投资者是否形成共识或分歧。
+它是 Investor Behavior Intelligence System，关注谁在关注什么、为什么关注、观点如何变化、是否发生行为，以及多位投资者是否形成共识或分歧。
+产品核心原则是：**Change matters more than popularity.**
