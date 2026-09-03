@@ -69,27 +69,24 @@
 - v4/v5 policy isolation ✅
 - v5 production rollout ✅
 
+### Sprint 2E.2
+
+#### Thesis Change V0 ✅
+
+- Effective v5 Opinion timeline ✅
+- Independent structured Thesis Comparator ✅
+- Versioned ThesisChange artifact ✅
+- Fact-time and late-recovery semantics ✅
+- `NEW_THESIS` / `THESIS_UNCHANGED` / `THESIS_REINFORCED` / `THESIS_EXTENDED` /
+  `THESIS_CHANGED` / `INSUFFICIENT_EVIDENCE` ✅
+
+`NEW_THESIS` means the first thesis observed in the currently available
+production-effective Opinion history for an Investor × Asset; it does not claim
+to be the investor's first-ever formation of that thesis. Superseded late-history
+predecessor pairings remain historical artifacts and are excluded from the
+effective Thesis Change timeline.
+
 ## Current / Next
-
-### Sprint 2E.2 — Thesis Change V0
-
-Status: `DESIGN / NEXT`
-
-The attribution prerequisite (2E.2-A) and production policy prerequisite (2E.2-B) are complete. Thesis Change
-comparator and persistence are not implemented.
-
-Current V0 design candidates:
-
-- `NEW_THESIS`
-- `THESIS_UNCHANGED`
-- `THESIS_REINFORCED`
-- `THESIS_EXTENDED`
-- `THESIS_CHANGED`
-- `INSUFFICIENT_EVIDENCE`
-
-Missing catalysts, risks, or `time_horizon` are `UNKNOWN / NOT_EXTRACTED`; they must not be interpreted as removed,
-weakened, or invalidated. `THESIS_WEAKENED`, `THESIS_INVALIDATED`, and thesis-removed semantics remain Future / Later
-options.
 
 ### Sprint 2E.1 — Attention Momentum
 
@@ -111,8 +108,8 @@ Momentum must distinguish `occurrence_count` / occurrence frequency, distinct ac
 active day` is not the same sustained attention intensity as `3 occurrences / 3 active days`. No concrete 7d/14d/28d
 thresholds are defined yet.
 
-Momentum data calibration and Thesis Change design can proceed in parallel; 2E.1 does not have to be completed before
-2E.2 design work.
+Thesis Change V0 is available, but useful coverage remains limited by the current number of repeated effective Opinion
+pairs.
 
 ## Planned
 

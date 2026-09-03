@@ -8,6 +8,11 @@ from intelligence.services.attention_occurrence import (
     AttentionRawEventNotFoundError,
 )
 from intelligence.services.state_update import OpinionNotFoundError, StateUpdateService
+from intelligence.services.thesis_change import (
+    ThesisChangeService,
+    ThesisEventNotFoundError,
+    ThesisOpinionNotFoundError,
+)
 
 __all__ = [
     "AssetIntelligenceService",
@@ -17,4 +22,7 @@ __all__ = [
     "InvestorNotFoundError",
     "OpinionNotFoundError",
     "StateUpdateService",
+    "ThesisChangeService",
+    "ThesisEventNotFoundError",
+    "ThesisOpinionNotFoundError",
 ]

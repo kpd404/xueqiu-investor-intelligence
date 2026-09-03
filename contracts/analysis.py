@@ -18,6 +18,12 @@ OPINION_EXTRACTION_SCHEMA_VERSION = "opinion-extraction-result-v2"
 PRODUCTION_OPINION_ANALYSIS_VERSION = (
     "opinion-analysis-v3:09ffeb296d9ff28099f3e746749eda14fc74b708efaf5ff59bcfc3c74fcada79"
 )
+THESIS_COMPARISON_PROMPT_VERSION = "thesis-comparison-v1"
+THESIS_COMPARISON_SCHEMA_VERSION = "thesis-comparison-result-v1"
+THESIS_COMPARISON_POLICY_VERSION = "thesis-comparison-policy-v1"
+PRODUCTION_THESIS_COMPARISON_VERSION = (
+    "thesis-comparison-policy-v1:3e914068dfdb8c36d40920788018159c9b62b3c1422b8ae7d77c9957b643596b"
+)
 LEGACY_PROVIDER_ID = "legacy"
 
 
@@ -120,6 +126,7 @@ class EventAnalysisStatus(StrEnum):
 
 class AnalysisType(StrEnum):
     OPINION_EXTRACTION = "OPINION_EXTRACTION"
+    THESIS_COMPARISON = "THESIS_COMPARISON"
 
 
 class EffectiveAnalysisPolicy(BaseModel):

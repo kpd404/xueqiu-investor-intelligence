@@ -336,6 +336,38 @@ STRONG_BULLISH
 }
 ```
 
+## Thesis Change Artifact
+
+`ThesisChange` is a versioned derived comparison between two effective Opinions for one
+Investor × Asset. It is not a replacement for Opinion or State.
+
+### Table
+
+`thesis_changes`
+
+### Fields
+
+| Field | Description |
+| --- | --- |
+| `investor_id` / `asset_id` | Investor and canonical Asset |
+| `previous_opinion_id` / `current_opinion_id` | Compared effective Opinions; previous is nullable for the first Opinion |
+| `previous_event_id` / `current_event_id` | Source RawEvents |
+| `effective_time` | Current RawEvent.published_time |
+| `change_type` | Versioned V0 comparison category |
+| `confidence` / `summary` / `evidence` | Structured comparison result |
+| `opinion_analysis_version` | Active Opinion interpretation identity |
+| `comparison_version` | Independent comparator identity |
+| `calculated_at` | Comparison calculation time |
+| `input_identity` | Deterministic previous/current/comparison identity |
+
+The first effective Opinion produces `NEW_THESIS` without an LLM comparison. Here “first” means the first
+observed thesis in the currently available production-effective Opinion history; it does not claim to be the
+investor's first-ever formation of that thesis. Later Opinions compare only with the immediately prior effective
+Opinion ordered by fact time. Missing catalysts, risks, or time horizon are `UNKNOWN`/`NOT_EXTRACTED`, not
+removal or weakening. A late historical Opinion may create a new comparison pair while preserving the original
+`published_time`; superseded predecessor pairings remain historical artifacts but are excluded from the effective
+Thesis Change timeline.
+
 ## 3.5 InvestorAssetState
 
 ### Purpose

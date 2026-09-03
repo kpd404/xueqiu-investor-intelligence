@@ -12,7 +12,9 @@ from contracts import (
     OpinionCreate,
     OpinionTimelineEntry,
     OpinionWriteResult,
+    ThesisOpinionView,
 )
+from database.models.asset import Asset
 from database.models.event_analysis import EventAnalysis
 from database.models.opinion import Opinion
 from database.models.raw_event import RawEvent
@@ -63,6 +65,33 @@ class OpinionRepository:
             return None
         return self._timeline_entry(row[0], row[1])
 
+    def get_effective_comparison_view(
+        self,
+        opinion_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> ThesisOpinionView | None:
+        statement = (
+            select(
+                Opinion,
+                RawEvent.published_time,
+                Asset.name,
+                Asset.market,
+                Asset.symbol,
+                EventAnalysis.analysis_version,
+            )
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .join(Asset, Opinion.asset_id == Asset.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.id == opinion_id,
+                *self._effective_analysis_predicates(policy),
+            )
+        )
+        row = self._session.execute(statement).one_or_none()
+        if row is None:
+            return None
+        return self._comparison_view(row[0], row[1], row[2], row[3], row[4], row[5])
+
     def list_timeline(self, investor_id: UUID, asset_id: UUID) -> list[OpinionTimelineEntry]:
         statement = (
             select(Opinion, RawEvent.published_time)
@@ -93,6 +122,44 @@ class OpinionRepository:
             .order_by(RawEvent.published_time, RawEvent.id, Opinion.id)
         )
         return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
+
+    def list_effective_comparison_timeline(
+        self,
+        investor_id: UUID,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[ThesisOpinionView]:
+        statement = (
+            select(
+                Opinion,
+                RawEvent.published_time,
+                Asset.name,
+                Asset.market,
+                Asset.symbol,
+                EventAnalysis.analysis_version,
+            )
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .join(Asset, Opinion.asset_id == Asset.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.investor_id == investor_id,
+                Opinion.asset_id == asset_id,
+                *self._effective_analysis_predicates(policy),
+            )
+        )
+        if as_of is not None:
+            statement = statement.where(RawEvent.published_time <= as_of)
+        statement = statement.order_by(
+            RawEvent.published_time,
+            RawEvent.id,
+            Opinion.id,
+        )
+        return [
+            self._comparison_view(row[0], row[1], row[2], row[3], row[4], row[5])
+            for row in self._session.execute(statement)
+        ]
 
     def list_timeline_by_asset(self, asset_id: UUID) -> list[OpinionTimelineEntry]:
         statement = (
@@ -243,6 +310,37 @@ class OpinionRepository:
             confidence=opinion.confidence,
             published_time=cls._as_utc(published_time),
             generated_time=cls._as_utc(opinion.generated_time),
+        )
+
+    @classmethod
+    def _comparison_view(
+        cls,
+        opinion: Opinion,
+        published_time: datetime,
+        asset_name: str,
+        market: str,
+        symbol: str,
+        analysis_version: str,
+    ) -> ThesisOpinionView:
+        return ThesisOpinionView(
+            opinion_id=opinion.id,
+            event_id=opinion.event_id,
+            investor_id=opinion.investor_id,
+            asset_id=opinion.asset_id,
+            analysis_version=analysis_version,
+            asset_name=asset_name,
+            market=market,
+            symbol=symbol,
+            direction=opinion.direction,
+            strength=opinion.strength,
+            confidence=opinion.confidence,
+            thesis=tuple(opinion.thesis),
+            catalysts=tuple(opinion.catalysts),
+            risks=tuple(opinion.risks),
+            time_horizon=opinion.time_horizon,
+            published_time=cls._as_utc(published_time),
+            generated_time=cls._as_utc(opinion.generated_time),
+            current_author_text="",
         )
 
     @staticmethod

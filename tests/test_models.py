@@ -14,6 +14,7 @@ from database.models import (
     Opinion,
     RawEvent,
     RawEventImmutableError,
+    ThesisChange,
 )
 from database.models.enums import EventType, OpinionDirection
 
@@ -30,6 +31,7 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
         "event_analyses",
         "raw_events",
         "signals",
+        "thesis_changes",
     }
 
 
@@ -104,6 +106,13 @@ def test_opinion_schema_has_ai_provenance_fields() -> None:
     assert {"event_id", "analysis_version", "status", "structured_output"} <= {
         column.name for column in inspect(EventAnalysis).columns
     }
+    assert {
+        "previous_opinion_id",
+        "current_opinion_id",
+        "effective_time",
+        "comparison_version",
+        "input_identity",
+    } <= {column.name for column in inspect(ThesisChange).columns}
 
 
 def test_asset_alias_is_scoped_to_asset_and_normalized_identity(db_session: Session) -> None:

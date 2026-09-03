@@ -8,6 +8,7 @@ from database.models.opinion import Opinion
 from database.models.raw_event import RawEvent, RawEventImmutableError
 from database.models.signal import Signal
 from database.models.state_change import InvestorAssetStateChange, StateChangeImmutableError
+from database.models.thesis_change import ThesisChange
 
 __all__ = [
     "Asset",
@@ -22,4 +23,5 @@ __all__ = [
     "RawEventImmutableError",
     "Signal",
     "StateChangeImmutableError",
+    "ThesisChange",
 ]

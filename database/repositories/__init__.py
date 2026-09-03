@@ -6,6 +6,7 @@ from database.repositories.investors import InvestorRepository
 from database.repositories.opinions import OpinionRepository
 from database.repositories.raw_events import RawEventRepository
 from database.repositories.state_changes import InvestorAssetStateChangeRepository
+from database.repositories.thesis_changes import ThesisChangeRepository
 
 __all__ = [
     "AssetRepository",
@@ -16,4 +17,5 @@ __all__ = [
     "InvestorRepository",
     "OpinionRepository",
     "RawEventRepository",
+    "ThesisChangeRepository",
 ]

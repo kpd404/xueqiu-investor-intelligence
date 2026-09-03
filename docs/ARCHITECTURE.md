@@ -40,8 +40,8 @@ Sprint 2D Asset Resolution is complete, including deterministic resolution, Asse
 data, cross-listing / alias safety, and unresolved recovery. Sprint 2E.0 Behavior Evidence Foundation, Sprint 2E.2-A
 Opinion Attribution & Identity Hardening, and Sprint 2E.2-B Production Analysis Policy & Projection Provenance are also
 complete. Attention Momentum has its architecture and evidence foundation, but production calculation is paused for
-data calibration pending broader temporal coverage. The next design increment is Sprint 2E.2 Thesis Change V0; its
-comparator and persistence are not implemented. Current Asset Intelligence remains a basic aggregation / Consensus
+data calibration pending broader temporal coverage. Thesis Change V0 is implemented with a versioned comparator and
+artifact persistence. Current Asset Intelligence remains a basic aggregation / Consensus
 foundation rather than a complete Intelligence Engine.
 
 ---
@@ -667,6 +667,32 @@ StateChange provenance is resolved through
 `triggering_opinion_id → Opinion.analysis_id → EventAnalysis.analysis_version`.
 The active-ledger repository query applies this join; v4 ledger rows remain
 append-only historical data and are excluded from the production view.
+
+## Sprint 2E.2 Thesis Change V0
+
+Thesis Change compares each current active Opinion with the immediately prior
+active Opinion for the same Investor × Asset, ordered by
+`RawEvent.published_time`, `RawEvent.id`, and `Opinion.id`. The first effective
+Opinion deterministically produces `NEW_THESIS`; “first” means first observed
+within the currently available production-effective history, not the investor's
+first-ever formation of the thesis. Later pairs use a separate versioned
+`ThesisComparator` structured-output port. If late history changes a predecessor,
+the old artifact remains append-only but the effective query returns only the
+pairing that matches the current predecessor timeline.
+
+``BT@@text
+Effective Opinion Timeline
+        ↓
+ThesisComparator (independent prompt/schema/policy)
+        ↓
+ThesisChange artifact
+``BT@@
+
+`ThesisChange` stores both Opinion/Event identities, effective and calculation
+times, comparison version, input identity, summary, and evidence. Missing
+catalysts, risks, or time horizon are `UNKNOWN`/`NOT_EXTRACTED`, never evidence
+of removal or weakening. Historical `as_of` and late recovery use fact-time
+predecessor selection; they do not create a new current behavior.
 
 ## Sprint 2E.2-A Opinion Attribution Boundary
 

@@ -1,6 +1,6 @@
 # Xueqiu Investor Intelligence System
 
-面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening 和 Sprint 2E.2-B Production Analysis Policy & Projection Provenance。Attention Momentum 当前进入数据校准暂停阶段，下一项设计工作是 Sprint 2E.2：Thesis Change V0。
+面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening、Sprint 2E.2-B Production Analysis Policy & Projection Provenance 和 Sprint 2E.2 Thesis Change V0。Attention Momentum 当前进入数据校准暂停阶段。
 
 ## Local setup
 
@@ -184,6 +184,8 @@ historical replay、Attention 和 Asset Intelligence 只消费 active analysis p
 - effective State / StateChange / Attention queries
 - Behavior Evidence Foundation / AttentionOccurrence
 - `OPINION` / `EXPLICIT_MENTION` / `REPOST` evidence attribution
+- versioned Thesis Change V0 (`NEW_THESIS` / `THESIS_UNCHANGED` / `THESIS_REINFORCED` /
+  `THESIS_EXTENDED` / `THESIS_CHANGED` / `INSUFFICIENT_EVIDENCE`)
 - basic Asset Intelligence / Consensus
 
 历史 unresolved analysis 可以在补充可信 Asset / Alias 后重新执行确定性 recovery：
@@ -201,12 +203,12 @@ Recovery 不重新调用 LLM。
 
 ### Sprint 2E.2 — Thesis Change V0
 
-Status: `DESIGN / NEXT`
+Status: `IMPLEMENTED`
 
-2E.2-A attribution prerequisite 和 2E.2-B production policy prerequisite 已完成。Thesis Change comparator 与
-persistence 尚未实现。
+2E.2-A attribution prerequisite 和 2E.2-B production policy prerequisite 已完成。Thesis Change V0
+现在支持 fact-time effective Opinion timeline、独立 structured comparator、版本化持久化 artifact 和幂等重算。
 
-当前 V0 设计候选：
+V0 已实现的比较类别：
 
 - `NEW_THESIS`
 - `THESIS_UNCHANGED`
@@ -217,6 +219,10 @@ persistence 尚未实现。
 
 `missing catalysts / risks / time_horizon = UNKNOWN / NOT_EXTRACTED`，不能安全解释为 removed、weakened 或
 invalidated。`THESIS_WEAKENED`、`THESIS_INVALIDATED` 和 `thesis removed` 可留作 Future / Later semantics。
+
+`NEW_THESIS` 表示当前可用 production-effective Opinion history 中首次观察到该 Investor × Asset 的 thesis，
+不表示投资者历史上第一次形成该观点。迟到历史 Opinion 重新建立 predecessor pairing 时，旧 comparison artifact
+保留为历史记录，但 effective Thesis timeline 只返回当前 predecessor 匹配的 artifact。
 
 ### Sprint 2E.1 — Attention Momentum
 
@@ -236,12 +242,11 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 计算时必须区分 `occurrence_count` / `occurrence frequency`、`distinct active days` 和 `recency`。例如 `3 occurrences / 1 active day`
 不能与 `3 occurrences / 3 active days` 视为相同的持续关注强度。当前不定义具体 7d / 14d / 28d 阈值。
 
-2E.1 Momentum 数据校准与 2E.2 Thesis Change 设计可以并行推进；不要求 2E.1 先于 2E.2 完成。
+2E.1 Momentum 数据校准与 Thesis Change V0 已分别收口；Momentum 仍需等待更长时间序列数据。
 
 ## Remaining planned capabilities
 
 - Attention Momentum production logic
-- Thesis Change comparator / persistence
 - Portfolio Fact Pipeline
 - Position Change
 - Opinion × Action Consistency

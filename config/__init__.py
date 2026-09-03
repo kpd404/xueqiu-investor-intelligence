@@ -5,6 +5,8 @@ from config.production import (
     ProductionPolicyConfigurationError,
     get_production_analysis_policy,
     get_production_effective_policy,
+    get_production_policy,
+    get_production_thesis_comparison_policy,
 )
 
 __all__ = [
@@ -12,5 +14,7 @@ __all__ = [
     "Settings",
     "get_production_analysis_policy",
     "get_production_effective_policy",
+    "get_production_policy",
+    "get_production_thesis_comparison_policy",
     "get_settings",
 ]
