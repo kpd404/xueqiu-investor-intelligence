@@ -86,6 +86,56 @@ to be the investor's first-ever formation of that thesis. Superseded late-histor
 predecessor pairings remain historical artifacts and are excluded from the
 effective Thesis Change timeline.
 
+### Sprint 2E.3-A — Portfolio Fact Foundation Bootstrap ✅
+
+- Independent Portfolio and PositionSnapshot facts ✅
+- Derived PortfolioAction contract and persistence ✅
+- InvestorActionClaim with RawEvent provenance ✅
+- Resolved / unresolved asset identity support ✅
+- No Portfolio Collector or production action detection yet ✅
+
+### Sprint 2E.3-B — Portfolio Snapshot Import Foundation ✅
+
+- External snapshot import contract ✅
+- Deterministic AssetResolver integration ✅
+- Resolved and unresolved PositionSnapshot persistence ✅
+- Repeat-import idempotency ✅
+- No Portfolio Collector, Action Diff, or Consistency Engine yet ✅
+
+### Sprint 2E.3-C — Portfolio Snapshot Provenance Layer ✅
+
+- PortfolioSnapshotBatch parent fact ✅
+- PositionSnapshot batch ownership ✅
+- Batch-aware repository and UnitOfWork ✅
+- Deterministic batch / position idempotency ✅
+- No PortfolioAction diff generation yet ✅
+
+### Sprint 2E.3-D — Portfolio Position Change Detection V0 ✅
+
+- Deterministic two-batch position comparison ✅
+- `POSITION_ADDED` / `POSITION_REMOVED` ✅
+- `POSITION_INCREASED` / `POSITION_DECREASED` / `POSITION_UNCHANGED` ✅
+- Complete batch and position provenance ✅
+- Resolved / unresolved identity isolation ✅
+- No BUY/SELL intent inference ✅
+
+### Sprint 2E.3-E — Opinion × Action Consistency V0 ✅
+
+- Independent consistency domain ✅
+- Active Opinion and PortfolioAction fact-time matching ✅
+- Positive / negative alignment and no-direction semantics ✅
+- Versioned, provenance-complete consistency artifact ✅
+- Idempotent persistence ✅
+- No skill, profitability, ranking, or investment recommendation ✅
+
+### Sprint 2E.3-F — Investor Behavior Snapshot Foundation ✅
+
+- Window-scoped InvestorBehaviorSnapshot aggregation ✅
+- Active artifact and fact-time filtering ✅
+- Attention, Opinion, ThesisChange, PortfolioAction, and Consistency metrics ✅
+- Deterministic snapshot identity and idempotent persistence ✅
+- No scoring, ranking, prediction, Signal, or Dashboard ✅
+
 ## Current / Next
 
 ### Sprint 2E.1 — Attention Momentum
@@ -113,18 +163,22 @@ pairs.
 
 ## Planned
 
-### Sprint 2E.3 — Portfolio Fact Pipeline
+### Remaining Sprint 2E.3 scope — Portfolio production orchestration
 
-- Portfolio snapshot
-- New position
-- Increase
-- Reduce
-- Exit
+The Portfolio Fact Foundation bootstrap is complete in Sprint 2E.3-A. The
+Snapshot Import Foundation is complete in Sprint 2E.3-B, Snapshot Provenance
+is complete in Sprint 2E.3-C, and Position Change Detection V0 is complete in
+Sprint 2E.3-D. The remaining scope
+is intentionally not implemented yet:
 
-### Sprint 2E.4 — Opinion × Action Consistency
+- Portfolio Collector
+- Production portfolio ingestion orchestration
 
-- Opinion confirmation
-- Opinion/action divergence
+### Sprint 2E.4 — Portfolio Intelligence / Performance Analysis
+
+- Portfolio intelligence extensions
+- Performance analysis (future)
+- Position / opinion longitudinal analysis
 
 ### Sprint 2F — Cross-Investor Intelligence
 

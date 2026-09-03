@@ -11,7 +11,14 @@ from database.models import (
     AssetAlias,
     EventAnalysis,
     Investor,
+    InvestorActionClaim,
+    InvestorActionConsistency,
+    InvestorBehaviorSnapshot,
     Opinion,
+    Portfolio,
+    PortfolioAction,
+    PortfolioSnapshotBatch,
+    PositionSnapshot,
     RawEvent,
     RawEventImmutableError,
     ThesisChange,
@@ -29,6 +36,13 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
         "investor_asset_state_changes",
         "opinions",
         "event_analyses",
+        "portfolio",
+        "position_snapshots",
+        "portfolio_actions",
+        "portfolio_snapshot_batches",
+        "investor_action_claims",
+        "investor_action_consistencies",
+        "investor_behavior_snapshots",
         "raw_events",
         "signals",
         "thesis_changes",
@@ -113,6 +127,79 @@ def test_opinion_schema_has_ai_provenance_fields() -> None:
         "comparison_version",
         "input_identity",
     } <= {column.name for column in inspect(ThesisChange).columns}
+
+
+def test_portfolio_fact_models_have_expected_identity_fields() -> None:
+    assert {
+        "investor_id",
+        "source",
+        "external_id",
+        "status",
+        "created_at",
+        "updated_at",
+    } <= {column.name for column in inspect(Portfolio).columns}
+    assert {
+        "portfolio_id",
+        "snapshot_time",
+        "source",
+        "external_id",
+        "created_at",
+    } <= {column.name for column in inspect(PortfolioSnapshotBatch).columns}
+    assert {
+        "portfolio_id",
+        "snapshot_batch_id",
+        "asset_id",
+        "asset_reference_id",
+        "snapshot_time",
+        "source_type",
+        "source_reference",
+    } <= {column.name for column in inspect(PositionSnapshot).columns}
+    assert {
+        "portfolio_id",
+        "previous_snapshot_batch_id",
+        "current_snapshot_batch_id",
+        "previous_position_snapshot_id",
+        "current_position_snapshot_id",
+        "asset_reference_id",
+        "asset_id",
+        "previous_snapshot_id",
+        "current_snapshot_id",
+        "action_type",
+        "effective_time",
+        "calculated_at",
+    } <= {column.name for column in inspect(PortfolioAction).columns}
+    assert {
+        "investor_id",
+        "asset_id",
+        "asset_reference_id",
+        "event_id",
+        "claim_type",
+        "evidence_text",
+        "published_time",
+        "analysis_version",
+    } <= {column.name for column in inspect(InvestorActionClaim).columns}
+    assert {
+        "investor_id",
+        "asset_id",
+        "opinion_id",
+        "portfolio_action_id",
+        "consistency_type",
+        "effective_time",
+        "opinion_analysis_version",
+        "consistency_policy_version",
+        "input_identity",
+    } <= {column.name for column in inspect(InvestorActionConsistency).columns}
+    assert {
+        "investor_id",
+        "as_of",
+        "window_start",
+        "window_end",
+        "attention_asset_count",
+        "opinion_count",
+        "behavior_policy_version",
+        "calculated_at",
+        "input_identity",
+    } <= {column.name for column in inspect(InvestorBehaviorSnapshot).columns}
 
 
 def test_asset_alias_is_scoped_to_asset_and_normalized_identity(db_session: Session) -> None:

@@ -38,11 +38,11 @@ Version: 1.5
 
 Sprint 2D Asset Resolution is complete, including deterministic resolution, AssetAlias, evidence-backed Asset Master
 data, cross-listing / alias safety, and unresolved recovery. Sprint 2E.0 Behavior Evidence Foundation, Sprint 2E.2-A
-Opinion Attribution & Identity Hardening, and Sprint 2E.2-B Production Analysis Policy & Projection Provenance are also
-complete. Attention Momentum has its architecture and evidence foundation, but production calculation is paused for
-data calibration pending broader temporal coverage. Thesis Change V0 is implemented with a versioned comparator and
-artifact persistence. Current Asset Intelligence remains a basic aggregation / Consensus
-foundation rather than a complete Intelligence Engine.
+Opinion Attribution & Identity Hardening, Sprint 2E.2-B Production Analysis Policy & Projection Provenance, Thesis
+Change V0, and Sprint 2E.3-A–F Portfolio / Behavior foundations are complete. Attention Momentum has its architecture
+and evidence foundation, but production calculation is paused for data calibration pending broader temporal coverage.
+Current Asset Intelligence remains a basic aggregation / Consensus foundation rather than a complete Intelligence
+Engine.
 
 ---
 
@@ -286,6 +286,85 @@ AI Pipeline
 
 ---
 
+# Portfolio Fact Foundation (Sprint 2E.3-A)
+
+Portfolio is an independent fact stream and must not depend on Opinion,
+ThesisChange, AttentionOccurrence, or an AI provider:
+
+```text
+Portfolio Source
+      ↓
+PositionSnapshot
+      ↓
+PortfolioAction
+```
+
+The first import workflow is deliberately small:
+
+```text
+External Portfolio Snapshot Input
+        ↓
+PortfolioSnapshotImportService
+        ↓
+AssetResolver (deterministic, no creation)
+        ↓
+PositionSnapshotRepository
+        ↓
+Portfolio Fact Storage
+```
+
+Repeated imports use the same portfolio, snapshot time, and asset identity;
+database partial unique indexes protect resolved and unresolved positions from
+duplicate facts.
+
+`InvestorActionClaim` is a separate RawEvent-linked text claim. It is not a
+portfolio fact and does not modify Opinion. `Portfolio`, `PositionSnapshot`,
+`PortfolioAction`, and `InvestorActionClaim` are composed through the dedicated
+Portfolio repositories and UnitOfWork. Resolved snapshots reference `asset_id`;
+unresolved snapshots retain an opaque `asset_reference_id` without creating an
+Asset. The foundation intentionally does not implement a Portfolio Collector
+or Signal workflow. V0 position-change detection is deterministic and fact-only;
+it does not infer BUY/SELL intent. Opinion × PortfolioAction Consistency is a
+separate analysis boundary documented below.
+
+## Sprint 2E.3-C Snapshot Provenance
+
+`PortfolioSnapshotBatch` is the deterministic parent fact for one observed
+portfolio snapshot. The import workflow first gets or creates the batch using
+`portfolio_id + snapshot_time + source + external_id`, then attaches every
+`PositionSnapshot` to that batch. Batch and position persistence are protected
+by database uniqueness.
+
+## Sprint 2E.3-E Opinion × PortfolioAction Consistency
+
+Consistency is an independent analysis boundary between two existing domains:
+
+```text
+active production Opinion ─┐
+                           ├─→ OpinionActionConsistencyService
+fact-derived PortfolioAction ┘             ↓
+                              InvestorActionConsistency
+```
+
+The service reads only active Opinion timelines and PortfolioAction facts. It
+does not call AI, modify either source entity, infer BUY/SELL intent, evaluate
+performance, or produce Signal. Matching uses the latest Opinion at or before
+the Action `effective_time`; an Action before any eligible Opinion is left
+unmatched. The artifact retains the active Opinion analysis version and a
+versioned consistency policy.
+
+## Sprint 2E.3-D Position Change Detection V0
+
+`PositionChangeDetectionService` compares two batches belonging to the same
+Portfolio. It matches resolved positions by `asset_id` and unresolved positions
+by `asset_reference_id`; resolved and unresolved identities never cross-match.
+The result is persisted as `PortfolioAction` with both batch IDs and previous /
+current PositionSnapshot provenance. `effective_time` is the current batch's
+`snapshot_time`; `calculated_at` is calculation time. The V0 action taxonomy is
+`POSITION_ADDED`, `POSITION_REMOVED`, `POSITION_INCREASED`,
+`POSITION_DECREASED`, and `POSITION_UNCHANGED`; it makes no trading-intent
+claim and does not depend on Opinion, ThesisChange, Attention, LLM, or Signal.
+
 # 6. Investment Understanding Layer
 
 ## 6.1 Responsibility
@@ -360,6 +439,28 @@ AttentionOccurrence
 One Investor × Asset × RawEvent creates at most one occurrence per attention policy version. `OPINION`,
 `EXPLICIT_MENTION`, and `REPOST` are merged evidence types. Mention matching and attention policies are pure; ORM and
 transaction orchestration remain in repositories and application services.
+
+## 6.6 Investor Behavior Snapshot Foundation (Sprint 2E.3-F)
+
+Behavior Snapshot is an independent aggregation boundary over existing
+effective artifacts:
+
+```text
+AttentionOccurrence ─┐
+Opinion              ├─→ InvestorBehaviorSnapshotService
+ThesisChange         │              ↓
+PortfolioAction      │     InvestorBehaviorSnapshot
+Consistency          ┘
+```
+
+The service receives an Investor and an inclusive fact-time window, reads only
+active interpretation artifacts plus portfolio facts, and persists one
+versioned snapshot per identity. It does not call AI, modify source artifacts,
+infer intent, calculate a score, rank investors, or produce Signal.
+`published_time` / `effective_time` are behavior times; `calculated_at` is
+derived calculation time. Repository and UnitOfWork wiring stay in the
+application/infrastructure layer while the behavior service depends only on
+provider-neutral contracts.
 
 ---
 
@@ -459,6 +560,7 @@ GET /timeline/{asset}
 - RawEvent
 - Opinion
 - State
+- Portfolio Fact Foundation
 - Signal
 
 ## 11.2 Future Storage

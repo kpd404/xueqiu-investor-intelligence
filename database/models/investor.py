@@ -11,6 +11,7 @@ from database.models._types import utc_now
 if TYPE_CHECKING:
     from database.models.investor_asset_state import InvestorAssetState
     from database.models.opinion import Opinion
+    from database.models.portfolio import Portfolio
     from database.models.raw_event import RawEvent
 
 
@@ -36,3 +37,4 @@ class Investor(Base):
     raw_events: Mapped[list["RawEvent"]] = relationship(back_populates="investor")
     opinions: Mapped[list["Opinion"]] = relationship(back_populates="investor")
     asset_states: Mapped[list["InvestorAssetState"]] = relationship(back_populates="investor")
+    portfolios: Mapped[list["Portfolio"]] = relationship(back_populates="investor")

@@ -7,10 +7,17 @@ from database.repositories import (
     AssetRepository,
     AttentionOccurrenceRepository,
     EventAnalysisRepository,
+    InvestorActionClaimRepository,
+    InvestorActionConsistencyRepository,
     InvestorAssetStateChangeRepository,
     InvestorAssetStateRepository,
+    InvestorBehaviorSnapshotRepository,
     InvestorRepository,
     OpinionRepository,
+    PortfolioActionRepository,
+    PortfolioRepository,
+    PortfolioSnapshotBatchRepository,
+    PositionSnapshotRepository,
     RawEventRepository,
     ThesisChangeRepository,
 )
@@ -93,6 +100,126 @@ class SqlAlchemyThesisChangeUnitOfWork:
             raise RuntimeError("unit of work is not active")
         self._session.commit()
         self._committed = True
+
+
+class SqlAlchemyPortfolioUnitOfWork:
+    """Transactional scope for the independent Portfolio Fact repositories."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+        self._committed = False
+
+    def __enter__(self) -> "SqlAlchemyPortfolioUnitOfWork":
+        self._session = self._session_factory()
+        self._committed = False
+        self.portfolios = PortfolioRepository(self._session)
+        self.assets = AssetRepository(self._session)
+        self.asset_resolver = AssetResolver(self.assets)
+        self.portfolio_snapshot_batches = PortfolioSnapshotBatchRepository(self._session)
+        self.position_snapshots = PositionSnapshotRepository(self._session)
+        self.portfolio_actions = PortfolioActionRepository(self._session)
+        self.investor_action_claims = InvestorActionClaimRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        if exc_type is not None or not self._committed:
+            self._session.rollback()
+        self._session.close()
+        self._session = None
+
+    def commit(self) -> None:
+        if self._session is None:
+            raise RuntimeError("unit of work is not active")
+        self._session.commit()
+        self._committed = True
+
+
+class SqlAlchemyConsistencyUnitOfWork:
+    """Transactional scope for Opinion × PortfolioAction consistency analysis."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+        self._committed = False
+
+    def __enter__(self) -> "SqlAlchemyConsistencyUnitOfWork":
+        self._session = self._session_factory()
+        self._committed = False
+        self.opinions = OpinionRepository(self._session)
+        self.portfolio_actions = PortfolioActionRepository(self._session)
+        self.consistencies = InvestorActionConsistencyRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        if exc_type is not None or not self._committed:
+            self._session.rollback()
+        self._session.close()
+        self._session = None
+
+    def commit(self) -> None:
+        if self._session is None:
+            raise RuntimeError("unit of work is not active")
+        self._session.commit()
+        self._committed = True
+
+
+class SqlAlchemyBehaviorSnapshotUnitOfWork:
+    """Transactional scope for Behavior Snapshot aggregation inputs and output."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+        self._committed = False
+
+    def __enter__(self) -> "SqlAlchemyBehaviorSnapshotUnitOfWork":
+        self._session = self._session_factory()
+        self._committed = False
+        self.opinions = OpinionRepository(self._session)
+        self.attention_occurrences = AttentionOccurrenceRepository(self._session)
+        self.thesis_changes = ThesisChangeRepository(self._session)
+        self.portfolio_actions = PortfolioActionRepository(self._session)
+        self.consistencies = InvestorActionConsistencyRepository(self._session)
+        self.behavior_snapshots = InvestorBehaviorSnapshotRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        if exc_type is not None or not self._committed:
+            self._session.rollback()
+        self._session.close()
+        self._session = None
+
+    def commit(self) -> None:
+        if self._session is None:
+            raise RuntimeError("unit of work is not active")
+        self._session.commit()
+        self._committed = True
+
+
+# Keep the shorter name available for application callers following the
+# existing domain UoW naming convention.
+SqlAlchemyBehaviorUnitOfWork = SqlAlchemyBehaviorSnapshotUnitOfWork
 
 
 class SqlAlchemyAttentionUnitOfWork:

@@ -89,6 +89,10 @@ InvestorAssetState
 Signal
 ```
 
+Portfolio Fact Foundation additionally provides `Portfolio`, `PositionSnapshot`,
+`PortfolioAction`, and `InvestorActionClaim` as an independent behavior-fact
+stream; it does not change the Opinion lifecycle.
+
 核心关系：
 
 ```text
@@ -368,6 +372,108 @@ removal or weakening. A late historical Opinion may create a new comparison pair
 `published_time`; superseded predecessor pairings remain historical artifacts but are excluded from the effective
 Thesis Change timeline.
 
+## Portfolio Fact Foundation (Sprint 2E.3-A)
+
+Portfolio is an independent fact domain. It is not an Opinion, ThesisChange, or AttentionOccurrence and does not
+depend on an LLM:
+
+```text
+Portfolio Source
+      ↓
+PositionSnapshot
+      ↓
+PortfolioAction
+```
+
+`Portfolio` identifies one Investor-owned portfolio by `(source, external_id)`; one Investor may have multiple
+portfolios. `PositionSnapshot` records an observed portfolio state at `snapshot_time` and supports either a resolved
+`asset_id` or an opaque unresolved `asset_reference_id`, but never both or neither. `created_at` is the system
+recording time and is not the fact time.
+
+`PortfolioAction` is a derived difference between two Snapshot Batches. Its `effective_time` is the current batch's
+`snapshot_time`; `calculated_at` records when the difference was calculated. Sprint 2E.3-D detects only factual
+position changes (`POSITION_ADDED`, `POSITION_REMOVED`, `POSITION_INCREASED`, `POSITION_DECREASED`,
+`POSITION_UNCHANGED`) and does not infer BUY/SELL intent.
+
+Each action stores both batch IDs and the available previous/current PositionSnapshot IDs. Resolved positions match
+by `asset_id`; unresolved positions match by `asset_reference_id`; the two identity kinds never match each other.
+
+`InvestorActionClaim` is a separate textual claim made by an Investor and is always linked to its source RawEvent.
+It is not Portfolio Fact and does not modify Opinion. An unresolved claim may retain an opaque
+`asset_reference_id`; no Asset is automatically created.
+
+The foundation tables are `portfolio`, `position_snapshots`, `portfolio_actions`, and `investor_action_claims`.
+Portfolio Fact persistence is intentionally separate from the Opinion and Attention lifecycles.
+
+Sprint 2E.3-B adds a source-neutral `PortfolioSnapshotImportCommand` and import service. The service reuses the
+deterministic `AssetResolver`, writes one `PositionSnapshot` per input position, and turns unresolved hints into a
+stable opaque reference identity without creating an Asset. Snapshot import identity is scoped to
+`portfolio_id + snapshot_time + (asset_id or asset_reference_id)` so repeating one external snapshot reuses its
+position facts.
+
+Sprint 2E.3-C adds the explicit `PortfolioSnapshotBatch` parent. Sprint 2E.3-D compares two batches through the
+deterministic `PositionChangeDetectionService`; no Portfolio Collector or BUY/SELL interpretation is included.
+
+## Opinion × PortfolioAction Consistency (Sprint 2E.3-E)
+
+`InvestorActionConsistency` is a derived analysis artifact linking one production-effective Opinion to one
+fact-derived `PortfolioAction`. It does not change either source entity and does not evaluate investment skill,
+profitability, or correctness.
+
+### Table
+
+`investor_action_consistencies`
+
+### Identity and fields
+
+The artifact stores `investor_id`, `asset_id`, `opinion_id`, `opinion_direction`, `portfolio_action_id`,
+`action_type`, `consistency_type`, `confidence`, structured `evidence`, `effective_time`, `calculated_at`,
+`opinion_analysis_version`, and `consistency_policy_version`. `input_identity` deterministically contains the
+Opinion ID, Action ID, and consistency policy version and is unique.
+
+Only active production Opinions are eligible. The service matches the latest Opinion whose
+`RawEvent.published_time` is at or before the Action `effective_time`; Actions earlier than any eligible Opinion
+remain unmatched. `effective_time` is the Action fact time and `calculated_at` is analysis time.
+
+V0 maps bullish/bearish directions against increased/decreased position facts to `POSITIVE_ALIGNMENT` or
+`NEGATIVE_ALIGNMENT`. Neutral or absent direction is `NO_DIRECTION`; unsupported/missing evidence is
+`INSUFFICIENT_EVIDENCE`. Added, removed, and unchanged actions do not imply BUY/SELL intent.
+
+Sprint 2E.3-C introduces `PortfolioSnapshotBatch` as the parent fact container. Its identity is
+`portfolio_id + snapshot_time + source + external_id`; every `PositionSnapshot` must reference exactly one
+batch and retain the batch's fact time. This makes the complete observed portfolio state and future
+previous/current action provenance explicit without implementing action detection.
+
+## Investor Behavior Snapshot (Sprint 2E.3-F)
+
+`InvestorBehaviorSnapshot` is a derived aggregation for one Investor and one
+inclusive fact-time window. It does not replace any source artifact and does
+not assign a score or investment recommendation.
+
+### Table
+
+`investor_behavior_snapshots`
+
+### Identity and metrics
+
+The unique identity is
+`investor_id + window_start + window_end + behavior_policy_version`.
+The snapshot stores attention asset/occurrence/new-attention counts, active
+Opinion and bullish/bearish counts, ThesisChange/reinforced/changed counts,
+PortfolioAction/increased/decreased counts, and positive/negative consistency
+counts. `as_of` is the window end for this V0.
+
+`new_attention_count` counts assets whose earliest effective occurrence for the
+investor falls inside the requested window. Only active production Opinion
+artifacts are included; old or failed analyses never fall back into the
+snapshot. All input filtering uses `AttentionOccurrence.published_time`,
+`RawEvent.published_time` for Opinion, and `effective_time` for ThesisChange,
+`PortfolioAction`, and consistency. `calculated_at` and `created_at` are never
+behavior timestamps.
+
+The snapshot is an intelligence aggregation foundation, not Signal, ranking,
+portfolio performance, prediction, or recommendation logic.
+
 ## 3.5 InvestorAssetState
 
 ### Purpose
@@ -459,6 +565,14 @@ LOW_PRIORITY
 Investor 1:N RawEvent
 ```
 
+## Investor → Portfolio
+
+一个 Investor 可以拥有多个独立组合：
+
+```text
+Investor 1:N Portfolio
+```
+
 ## RawEvent → Opinion
 
 一个 RawEvent 可以生成多个 Opinion：
@@ -522,9 +636,9 @@ model_version
 
 以下内容暂不实现：
 
-## Portfolio
+## Portfolio Collector / Action Detection
 
-记录完整组合。
+Portfolio Fact Foundation、Snapshot provenance 和 V0 持仓变化检测已建立；完整组合采集及生产级编排流程仍未实现。
 
 ## Industry Trend
 

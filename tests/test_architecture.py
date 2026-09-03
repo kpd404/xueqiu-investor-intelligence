@@ -62,12 +62,15 @@ def test_database_configuration_does_not_depend_on_backend(database_module: str)
     "package_name",
     [
         "ai",
+        "behavior",
         "collectors",
+        "consistency",
         "config",
         "contracts",
         "intelligence",
         "ingestion",
         "pipeline",
+        "portfolio",
         "resolution",
         "signal_engine",
     ],
@@ -94,7 +97,9 @@ def test_pyproject_discovers_layer_packages() -> None:
     assert {
         "ai*",
         "backend*",
+        "behavior*",
         "collectors*",
+        "consistency*",
         "config*",
         "contracts*",
         "database*",
@@ -137,6 +142,27 @@ def test_asset_resolver_is_source_and_persistence_independent() -> None:
 def test_asset_recovery_is_source_and_provider_independent() -> None:
     imports = imported_roots("resolution/recovery.py")
     assert imports.isdisjoint({"ai", "collectors", "database", "sqlalchemy"})
+
+
+@pytest.mark.parametrize(
+    "portfolio_model",
+    [
+        "database/models/portfolio.py",
+        "database/models/position_snapshot.py",
+        "database/models/portfolio_action.py",
+        "database/models/portfolio_snapshot.py",
+        "database/models/investor_action_claim.py",
+    ],
+)
+def test_portfolio_fact_models_do_not_depend_on_interpretation_layers(
+    portfolio_model: str,
+) -> None:
+    imports = imported_roots(portfolio_model)
+    source = (PROJECT_ROOT / portfolio_model).read_text(encoding="utf-8").lower()
+    assert imports.isdisjoint({"ai", "intelligence", "signal", "signal_engine"})
+    assert "opinion" not in source
+    assert "thesischange" not in source
+    assert "attentionoccurrence" not in source
 
 
 def test_attention_matcher_is_pure_and_source_independent() -> None:
@@ -197,6 +223,59 @@ def test_asset_intelligence_service_does_not_cross_forbidden_boundaries() -> Non
 def test_core_intelligence_pipeline_has_no_infrastructure_or_signal_dependency() -> None:
     imports = imported_roots("pipeline/intelligence_pipeline.py")
     assert imports.isdisjoint({"collectors", "database", "signal", "signal_engine", "sqlalchemy"})
+
+
+def test_portfolio_snapshot_import_service_stays_outside_interpretation_layers() -> None:
+    imports = imported_roots("portfolio/services/snapshot_import.py")
+    source = (PROJECT_ROOT / "portfolio/services/snapshot_import.py").read_text(encoding="utf-8")
+    assert imports.isdisjoint(
+        {"ai", "collectors", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"}
+    )
+    assert "opinion" not in source.lower()
+    assert "thesischange" not in source.lower()
+    assert "attentionoccurrence" not in source.lower()
+
+
+def test_position_change_detection_service_stays_outside_interpretation_layers() -> None:
+    path = "portfolio/services/position_change_detection.py"
+    imports = imported_roots(path)
+    source = (PROJECT_ROOT / path).read_text(encoding="utf-8")
+    assert imports.isdisjoint(
+        {"ai", "collectors", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"}
+    )
+    assert "opinion" not in source.lower()
+    assert "thesischange" not in source.lower()
+    assert "attentionoccurrence" not in source.lower()
+
+
+def test_consistency_service_stays_outside_provider_and_source_layers() -> None:
+    path = "consistency/services/opinion_action_consistency.py"
+    imports = imported_roots(path)
+    assert imports.isdisjoint(
+        {"ai", "collectors", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"}
+    )
+
+
+def test_consistency_policy_is_pure() -> None:
+    imports = imported_roots("consistency/policies/direction.py")
+    assert imports.isdisjoint(
+        {"ai", "collectors", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"}
+    )
+
+
+def test_behavior_package_stays_outside_infrastructure_and_interpretation_layers() -> None:
+    assert_package_boundary(
+        "behavior",
+        {
+            "ai",
+            "collectors",
+            "database",
+            "intelligence",
+            "signal",
+            "signal_engine",
+            "sqlalchemy",
+        },
+    )
 
 
 def test_collector_package_boundaries_are_source_only() -> None:

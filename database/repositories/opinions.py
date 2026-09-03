@@ -123,6 +123,25 @@ class OpinionRepository:
         )
         return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
 
+    def list_effective_timeline_by_investor(
+        self,
+        investor_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[OpinionTimelineEntry]:
+        """Return all active Opinion facts for one investor in fact-time order."""
+
+        statement = (
+            select(Opinion, RawEvent.published_time)
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(
+                Opinion.investor_id == investor_id,
+                *self._effective_analysis_predicates(policy),
+            )
+            .order_by(Opinion.asset_id, RawEvent.published_time, RawEvent.id, Opinion.id)
+        )
+        return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
+
     def list_effective_comparison_timeline(
         self,
         investor_id: UUID,

@@ -128,6 +128,32 @@ class AttentionOccurrenceRepository:
         )
         return [self._to_view(entity) for entity in self._session.scalars(statement)]
 
+    def list_effective_by_investor(
+        self,
+        investor_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+    ) -> list[AttentionOccurrenceView]:
+        """Return one investor's active occurrences in published-time order."""
+
+        statement = (
+            select(AttentionOccurrence)
+            .outerjoin(EventAnalysis, AttentionOccurrence.analysis_id == EventAnalysis.id)
+            .where(
+                AttentionOccurrence.investor_id == investor_id,
+                or_(
+                    AttentionOccurrence.analysis_id.is_(None),
+                    and_(
+                        EventAnalysis.analysis_version == policy.active_analysis_version,
+                        EventAnalysis.status.in_(
+                            [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                        ),
+                    ),
+                ),
+            )
+            .order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
+        )
+        return [self._to_view(entity) for entity in self._session.scalars(statement)]
+
     @classmethod
     def _to_view(cls, entity: AttentionOccurrence) -> AttentionOccurrenceView:
         return AttentionOccurrenceView(

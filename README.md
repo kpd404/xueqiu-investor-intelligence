@@ -1,6 +1,6 @@
 # Xueqiu Investor Intelligence System
 
-面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening、Sprint 2E.2-B Production Analysis Policy & Projection Provenance 和 Sprint 2E.2 Thesis Change V0。Attention Momentum 当前进入数据校准暂停阶段。
+面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening、Sprint 2E.2-B Production Analysis Policy & Projection Provenance、Sprint 2E.2 Thesis Change V0 和 Sprint 2E.3-A–F Portfolio / Behavior foundations。Attention Momentum 当前进入数据校准暂停阶段。
 
 ## Local setup
 
@@ -187,6 +187,11 @@ historical replay、Attention 和 Asset Intelligence 只消费 active analysis p
 - versioned Thesis Change V0 (`NEW_THESIS` / `THESIS_UNCHANGED` / `THESIS_REINFORCED` /
   `THESIS_EXTENDED` / `THESIS_CHANGED` / `INSUFFICIENT_EVIDENCE`)
 - basic Asset Intelligence / Consensus
+- Portfolio Fact ingestion foundation
+- Portfolio SnapshotBatch provenance
+- deterministic Portfolio Position Change Detection V0
+- Opinion × PortfolioAction Consistency V0
+- InvestorBehaviorSnapshot aggregation foundation
 
 历史 unresolved analysis 可以在补充可信 Asset / Alias 后重新执行确定性 recovery：
 
@@ -198,6 +203,29 @@ unresolved EventAnalysis
 ```
 
 Recovery 不重新调用 LLM。
+
+## Investor Behavior Snapshot Foundation (Sprint 2E.3-F)
+
+`InvestorBehaviorSnapshot` is a deterministic, window-scoped aggregation of
+active AttentionOccurrence, Opinion, ThesisChange, PortfolioAction, and
+InvestorActionConsistency artifacts. All counters use their source fact times
+(`published_time` or `effective_time`); `calculated_at` records only when the
+snapshot was computed. Snapshot identity is the investor, inclusive window,
+and behavior policy version, so repeated calculation is idempotent.
+
+This is an intelligence aggregation foundation. It is not a score, ranking,
+prediction, recommendation, Signal, or dashboard API. Portfolio Collector,
+advanced Portfolio Intelligence, Attention Momentum, and other downstream
+capabilities remain separate work.
+
+Portfolio Fact ingestion now groups imported positions under a deterministic
+`PortfolioSnapshotBatch`. Repeating the same portfolio snapshot reuses both the
+batch and its position facts. Portfolio Collector、完整生产级 PortfolioAction
+编排、Performance Analysis 和 Signal 仍未实现。
+
+Position Change Detection V0 已实现两个 SnapshotBatch 之间的事实差异比较，输出
+`POSITION_ADDED`、`POSITION_REMOVED`、`POSITION_INCREASED`、`POSITION_DECREASED` 或
+`POSITION_UNCHANGED`，不推断 BUY/SELL 意图。完整 Portfolio Collector 与生产编排仍未实现。
 
 ## Current / Next
 
@@ -247,9 +275,9 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 ## Remaining planned capabilities
 
 - Attention Momentum production logic
-- Portfolio Fact Pipeline
-- Position Change
-- Opinion × Action Consistency
+- Portfolio Collector
+- Portfolio position-change production orchestration
+- Portfolio Intelligence / Performance Analysis
 - enhanced Consensus / Divergence
 - Multi-investor warming
 - Industry / Theme Trend
