@@ -36,9 +36,13 @@ Version: 1.5
 
 ## 1.3 Delivery Status
 
-Sprint 2D Asset Resolution is complete, including deterministic resolution, AssetAlias, and unresolved recovery.
-The next planned increment is Sprint 2E Investor Behavior Intelligence, beginning with Attention Momentum. Current
-Asset Intelligence remains a basic aggregation / Consensus foundation rather than a complete Intelligence Engine.
+Sprint 2D Asset Resolution is complete, including deterministic resolution, AssetAlias, evidence-backed Asset Master
+data, cross-listing / alias safety, and unresolved recovery. Sprint 2E.0 Behavior Evidence Foundation, Sprint 2E.2-A
+Opinion Attribution & Identity Hardening, and Sprint 2E.2-B Production Analysis Policy & Projection Provenance are also
+complete. Attention Momentum has its architecture and evidence foundation, but production calculation is paused for
+data calibration pending broader temporal coverage. The next design increment is Sprint 2E.2 Thesis Change V0; its
+comparator and persistence are not implemented. Current Asset Intelligence remains a basic aggregation / Consensus
+foundation rather than a complete Intelligence Engine.
 
 ---
 
