@@ -10,13 +10,13 @@ old chat descriptions are not.
 
 The project is in Phase 2, Cross-Investor Intelligence.
 
-- Latest completed sprint: **Sprint 2F.1 — Cross-Investor Asset Evidence Snapshot Foundation**.
-- Current checkpoint: 2F.1 is implemented and verified; 2F.2 has not started.
+- Latest completed sprint: **Sprint 2F.2 — Opinion Coverage & Directional Alignment V0**.
+- Current checkpoint: 2F.2 is implemented and verified; Consensus/Divergence remains future work.
 - Attention Momentum (2E.1) remains paused for temporal data calibration.
 - No Signal, ranking, recommendation, or portfolio-performance engine is implemented.
 
 The next candidate is a narrowly scoped Consensus/Divergence evidence design,
-not a score or trading recommendation.
+not a score or trading recommendation. Directional Alignment != Consensus.
 
 ## Completed functionality
 
@@ -108,6 +108,26 @@ not a score or trading recommendation.
 - No Consensus direction/score, Divergence, Momentum, Ranking, Signal, or LLM
   logic is part of 2F.1.
 
+Sprint 2F.1.2 adds complete `window_opinion_ids` and
+`window_opinion_count` to each contribution. The policy version is now
+`cross-investor-asset-snapshot-v2`; v1 snapshot rows remain immutable for
+audit and are not overwritten.
+
+### Sprint 2F.2 — Opinion Coverage & Directional Alignment V0
+
+- `CrossInvestorAssetAlignment` is an immutable artifact derived from one
+  `CrossInvestorAssetSnapshot`.
+- Opinion Coverage is `NONE`, `PARTIAL`, or `COMPLETE`, only for snapshots
+  with at least two Attention Investors.
+- Directional Alignment uses one latest Opinion direction per Investor and
+  emits `INSUFFICIENT_EVIDENCE`, `ALIGNED_BULLISH`,
+  `ALIGNED_BEARISH`, `ALIGNED_NEUTRAL`, or `MIXED_DIRECTION`.
+- Opinion Investors outside the Attention Investor set fail explicitly.
+- Policy `cross-investor-directional-alignment-v1` is fingerprinted with the
+  source snapshot identity; identical inputs reuse and policy changes append.
+- No Consensus, Divergence Score, weighting, Momentum, Signal, or LLM logic
+  was introduced.
+
 ## Current architecture and responsibilities
 
 The high-level dependency flow is:
@@ -154,7 +174,8 @@ The current modules are responsible for the following:
 - `intelligence/policies/`: pure deterministic reducers/matchers/aggregation
   policies.
 - `intelligence/services/`: StateUpdate, AttentionOccurrence, ThesisChange,
-  AssetIntelligence, and CrossInvestorAssetSnapshot services.
+  AssetIntelligence, CrossInvestorAssetSnapshot, and CrossInvestorAssetAlignment
+  services.
 - `behavior/`: InvestorBehaviorSnapshot aggregation boundary.
 - `consistency/`: Opinion versus PortfolioAction analysis boundary.
 - `portfolio/`: Portfolio snapshot import and position-change detection boundary.
@@ -210,6 +231,10 @@ to an older version.
 10. **No quality weighting is used.** `Investor.quality_score` is not an input to
     the CrossInvestor snapshot.
 
+11. **Directional Alignment is not Consensus.** 2F.2 emits a deterministic
+    coverage/alignment view from one immutable snapshot; it does not select a
+    consensus winner or calculate a score.
+
 ## Database, schema, and migrations
 
 The latest migration chain is:
@@ -232,15 +257,15 @@ The latest migration chain is:
 | `20260904_0014` | Effective artifact/snapshot provenance hardening |
 | `20260904_0015` | Explicit Attention policy provenance |
 | `20260904_0016` | CrossInvestorAssetSnapshot |
+| `20260905_0017` | CrossInvestorAssetAlignment |
 
 Real PostgreSQL verification currently reports:
 
-- Alembic revision: `20260904_0016 (head)`.
+- Alembic revision: `20260905_0017 (head)`.
 - `alembic check`: no new upgrade operations.
-- Table `cross_investor_asset_snapshots` exists.
-- One real smoke snapshot row exists for an observed shared Asset.
-
-No further schema change is required for the unimplemented 2F.2 design.
+- Tables `cross_investor_asset_snapshots` and
+  `cross_investor_asset_alignments` exist.
+- Five v2 overlap snapshots have corresponding immutable alignment artifacts.
 
 ## Current real PostgreSQL data snapshot
 
@@ -262,7 +287,8 @@ The latest read-only audit of the development `snowball` database reports:
 | PositionSnapshot rows | 0 |
 | PortfolioAction rows | 0 |
 | InvestorActionConsistency rows | 0 |
-| CrossInvestorAssetSnapshot rows | 1 |
+| CrossInvestorAssetSnapshot rows | 10 (5 v1 + 5 v2) |
+| CrossInvestorAssetAlignment rows | 5 |
 
 The observed RawEvent range is 2026-08-27 through 2026-09-04, approximately
 7.98 days. Active Analysis statuses are:
@@ -277,17 +303,32 @@ three or more Investors. Asset resolution still has 60 unresolved entries over
 50 names. Sample-bias fields are not sufficiently populated to infer investor
 style or industry concentration.
 
+2F.2 calibration of the five v2 overlap snapshots:
+
+| Asset | Attention Investors | Opinion Investors | Opinion Coverage | Directional Alignment |
+| --- | ---: | ---: | --- | --- |
+| 中远海能 | 2 | 0 | NONE | INSUFFICIENT_EVIDENCE |
+| 紫金矿业 | 2 | 1 | PARTIAL | INSUFFICIENT_EVIDENCE |
+| 招商轮船 | 2 | 2 | COMPLETE | ALIGNED_BULLISH |
+| 上证指数 | 2 | 2 | COMPLETE | ALIGNED_BEARISH |
+| 特变电工 | 2 | 2 | COMPLETE | ALIGNED_BEARISH |
+
+The real dataset has no mixed-direction overlap. `MIXED_DIRECTION` is
+validated only through synthetic tests.
+
 ## Tests and verification
 
 The current repository verification is:
 
-- `pytest`: **375 passed**, with two non-failing environment warnings (FastAPI
+- `pytest`: **390 passed**, with two non-failing environment warnings (FastAPI
   test-client deprecation and `.pytest_cache` permission).
-- `ruff format --check .`: passed; 237 files formatted.
+- `ruff format --check .`: passed; 243 files formatted.
 - `ruff check .`: passed.
-- Alembic current/check against real PostgreSQL: `20260904_0016 (head)`, no drift.
-- New CrossInvestor coverage is in
-  `tests/integration/test_cross_investor_asset_snapshot.py`; model metadata
+- Alembic current/check against real PostgreSQL: `20260905_0017 (head)`, no drift.
+- CrossInvestor evidence tests are in
+  `tests/integration/test_cross_investor_asset_snapshot.py`; Coverage/
+  Alignment A-K tests and Repository provenance tests are in
+  `tests/integration/test_cross_investor_asset_alignment.py`; model metadata
   coverage is updated in `tests/test_models.py`.
 
 The pytest suite is offline and does not call real LLM providers or Xueqiu.
@@ -300,8 +341,9 @@ existing production entry points, outside pytest.
   paused; no thresholds or score are implemented.
 - Cross-investor Consensus/Divergence, multi-investor warming, Industry Trend,
   and Theme Trend are not implemented.
-- The current CrossInvestor snapshot is an evidence foundation only; it does not
-  choose a consensus direction or rank Investors/Assets.
+- `CrossInvestorAssetSnapshot` remains an evidence foundation and
+  `CrossInvestorAssetAlignment` remains a coverage/alignment view only; neither
+  chooses a consensus winner or ranks Investors/Assets.
 - Portfolio Collector, real Portfolio snapshot ingestion, and broader Portfolio
   Intelligence are not implemented; the current database has no Portfolio facts.
 - Opinion × Action expansion, performance analysis, Research Signal/Candidate,
@@ -329,7 +371,7 @@ existing production entry points, outside pytest.
    requires the established temporary psycopg client-cursor compatibility shim
    when invoking Alembic; no source migration drift was found.
 8. **Working-tree hygiene:** The current branch contains uncommitted sprint
-   changes, including the audit script and CrossInvestor implementation. A new
+  changes, including the audit script and CrossInvestor 2F.1/2F.2 implementation. A new
    session must preserve them and must not reset, stash, or discard them.
 
 ## Current blockers
@@ -349,16 +391,13 @@ scores, or provider-specific logic.
 
 ## Recommended next task
 
-The next implementation candidate is **Sprint 2F.2 — Consensus/Divergence
-Evidence V0**, with a deliberately small scope:
+The next implementation candidate is a future Consensus/Divergence evidence
+design, with a deliberately small scope:
 
 1. Freeze the current CrossInvestorAssetSnapshot contribution/effective-input
-   contract as the only input.
-2. Define deterministic, explainable evidence views for shared Assets without
-   consensus scores, quality weighting, or recommendations.
-3. Preserve per-Investor direction, Attention, Thesis, and provenance evidence;
-   do not collapse disagreements into a winner.
-4. Keep Momentum paused until natural 14d/28d data exists, and treat Portfolio
+   and CrossInvestorAssetAlignment contracts as the only inputs.
+2. Wait for 3+ Investor overlap, real mixed direction, and longer time series.
+3. Keep Momentum paused until natural 14d/28d data exists, and treat Portfolio
    as optional auxiliary evidence until real snapshots arrive.
 
 Before that task, a new session should read `AGENTS.md`, this file, the current

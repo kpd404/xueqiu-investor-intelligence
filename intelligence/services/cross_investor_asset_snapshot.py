@@ -487,9 +487,13 @@ class CrossInvestorAssetSnapshotService:
                     attention_occurrence_count=len(attention_values),
                     first_attention_occurrence_id=first[1] if first else None,
                     first_attention_published_time=first[2] if first else None,
-                    latest_opinion_id=latest.opinion_id if latest else None,
-                    latest_opinion_direction=latest.direction if latest else None,
-                    latest_opinion_published_time=(
+                    window_opinion_ids=tuple(
+                        item.opinion_id for item in sorted(opinion_values, key=cls._opinion_key)
+                    ),
+                    window_opinion_count=len(opinion_values),
+                    latest_window_opinion_id=latest.opinion_id if latest else None,
+                    latest_window_opinion_direction=latest.direction if latest else None,
+                    latest_window_opinion_time=(
                         cls._utc(latest.published_time) if latest else None
                     ),
                     thesis_change_ids=tuple(item.id for item in thesis_values),

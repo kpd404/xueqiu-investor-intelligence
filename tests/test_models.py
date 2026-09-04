@@ -9,6 +9,7 @@ from database.base import Base
 from database.models import (
     Asset,
     AssetAlias,
+    CrossInvestorAssetAlignment,
     EventAnalysis,
     Investor,
     InvestorActionClaim,
@@ -44,6 +45,7 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
         "investor_action_consistencies",
         "investor_behavior_snapshots",
         "cross_investor_asset_snapshots",
+        "cross_investor_asset_alignments",
         "raw_events",
         "signals",
         "thesis_changes",
@@ -191,6 +193,20 @@ def test_portfolio_fact_models_have_expected_identity_fields() -> None:
         "consistency_policy_version",
         "input_identity",
     } <= {column.name for column in inspect(InvestorActionConsistency).columns}
+    assert {
+        "asset_id",
+        "source_snapshot_id",
+        "opinion_coverage_state",
+        "directional_alignment_state",
+        "alignment_policy_version",
+        "input_identity",
+        "calculated_at",
+        "created_at",
+    } <= {column.name for column in inspect(CrossInvestorAssetAlignment).columns}
+    alignment_constraints = {
+        constraint.name for constraint in CrossInvestorAssetAlignment.__table__.constraints
+    }
+    assert "cross_investor_asset_alignment_input_identity" in alignment_constraints
     assert {
         "investor_id",
         "as_of",

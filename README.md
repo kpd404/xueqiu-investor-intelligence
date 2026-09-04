@@ -2,7 +2,8 @@
 
 Current delivery status includes Sprint 2E.3-G/H correctness closure and
 Sprint 2F.0 Data Reality Check and Sprint 2F.1 Cross-Investor Asset Evidence
-Snapshot Foundation. The latest calibration is data-limited:
+Snapshot Foundation, plus Sprint 2F.2 Opinion Coverage & Directional Alignment
+V0. The latest calibration is data-limited:
 Attention Momentum remains paused pending natural multi-week coverage.
 
 面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening、Sprint 2E.2-B Production Analysis Policy & Projection Provenance、Sprint 2E.2 Thesis Change V0 和 Sprint 2E.3-A–F Portfolio / Behavior foundations。Attention Momentum 当前进入数据校准暂停阶段。
@@ -199,6 +200,7 @@ historical replay、Attention 和 Asset Intelligence 只消费 active analysis p
 - InvestorBehaviorSnapshot aggregation foundation
 - Sprint 2F.0 Data Reality Check / Intelligence Calibration (read-only audit)
 - CrossInvestorAssetSnapshot evidence aggregation foundation
+- CrossInvestorAssetAlignment deterministic Opinion Coverage / Directional Alignment V0
 
 历史 unresolved analysis 可以在补充可信 Asset / Alias 后重新执行确定性 recovery：
 
@@ -295,6 +297,11 @@ The Sprint 1D `AssetIntelligenceSnapshot` remains a separate Asset-level state
 and basic Consensus foundation; it is not replaced by this cross-Investor
 snapshot.
 
+Sprint 2F.1.2 adds complete `window_opinion_ids` and
+`window_opinion_count` provenance to each Investor contribution. This is
+versioned as `cross-investor-asset-snapshot-v2`; v1 snapshots remain preserved
+for audit and are not overwritten.
+
 Portfolio Fact ingestion now groups imported positions under a deterministic
 `PortfolioSnapshotBatch`. Repeating the same portfolio snapshot reuses both the
 batch and its position facts. Portfolio Collector、完整生产级 PortfolioAction
@@ -303,6 +310,31 @@ batch and its position facts. Portfolio Collector、完整生产级 PortfolioAct
 Position Change Detection V0 已实现两个 SnapshotBatch 之间的事实差异比较，输出
 `POSITION_ADDED`、`POSITION_REMOVED`、`POSITION_INCREASED`、`POSITION_DECREASED` 或
 `POSITION_UNCHANGED`、`POSITION_CHANGE_UNKNOWN`，不推断 BUY/SELL 意图。完整 Portfolio Collector 与生产编排仍未实现。
+
+## Sprint 2F.2 Opinion Coverage & Directional Alignment V0
+
+`CrossInvestorAssetAlignment` is a deterministic, immutable derived artifact
+from one `CrossInvestorAssetSnapshot`. It classifies only snapshots with at
+least two Attention Investors:
+
+- `OpinionCoverageState`: `NONE`, `PARTIAL`, or `COMPLETE`
+- `DirectionalAlignmentState`: `INSUFFICIENT_EVIDENCE`,
+  `ALIGNED_BULLISH`, `ALIGNED_BEARISH`, `ALIGNED_NEUTRAL`, or
+  `MIXED_DIRECTION`
+
+Coverage compares distinct Opinion Investors with distinct Attention
+Investors. Direction uses only each Investor contribution's latest window
+Opinion; `STRONG_BULLISH`/`STRONG_BEARISH` map to the corresponding side, and
+multiple Opinions from one Investor never create extra votes. An Opinion
+Investor outside the Attention Investor set is an explicit integrity error.
+
+The policy is `cross-investor-directional-alignment-v1`. Its SHA-256
+`input_identity` contains the immutable source snapshot `input_identity` and
+the alignment policy version. Repeating the same source/policy reuses the
+artifact; a new source snapshot or policy appends a new artifact.
+
+Directional Alignment != Consensus. This sprint implements no Consensus,
+Divergence Score, weighting, ranking, Momentum, Signal, or Research Candidate.
 
 ## Current / Next
 

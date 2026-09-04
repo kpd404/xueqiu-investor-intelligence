@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from contracts import (
+    CROSS_INVESTOR_POLICY_VERSION,
     AttentionEvidence,
     AttentionEvidenceType,
     AttentionOccurrenceView,
@@ -317,10 +318,36 @@ def test_cross_investor_snapshot_aggregates_contributions_and_latest_direction()
     }
     first = next(item for item in snapshot.contributions if item.investor_id == INVESTOR_ONE)
     assert first.attention_occurrence_count == 1
-    assert first.latest_opinion_direction is OpinionDirection.BEARISH
+    assert first.window_opinion_count == 2
+    assert len(first.window_opinion_ids) == 2
+    assert first.latest_window_opinion_direction is OpinionDirection.BEARISH
+    assert first.latest_window_opinion_id in first.window_opinion_ids
     assert first.thesis_change_types == (ThesisChangeType.THESIS_REINFORCED,)
     assert first.portfolio_action_types == (PortfolioActionType.POSITION_INCREASED,)
     assert first.consistency_types == (ConsistencyType.POSITIVE_ALIGNMENT,)
+    assert (
+        sum(item.attention_occurrence_count for item in snapshot.contributions)
+        == snapshot.attention_occurrence_count
+    )
+    assert (
+        sum(item.window_opinion_count for item in snapshot.contributions) == snapshot.opinion_count
+    )
+    assert (
+        sum(bool(item.window_opinion_ids) for item in snapshot.contributions)
+        == snapshot.opinion_investor_count
+    )
+    assert (
+        sum(len(item.thesis_change_ids) for item in snapshot.contributions)
+        == snapshot.thesis_change_count
+    )
+    assert (
+        sum(len(item.portfolio_action_ids) for item in snapshot.contributions)
+        == snapshot.portfolio_action_count
+    )
+    assert (
+        sum(len(item.consistency_ids) for item in snapshot.contributions)
+        == snapshot.consistency_count
+    )
 
 
 def test_cross_investor_snapshot_isolates_attention_policy_and_future_data():
@@ -410,7 +437,7 @@ def test_cross_investor_snapshot_repository_is_idempotent(db_session: Session):
         attention_policy_version=ATTENTION_POLICY,
         thesis_comparison_version=THESIS_VERSION,
         consistency_policy_version=CONSISTENCY_POLICY,
-        cross_investor_policy_version="cross-investor-asset-snapshot-v1",
+        cross_investor_policy_version=CROSS_INVESTOR_POLICY_VERSION,
     )
     values = {
         "asset_id": asset.id,

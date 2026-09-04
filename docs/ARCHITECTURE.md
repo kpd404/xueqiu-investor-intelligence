@@ -2,7 +2,7 @@
 
 ## System Architecture Specification
 
-Version: 1.5
+Version: 1.6
 
 ---
 
@@ -48,7 +48,9 @@ The delivery status also includes Sprint 2E.3-G/H correctness closure and the
 Sprint 2F.0 Data Reality Check. This audit added no business model or table:
 it records the observed data limits before Cross-Investor Intelligence work.
 Sprint 2F.1 now adds the asset-centric evidence snapshot foundation without
-introducing consensus, scoring, Momentum, or Signal logic.
+introducing consensus, scoring, Momentum, or Signal logic. Sprint 2F.2 adds
+the deterministic Opinion Coverage and Directional Alignment view on top of
+that immutable snapshot; it is explicitly not Consensus.
 
 ## 6.9 Sprint 2F.0 data reality check
 
@@ -537,6 +539,45 @@ divergence, warming, Momentum, scores, rankings, or Signals. The existing
 Sprint 1D `AssetIntelligenceSnapshot` remains compatible and is a separate
 Asset-level state/consensus foundation; it is not replaced by this cross-
 Investor provenance artifact.
+
+Sprint 2F.1.2 closes contribution provenance by storing every effective Opinion
+ID in the window per Investor (`window_opinion_ids` and count), while retaining
+the latest Opinion separately for direction aggregation. This is a new
+`cross-investor-asset-snapshot-v2` artifact version; v1 rows remain historical.
+
+---
+
+## 6.11 Cross-Investor Asset Alignment (Sprint 2F.2)
+
+The cross-investor layer has two separate deterministic artifacts:
+
+```text
+CrossInvestorAssetSnapshot
+        │
+        └── Evidence Aggregation
+                    ↓
+        CrossInvestorAssetAlignment
+        Deterministic Coverage + Directional Alignment
+```
+
+`CrossInvestorAssetAlignment` reads exactly one immutable source snapshot.
+Its service depends on provider-neutral snapshot views and a UnitOfWork port;
+ORM/SQLAlchemy remains in the repository adapter. The artifact keeps the
+source snapshot ID, alignment policy version, and a SHA-256 fingerprint of
+the source snapshot `input_identity` plus that policy.
+
+Only snapshots with at least two Attention Investors are classified. The
+service validates that the distinct Investor set with window Opinions is a
+subset of the distinct Attention Investor set before classification. Coverage
+is `NONE`, `PARTIAL`, or `COMPLETE`. Directional alignment uses one latest
+Opinion direction per Investor: bullish/strong bullish, bearish/strong
+bearish, or neutral. Multiple Opinions from one Investor do not add votes.
+
+The states are `INSUFFICIENT_EVIDENCE`, `ALIGNED_BULLISH`,
+`ALIGNED_BEARISH`, `ALIGNED_NEUTRAL`, and `MIXED_DIRECTION`.
+Directional Alignment != Consensus. This boundary does not calculate
+Consensus, Divergence Score, Strength, Probability, Heat, Warming, Momentum,
+Investor weighting/ranking, Signal, Research Candidate, or LLM output.
 
 ---
 

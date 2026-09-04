@@ -175,6 +175,26 @@ discussion only; Momentum still requires natural multi-week data.
 - Deterministic SHA-256 input identity and immutable versions ✅
 - No Consensus score, Divergence, Momentum, Ranking, Signal, or LLM ✅
 
+### Sprint 2F.1.2 — Cross-Investor Contribution Provenance Closure ✅
+
+- Complete window Opinion IDs and counts per Investor contribution ✅
+- `cross-investor-asset-snapshot-v2` with v1 preservation ✅
+- Aggregate-count reconstruction and repeated-input idempotency validation ✅
+
+### Sprint 2F.2 — Opinion Coverage & Directional Alignment V0 ✅
+
+- Immutable `CrossInvestorAssetAlignment` derived from one source snapshot ✅
+- Deterministic `NONE` / `PARTIAL` / `COMPLETE` Opinion Coverage ✅
+- Deterministic latest-per-Investor Directional Alignment ✅
+- Attention/Opinion Investor-set integrity validation ✅
+- SHA-256 source-snapshot + policy identity and append-only idempotency ✅
+- No Consensus, Divergence Score, weighting, Momentum, Signal, or LLM ✅
+
+Directional Alignment != Consensus. The real dataset has no mixed-direction
+overlap; mixed direction is validated only by synthetic tests in this sprint.
+True Consensus/Divergence work waits for 3+ Investor overlap, real mixed
+direction, and longer time series.
+
 ## Current / Next
 
 ### Sprint 2E.1 — Attention Momentum
@@ -224,7 +244,7 @@ is intentionally not implemented yet:
 
 ### Sprint 2F — Cross-Investor Intelligence
 
-- 2F.0 calibration and 2F.1 evidence foundation are complete; broader data remains limited.
+- 2F.0 calibration, 2F.1 evidence foundation, and 2F.2 Coverage/Alignment V0 are complete; broader data remains limited.
 - Enhanced Consensus / Divergence
 - Multi-investor attention warming
 - Industry Trend

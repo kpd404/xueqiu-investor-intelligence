@@ -2,7 +2,7 @@
 
 ## Data Model Specification
 
-Version: 1.3
+Version: 1.4
 
 ---
 
@@ -550,10 +550,17 @@ as either direction.
 
 `contributions` is structured JSON with one entry per contributing Investor.
 Each entry preserves Attention occurrence IDs and first identity/time, the
-latest window Opinion ID/direction/time, ThesisChange IDs/types, PortfolioAction
-IDs/types, and Consistency IDs/types. This keeps the aggregate answerable as
+lifetime window Opinion IDs/count plus the latest window Opinion ID/direction/
+time, ThesisChange IDs/types, PortfolioAction IDs/types, and Consistency
+IDs/types. This keeps the aggregate answerable as
 “which Investors produced this evidence?” without reading `Investor.quality_score`
 or introducing weighting.
+
+Sprint 2F.1.2 versions this contribution schema as
+`cross-investor-asset-snapshot-v2`. Existing v1 snapshot rows remain immutable
+and readable; recalculation writes a v2 row with complete
+`window_opinion_ids`/`window_opinion_count` provenance. The latest Opinion is
+still used only for direction aggregation.
 
 Only production-effective policy versions are read. Attention uses the active
 Attention policy; Opinion and ThesisChange use the active Opinion and
@@ -564,6 +571,60 @@ Sprint 1D `AssetIntelligenceSnapshot`: the latter is an Asset-level state/
 consensus foundation, whereas Sprint 2F.1 preserves the cross-Investor
 evidence contributions and window provenance needed before any consensus or
 divergence logic.
+
+## Cross-Investor Asset Alignment (Sprint 2F.2)
+
+`CrossInvestorAssetSnapshot` is the evidence aggregation input. It cannot
+also carry a recomputable policy-specific coverage/alignment result without
+mixing evidence inventory with deterministic interpretation, so
+`CrossInvestorAssetAlignment` is a separate immutable derived artifact.
+
+### Table
+
+`cross_investor_asset_alignments`
+
+### Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | UUID | Primary Key |
+| `asset_id` | UUID | Canonical Asset |
+| `source_snapshot_id` | UUID | Immutable `CrossInvestorAssetSnapshot` provenance |
+| `opinion_coverage_state` | string | `NONE`, `PARTIAL`, or `COMPLETE` |
+| `directional_alignment_state` | string | Directional alignment V0 state |
+| `alignment_policy_version` | string | `cross-investor-directional-alignment-v1` |
+| `input_identity` | string | SHA-256 of source snapshot identity + policy |
+| `calculated_at` | timestamp | Deterministic calculation time |
+| `created_at` | timestamp | Persistence time |
+
+The table has foreign keys to the Asset and source snapshot, a unique
+`input_identity`, and a unique source-snapshot/policy pair. Old artifacts are
+kept; identical source snapshot + policy input is reused, while a new source
+snapshot or policy creates a new row.
+
+### Opinion Coverage
+
+Only snapshots with `attention_investor_count >= 2` are classified.
+`NONE` means zero distinct Opinion Investors, `PARTIAL` means more than
+zero but fewer Opinion Investors than Attention Investors, and `COMPLETE`
+means the two distinct Investor counts are equal. The Opinion Investor set
+must be a subset of the Attention Investor set; otherwise calculation fails
+with an integrity error.
+
+### Directional Alignment
+
+Directional alignment is independent of Consensus. It uses only
+`latest_window_opinion_direction` once per Investor contribution:
+`BULLISH`/`STRONG_BULLISH` map to bullish, `BEARISH`/`STRONG_BEARISH`
+map to bearish, and `NEUTRAL` maps to neutral. Fewer than two Opinion
+Investors produces `INSUFFICIENT_EVIDENCE`; otherwise all one side produces
+`ALIGNED_BULLISH`, `ALIGNED_BEARISH`, or `ALIGNED_NEUTRAL`, and multiple
+sides produce `MIXED_DIRECTION`. Multiple Opinion artifacts from one
+Investor never add votes.
+
+Directional Alignment != Consensus. This entity does not store a score,
+weight, probability, Momentum, Signal, ranking, Divergence Score, or research
+recommendation.
 
 ## 3.5 InvestorAssetState
 
