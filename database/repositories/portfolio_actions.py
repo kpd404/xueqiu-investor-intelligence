@@ -162,6 +162,78 @@ class PortfolioActionRepository:
         )
         return [self._to_view(entity) for entity in self._session.scalars(statement)]
 
+    def list_effective_by_portfolio(
+        self,
+        portfolio_id: UUID,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[PortfolioActionView]:
+        """Return only actions between adjacent fact-time snapshot batches."""
+
+        batches_statement = select(PortfolioSnapshotBatch).where(
+            PortfolioSnapshotBatch.portfolio_id == portfolio_id
+        )
+        normalized_as_of = self._as_utc(as_of) if as_of is not None else None
+        if normalized_as_of is not None:
+            batches_statement = batches_statement.where(
+                PortfolioSnapshotBatch.snapshot_time <= normalized_as_of
+            )
+        batches_statement = batches_statement.order_by(
+            PortfolioSnapshotBatch.snapshot_time,
+            PortfolioSnapshotBatch.source,
+            PortfolioSnapshotBatch.external_id,
+            PortfolioSnapshotBatch.id,
+        )
+        batches = list(self._session.scalars(batches_statement))
+        adjacent = {
+            (previous.id, current.id)
+            for previous, current in zip(batches, batches[1:], strict=False)
+        }
+        actions = self.list_by_portfolio(portfolio_id)
+        return [
+            action
+            for action in actions
+            if (normalized_as_of is None or self._as_utc(action.effective_time) <= normalized_as_of)
+            and (
+                action.previous_snapshot_batch_id,
+                action.current_snapshot_batch_id,
+            )
+            in adjacent
+        ]
+
+    def list_effective_by_investor(
+        self,
+        investor_id: UUID,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[PortfolioActionView]:
+        """Return effective actions for all portfolios owned by one investor."""
+
+        portfolio_ids = self._session.scalars(
+            select(Portfolio.id).where(Portfolio.investor_id == investor_id)
+        )
+        actions = [
+            action
+            for portfolio_id in portfolio_ids
+            for action in self.list_effective_by_portfolio(portfolio_id, as_of=as_of)
+        ]
+        return sorted(actions, key=lambda value: (value.effective_time, value.id.int))
+
+    def list_effective_by_investor_asset(
+        self,
+        investor_id: UUID,
+        asset_id: UUID,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[PortfolioActionView]:
+        """Return effective resolved-asset actions for one investor pair."""
+
+        return [
+            action
+            for action in self.list_effective_by_investor(investor_id, as_of=as_of)
+            if action.asset_id == asset_id
+        ]
+
     def list(
         self,
         *,

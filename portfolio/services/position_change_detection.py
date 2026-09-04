@@ -11,6 +11,7 @@ from contracts import (
     PortfolioActionType,
     PortfolioActionView,
     PortfolioSnapshotBatchView,
+    PortfolioSnapshotCompleteness,
     PositionChangeDetectionResult,
     PositionSnapshotView,
 )
@@ -86,7 +87,20 @@ class PositionChangeDetectionService:
             ):
                 previous = previous_positions.get(identity)
                 current = current_positions.get(identity)
-                action_type = self._action_type(previous, current)
+                action_type = self._action_type(
+                    previous,
+                    current,
+                    previous_completeness=getattr(
+                        previous_batch,
+                        "completeness",
+                        PortfolioSnapshotCompleteness.FULL,
+                    ),
+                    current_completeness=getattr(
+                        current_batch,
+                        "completeness",
+                        PortfolioSnapshotCompleteness.FULL,
+                    ),
+                )
                 representative = current or previous
                 assert representative is not None
                 action = PortfolioActionDTO(
@@ -149,13 +163,28 @@ class PositionChangeDetectionService:
     def _action_type(
         previous: PositionSnapshotView | None,
         current: PositionSnapshotView | None,
+        *,
+        previous_completeness: PortfolioSnapshotCompleteness = PortfolioSnapshotCompleteness.FULL,
+        current_completeness: PortfolioSnapshotCompleteness = PortfolioSnapshotCompleteness.FULL,
     ) -> PortfolioActionType:
         if previous is None:
+            if (
+                previous_completeness != PortfolioSnapshotCompleteness.FULL
+                or current_completeness != PortfolioSnapshotCompleteness.FULL
+            ):
+                return PortfolioActionType.POSITION_CHANGE_UNKNOWN
             return PortfolioActionType.POSITION_ADDED
         if current is None:
+            if (
+                previous_completeness != PortfolioSnapshotCompleteness.FULL
+                or current_completeness != PortfolioSnapshotCompleteness.FULL
+            ):
+                return PortfolioActionType.POSITION_CHANGE_UNKNOWN
             return PortfolioActionType.POSITION_REMOVED
         # A missing weight cannot prove an increase or decrease in this V0.
-        if previous.weight is None or current.weight is None or current.weight == previous.weight:
+        if previous.weight is None or current.weight is None:
+            return PortfolioActionType.POSITION_CHANGE_UNKNOWN
+        if current.weight == previous.weight:
             return PortfolioActionType.POSITION_UNCHANGED
         if current.weight > previous.weight:
             return PortfolioActionType.POSITION_INCREASED

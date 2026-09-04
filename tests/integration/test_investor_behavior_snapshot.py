@@ -50,8 +50,19 @@ class _Opinions(_Reader):
 
 
 class _Attention(_Reader):
-    def list_effective_by_investor(self, investor_id, policy):
-        return self.values
+    def list_effective_by_investor(
+        self,
+        investor_id,
+        policy,
+        attention_policy_version=None,
+        *,
+        as_of=None,
+    ):
+        return [
+            value
+            for value in self.values
+            if value.attention_policy_version == attention_policy_version
+        ]
 
 
 class _Thesis(_Reader):
@@ -67,17 +78,18 @@ class _Thesis(_Reader):
 
 
 class _Actions(_Reader):
-    def list_by_investor(self, investor_id):
+    def list_effective_by_investor(self, investor_id, *, as_of=None):
         return self.values
 
 
 class _Consistency(_Reader):
-    def list_by_investor(
+    def list_effective_by_investor(
         self,
         investor_id,
+        policy,
         *,
-        opinion_analysis_version=None,
         consistency_policy_version=None,
+        as_of=None,
     ):
         return self.values
 
@@ -115,7 +127,11 @@ class _Uow:
         self.commit_count += 1
 
 
-def _attention(asset_id, published_time):
+def _attention(
+    asset_id,
+    published_time,
+    attention_policy_version="attention-occurrence-v1",
+):
     return AttentionOccurrenceView(
         id=uuid4(),
         investor_id=INVESTOR_ID,
@@ -130,7 +146,7 @@ def _attention(asset_id, published_time):
                 reference="Asset",
             ),
         ),
-        attention_policy_version="attention-occurrence-v1",
+        attention_policy_version=attention_policy_version,
         calculated_at=published_time + timedelta(minutes=1),
     )
 
@@ -300,6 +316,107 @@ def test_behavior_snapshot_window_identity_changes_with_window_end():
     assert len(snapshots.values) == 2
 
 
+def test_late_effective_input_creates_new_snapshot_version():
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    end = datetime(2026, 9, 7, tzinfo=UTC)
+    attention = [_attention(ASSET_ONE, start + timedelta(days=1))]
+    snapshots = _SnapshotWriter()
+    uow = _Uow(
+        attention=attention,
+        opinions=[],
+        thesis=[],
+        actions=[],
+        consistencies=[],
+        snapshots=snapshots,
+    )
+    service = InvestorBehaviorSnapshotService(lambda: uow, POLICY)
+
+    first = service.calculate(INVESTOR_ID, start, end)
+    attention.append(_attention(ASSET_TWO, start + timedelta(days=2)))
+    second = service.calculate(INVESTOR_ID, start, end)
+
+    assert first.id != second.id
+    assert first.attention_occurrence_count == 1
+    assert second.attention_occurrence_count == 2
+    assert len(snapshots.values) == 2
+
+
+def test_late_pre_window_attention_changes_fingerprint_and_new_attention_metric():
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    end = datetime(2026, 9, 7, tzinfo=UTC)
+    attention = [_attention(ASSET_ONE, start + timedelta(days=1))]
+    snapshots = _SnapshotWriter()
+    uow = _Uow(
+        attention=attention,
+        opinions=[],
+        thesis=[],
+        actions=[],
+        consistencies=[],
+        snapshots=snapshots,
+    )
+    service = InvestorBehaviorSnapshotService(lambda: uow, POLICY)
+
+    first = service.calculate(INVESTOR_ID, start, end)
+    attention.append(_attention(ASSET_ONE, start - timedelta(days=1)))
+    second = service.calculate(INVESTOR_ID, start, end)
+
+    assert first.id != second.id
+    assert first.new_attention_count == 1
+    assert second.new_attention_count == 0
+
+
+def test_unrelated_late_attention_does_not_change_window_fingerprint():
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    end = datetime(2026, 9, 7, tzinfo=UTC)
+    attention = [_attention(ASSET_ONE, start + timedelta(days=1))]
+    snapshots = _SnapshotWriter()
+    uow = _Uow(
+        attention=attention,
+        opinions=[],
+        thesis=[],
+        actions=[],
+        consistencies=[],
+        snapshots=snapshots,
+    )
+    service = InvestorBehaviorSnapshotService(lambda: uow, POLICY)
+
+    first = service.calculate(INVESTOR_ID, start, end)
+    attention.append(_attention(ASSET_TWO, start - timedelta(days=1)))
+    second = service.calculate(INVESTOR_ID, start, end)
+
+    assert first.id == second.id
+    assert second.new_attention_count == 1
+
+
+def test_behavior_snapshot_reads_only_explicit_attention_policy():
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    end = datetime(2026, 9, 7, tzinfo=UTC)
+    attention = [
+        _attention(ASSET_ONE, start + timedelta(days=1), "attention-occurrence-v1"),
+        _attention(ASSET_TWO, start + timedelta(days=2), "attention-occurrence-v2"),
+    ]
+    snapshots = _SnapshotWriter()
+    uow = _Uow(
+        attention=attention,
+        opinions=[],
+        thesis=[],
+        actions=[],
+        consistencies=[],
+        snapshots=snapshots,
+    )
+    service = InvestorBehaviorSnapshotService(
+        lambda: uow,
+        POLICY,
+        attention_policy_version="attention-occurrence-v2",
+    )
+
+    snapshot = service.calculate(INVESTOR_ID, start, end)
+
+    assert snapshot.attention_occurrence_count == 1
+    assert snapshot.attention_asset_count == 1
+    assert snapshot.attention_policy_version == "attention-occurrence-v2"
+
+
 def test_behavior_snapshot_repository_database_identity_is_idempotent(db_session: Session):
     investor = Investor(name="Behavior Investor", platform="manual", platform_user_id="behavior-1")
     db_session.add(investor)
@@ -342,3 +459,56 @@ def test_behavior_snapshot_repository_database_identity_is_idempotent(db_session
     assert reused is False
     assert first.id == second.id
     assert len(repository.list_by_investor(investor.id)) == 1
+
+
+def test_behavior_snapshot_repository_allows_versions_for_one_scope(db_session: Session):
+    investor = Investor(
+        name="Versioned Investor", platform="manual", platform_user_id="versioned-1"
+    )
+    db_session.add(investor)
+    db_session.flush()
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    end = datetime(2026, 9, 7, tzinfo=UTC)
+    base = {
+        "investor_id": investor.id,
+        "as_of": end,
+        "window_start": start,
+        "window_end": end,
+        "attention_asset_count": 0,
+        "attention_occurrence_count": 0,
+        "new_attention_count": 0,
+        "opinion_count": 0,
+        "bullish_count": 0,
+        "bearish_count": 0,
+        "thesis_change_count": 0,
+        "thesis_reinforced_count": 0,
+        "thesis_changed_count": 0,
+        "portfolio_action_count": 0,
+        "position_increased_count": 0,
+        "position_decreased_count": 0,
+        "positive_alignment_count": 0,
+        "negative_alignment_count": 0,
+        "active_analysis_version": "analysis-v1",
+        "input_identity": "a" * 64,
+    }
+    first = InvestorBehaviorSnapshotCreate(**base)
+    second = InvestorBehaviorSnapshotCreate(
+        **{
+            **base,
+            "active_analysis_version": "analysis-v2",
+            "input_identity": "b" * 64,
+        }
+    )
+    repository = InvestorBehaviorSnapshotRepository(db_session)
+
+    repository.create(first)
+    repository.create(second)
+    db_session.commit()
+
+    versions = repository.list_versions_by_scope(
+        investor.id,
+        start,
+        end,
+        BEHAVIOR_SNAPSHOT_POLICY_VERSION,
+    )
+    assert len(versions) == 2

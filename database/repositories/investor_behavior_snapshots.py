@@ -29,12 +29,7 @@ class InvestorBehaviorSnapshotRepository:
     ) -> tuple[InvestorBehaviorSnapshotView, bool]:
         """Insert a snapshot or reuse its database-protected identity."""
 
-        existing = self.get_by_identity(
-            snapshot.investor_id,
-            snapshot.window_start,
-            snapshot.window_end,
-            snapshot.behavior_policy_version,
-        )
+        existing = self.get_by_input_identity(snapshot.input_identity)
         if existing is not None:
             return existing, False
         try:
@@ -43,12 +38,7 @@ class InvestorBehaviorSnapshotRepository:
                 self._session.add(entity)
                 self._session.flush()
         except IntegrityError:
-            existing = self.get_by_identity(
-                snapshot.investor_id,
-                snapshot.window_start,
-                snapshot.window_end,
-                snapshot.behavior_policy_version,
-            )
+            existing = self.get_by_input_identity(snapshot.input_identity)
             if existing is None:
                 raise
             return existing, False
@@ -75,6 +65,10 @@ class InvestorBehaviorSnapshotRepository:
             position_decreased_count=snapshot.position_decreased_count,
             positive_alignment_count=snapshot.positive_alignment_count,
             negative_alignment_count=snapshot.negative_alignment_count,
+            active_analysis_version=snapshot.active_analysis_version,
+            thesis_comparison_version=snapshot.thesis_comparison_version,
+            consistency_policy_version=snapshot.consistency_policy_version,
+            attention_policy_version=snapshot.attention_policy_version,
             behavior_policy_version=snapshot.behavior_policy_version,
             calculated_at=snapshot.calculated_at,
             input_identity=snapshot.input_identity,
@@ -84,6 +78,13 @@ class InvestorBehaviorSnapshotRepository:
         entity = self._session.get(InvestorBehaviorSnapshot, snapshot_id)
         return self._to_view(entity) if entity is not None else None
 
+    def get_by_input_identity(self, input_identity: str) -> InvestorBehaviorSnapshotView | None:
+        statement = select(InvestorBehaviorSnapshot).where(
+            InvestorBehaviorSnapshot.input_identity == input_identity
+        )
+        entity = self._session.scalar(statement)
+        return self._to_view(entity) if entity is not None else None
+
     def get_by_identity(
         self,
         investor_id: UUID,
@@ -91,14 +92,37 @@ class InvestorBehaviorSnapshotRepository:
         window_end: datetime,
         behavior_policy_version: str,
     ) -> InvestorBehaviorSnapshotView | None:
-        statement = select(InvestorBehaviorSnapshot).where(
-            InvestorBehaviorSnapshot.investor_id == investor_id,
-            InvestorBehaviorSnapshot.window_start == self._as_utc(window_start),
-            InvestorBehaviorSnapshot.window_end == self._as_utc(window_end),
-            InvestorBehaviorSnapshot.behavior_policy_version == behavior_policy_version,
+        statement = (
+            select(InvestorBehaviorSnapshot)
+            .where(
+                InvestorBehaviorSnapshot.investor_id == investor_id,
+                InvestorBehaviorSnapshot.window_start == self._as_utc(window_start),
+                InvestorBehaviorSnapshot.window_end == self._as_utc(window_end),
+                InvestorBehaviorSnapshot.behavior_policy_version == behavior_policy_version,
+            )
+            .order_by(InvestorBehaviorSnapshot.input_identity, InvestorBehaviorSnapshot.id)
         )
         entity = self._session.scalar(statement)
         return self._to_view(entity) if entity is not None else None
+
+    def list_versions_by_scope(
+        self,
+        investor_id: UUID,
+        window_start: datetime,
+        window_end: datetime,
+        behavior_policy_version: str,
+    ) -> list[InvestorBehaviorSnapshotView]:
+        statement = (
+            select(InvestorBehaviorSnapshot)
+            .where(
+                InvestorBehaviorSnapshot.investor_id == investor_id,
+                InvestorBehaviorSnapshot.window_start == self._as_utc(window_start),
+                InvestorBehaviorSnapshot.window_end == self._as_utc(window_end),
+                InvestorBehaviorSnapshot.behavior_policy_version == behavior_policy_version,
+            )
+            .order_by(InvestorBehaviorSnapshot.input_identity, InvestorBehaviorSnapshot.id)
+        )
+        return [self._to_view(entity) for entity in self._session.scalars(statement)]
 
     def list_by_investor(self, investor_id: UUID) -> list[InvestorBehaviorSnapshotView]:
         statement = (
@@ -134,6 +158,10 @@ class InvestorBehaviorSnapshotRepository:
             position_decreased_count=entity.position_decreased_count,
             positive_alignment_count=entity.positive_alignment_count,
             negative_alignment_count=entity.negative_alignment_count,
+            active_analysis_version=entity.active_analysis_version,
+            thesis_comparison_version=entity.thesis_comparison_version,
+            consistency_policy_version=entity.consistency_policy_version,
+            attention_policy_version=entity.attention_policy_version,
             behavior_policy_version=entity.behavior_policy_version,
             calculated_at=cls._as_utc(entity.calculated_at),
             input_identity=entity.input_identity,

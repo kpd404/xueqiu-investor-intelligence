@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from contracts.portfolio import PortfolioSnapshotCompleteness
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -51,6 +53,7 @@ class PortfolioSnapshotImportCommand(BaseModel):
     portfolio_name: str = Field(min_length=1, max_length=255)
     investor_id: UUID
     snapshot_time: AwareDatetime
+    completeness: PortfolioSnapshotCompleteness = PortfolioSnapshotCompleteness.FULL
     positions: tuple[PortfolioPositionInput, ...] = ()
 
     @field_validator("source")

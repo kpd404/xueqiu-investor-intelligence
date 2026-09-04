@@ -10,6 +10,7 @@ from contracts import (
     OPINION_ANALYSIS_POLICY_VERSION,
     OPINION_EXTRACTION_PROMPT_VERSION,
     OPINION_EXTRACTION_SCHEMA_VERSION,
+    PRODUCTION_ATTENTION_POLICY_VERSION,
     THESIS_COMPARISON_POLICY_VERSION,
     THESIS_COMPARISON_PROMPT_VERSION,
     THESIS_COMPARISON_SCHEMA_VERSION,
@@ -22,6 +23,12 @@ from contracts import (
 
 class ProductionPolicyConfigurationError(ValueError):
     """Raised when runtime provider settings do not match the approved policy."""
+
+
+def get_production_attention_policy_version() -> str:
+    """Return the explicitly approved AttentionOccurrence policy version."""
+
+    return PRODUCTION_ATTENTION_POLICY_VERSION
 
 
 def get_production_policy(

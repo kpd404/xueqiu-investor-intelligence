@@ -5,7 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import PortfolioSnapshotBatchDTO, PortfolioSnapshotBatchView, PositionSnapshotView
+from contracts import (
+    PortfolioSnapshotBatchDTO,
+    PortfolioSnapshotBatchView,
+    PositionSnapshotView,
+)
 from database.models.portfolio_snapshot import PortfolioSnapshotBatch
 from database.repositories.position_snapshots import PositionSnapshotRepository
 
@@ -22,6 +26,7 @@ class PortfolioSnapshotBatchRepository:
             snapshot_time=batch.snapshot_time,
             source=batch.source,
             external_id=batch.external_id,
+            completeness=batch.completeness,
             created_at=batch.created_at,
         )
         self._session.add(entity)
@@ -59,6 +64,10 @@ class PortfolioSnapshotBatchRepository:
             batch.external_id,
         )
         if existing is not None:
+            if existing.completeness != batch.completeness:
+                raise ValueError(
+                    "snapshot completeness cannot change for an existing batch"
+                ) from None
             return existing, False
         try:
             with self._session.begin_nested():
@@ -67,6 +76,7 @@ class PortfolioSnapshotBatchRepository:
                     snapshot_time=batch.snapshot_time,
                     source=batch.source,
                     external_id=batch.external_id,
+                    completeness=batch.completeness,
                     created_at=batch.created_at,
                 )
                 self._session.add(entity)
@@ -80,8 +90,31 @@ class PortfolioSnapshotBatchRepository:
             )
             if existing is None:
                 raise
+            if existing.completeness != batch.completeness:
+                raise ValueError(
+                    "snapshot completeness cannot change for an existing batch"
+                ) from None
             return existing, False
         return self._to_view(entity), True
+
+    def list_by_portfolio(
+        self,
+        portfolio_id: UUID,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[PortfolioSnapshotBatchView]:
+        statement = select(PortfolioSnapshotBatch).where(
+            PortfolioSnapshotBatch.portfolio_id == portfolio_id
+        )
+        if as_of is not None:
+            statement = statement.where(PortfolioSnapshotBatch.snapshot_time <= self._as_utc(as_of))
+        statement = statement.order_by(
+            PortfolioSnapshotBatch.snapshot_time,
+            PortfolioSnapshotBatch.source,
+            PortfolioSnapshotBatch.external_id,
+            PortfolioSnapshotBatch.id,
+        )
+        return [self._to_view(entity) for entity in self._session.scalars(statement)]
 
     def list_positions(self, snapshot_batch_id: UUID) -> list[PositionSnapshotView]:
         return PositionSnapshotRepository(self._session).list_by_snapshot_batch(snapshot_batch_id)
@@ -94,6 +127,7 @@ class PortfolioSnapshotBatchRepository:
             snapshot_time=cls._as_utc(entity.snapshot_time),
             source=entity.source,
             external_id=entity.external_id,
+            completeness=entity.completeness,
             created_at=cls._as_utc(entity.created_at),
         )
 

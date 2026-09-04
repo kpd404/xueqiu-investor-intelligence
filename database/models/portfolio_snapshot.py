@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from contracts.portfolio import PortfolioSnapshotCompleteness
 from database.base import Base
 from database.models._types import utc_now
 
@@ -36,6 +37,9 @@ class PortfolioSnapshotBatch(Base):
     )
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    completeness: Mapped[PortfolioSnapshotCompleteness] = mapped_column(
+        String(16), nullable=False, default=PortfolioSnapshotCompleteness.FULL
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )

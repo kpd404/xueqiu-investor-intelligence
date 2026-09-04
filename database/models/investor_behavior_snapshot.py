@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
+from contracts.attention import PRODUCTION_ATTENTION_POLICY_VERSION
 from contracts.behavior import BEHAVIOR_SNAPSHOT_POLICY_VERSION
 from database.base import Base
 
@@ -13,13 +14,7 @@ class InvestorBehaviorSnapshot(Base):
 
     __tablename__ = "investor_behavior_snapshots"
     __table_args__ = (
-        UniqueConstraint(
-            "investor_id",
-            "window_start",
-            "window_end",
-            "behavior_policy_version",
-            name="investor_behavior_snapshot_identity",
-        ),
+        UniqueConstraint("input_identity", name="investor_behavior_snapshot_input_identity"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -49,6 +44,12 @@ class InvestorBehaviorSnapshot(Base):
     positive_alignment_count: Mapped[int] = mapped_column(Integer, nullable=False)
     negative_alignment_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    active_analysis_version: Mapped[str] = mapped_column(String(255), nullable=False)
+    thesis_comparison_version: Mapped[str | None] = mapped_column(String(255))
+    consistency_policy_version: Mapped[str | None] = mapped_column(String(64))
+    attention_policy_version: Mapped[str] = mapped_column(
+        String(64), default=PRODUCTION_ATTENTION_POLICY_VERSION, nullable=False
+    )
     behavior_policy_version: Mapped[str] = mapped_column(
         String(64), default=BEHAVIOR_SNAPSHOT_POLICY_VERSION, nullable=False
     )

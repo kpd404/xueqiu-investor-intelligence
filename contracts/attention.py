@@ -13,6 +13,9 @@ from pydantic import (
 )
 
 ATTENTION_POLICY_VERSION = "attention-occurrence-v1"
+# Explicit application-approved policy. Historical callers may override it,
+# but production readers must pass this value rather than discover versions.
+PRODUCTION_ATTENTION_POLICY_VERSION = ATTENTION_POLICY_VERSION
 
 
 class AttentionEvidenceType(StrEnum):

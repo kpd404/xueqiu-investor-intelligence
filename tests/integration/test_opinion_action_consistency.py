@@ -331,3 +331,92 @@ def test_consistency_persistence_is_idempotent(
         repository = InvestorActionConsistencyRepository(session)
         assert len(repository.list_by_investor(investor_id)) == 1
         assert len(repository.list_by_asset(asset_id)) == 1
+
+
+def test_late_opinion_replaces_superseded_consistency_pairing(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    investor_id, asset_id, original_opinion_id, action_id = _seed_case(
+        db_session_factory,
+        direction=OpinionDirection.BULLISH,
+        previous_weight=0.10,
+        current_weight=0.20,
+    )
+    service = _service(db_session_factory)
+    first = service.process(investor_id, asset_id)
+    assert first.artifact_ids
+
+    late_time = PREVIOUS_TIME + timedelta(hours=2)
+    with db_session_factory() as session:
+        event = RawEvent(
+            investor_id=investor_id,
+            event_type=EventType.POST,
+            source="manual",
+            url=f"https://example.test/consistency/late/{uuid4()}",
+            published_time=late_time,
+            content="Late consistency opinion evidence",
+            raw_data={},
+            hash=uuid4().hex + uuid4().hex,
+            collected_time=late_time,
+        )
+        session.add(event)
+        session.flush()
+        analysis = EventAnalysis(
+            event_id=event.id,
+            analysis_version=ACTIVE_SPEC.analysis_version,
+            model_version=ACTIVE_SPEC.model_version,
+            prompt_version=ACTIVE_SPEC.prompt_version,
+            schema_version=ACTIVE_SPEC.schema_version,
+            status=EventAnalysisStatus.SUCCESS,
+            investment_related=True,
+            generated_time=late_time + timedelta(hours=1),
+            calculated_at=late_time + timedelta(hours=1),
+            confidence=0.8,
+            structured_output={"analysis_spec": ACTIVE_SPEC.model_dump(mode="json")},
+            provider_metadata={},
+        )
+        session.add(analysis)
+        session.flush()
+        late_opinion = Opinion(
+            event_id=event.id,
+            analysis_id=analysis.id,
+            investor_id=investor_id,
+            asset_id=asset_id,
+            direction=OpinionDirection.BEARISH,
+            strength=75,
+            confidence=0.85,
+            thesis=["late opinion"],
+            catalysts=[],
+            risks=[],
+            time_horizon=None,
+            generated_time=analysis.generated_time,
+            model_version=ACTIVE_SPEC.model_version,
+        )
+        session.add(late_opinion)
+        session.commit()
+        late_opinion_id = late_opinion.id
+
+    second = service.process(investor_id, asset_id)
+
+    with db_session_factory() as session:
+        repository = InvestorActionConsistencyRepository(session)
+        historical = repository.list_by_investor(investor_id)
+        effective = repository.list_effective_by_investor_asset(
+            investor_id,
+            asset_id,
+            POLICY,
+        )
+        effective_before_late = repository.list_effective_by_investor_asset(
+            investor_id,
+            asset_id,
+            POLICY,
+            as_of=late_time - timedelta(seconds=1),
+        )
+        assert len(historical) == 2
+        assert {artifact.opinion_id for artifact in effective} == {late_opinion_id}
+        # Before the late Opinion's fact time, the future Action is itself
+        # outside the as_of boundary, so no consistency artifact is visible.
+        assert effective_before_late == []
+        assert {artifact.portfolio_action_id for artifact in effective} == {action_id}
+        assert original_opinion_id not in {artifact.opinion_id for artifact in effective}
+        assert second.created_count == 1

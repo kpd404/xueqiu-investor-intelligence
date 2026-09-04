@@ -34,6 +34,7 @@ from contracts.asset_resolution import (
 )
 from contracts.attention import (
     ATTENTION_POLICY_VERSION,
+    PRODUCTION_ATTENTION_POLICY_VERSION,
     AssetMentionAlias,
     AssetMentionCandidate,
     AssetMentionMatch,
@@ -50,6 +51,7 @@ from contracts.behavior import (
     InvestorBehaviorSnapshotCreate,
     InvestorBehaviorSnapshotResult,
     InvestorBehaviorSnapshotView,
+    build_behavior_snapshot_input_identity,
 )
 from contracts.collection import (
     CollectionRequest,
@@ -100,6 +102,7 @@ from contracts.portfolio import (
     PortfolioDTO,
     PortfolioSnapshotBatchDTO,
     PortfolioSnapshotBatchView,
+    PortfolioSnapshotCompleteness,
     PortfolioStatus,
     PortfolioView,
     PositionChangeDetectionResult,
@@ -175,6 +178,7 @@ __all__ = [
     "THESIS_COMPARISON_PROMPT_VERSION",
     "THESIS_COMPARISON_SCHEMA_VERSION",
     "ATTENTION_POLICY_VERSION",
+    "PRODUCTION_ATTENTION_POLICY_VERSION",
     "AnalysisProcessingError",
     "AnalysisSpec",
     "EffectiveAnalysisPolicy",
@@ -205,6 +209,7 @@ __all__ = [
     "InvestorBehaviorSnapshotCreate",
     "InvestorBehaviorSnapshotResult",
     "InvestorBehaviorSnapshotView",
+    "build_behavior_snapshot_input_identity",
     "CONSISTENCY_POLICY_VERSION",
     "ConsistencyType",
     "InvestorActionConsistencyCreate",
@@ -246,6 +251,7 @@ __all__ = [
     "PortfolioDTO",
     "PortfolioSnapshotBatchDTO",
     "PortfolioSnapshotBatchView",
+    "PortfolioSnapshotCompleteness",
     "PortfolioStatus",
     "PortfolioView",
     "PositionSnapshotDTO",

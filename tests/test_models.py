@@ -143,6 +143,7 @@ def test_portfolio_fact_models_have_expected_identity_fields() -> None:
         "snapshot_time",
         "source",
         "external_id",
+        "completeness",
         "created_at",
     } <= {column.name for column in inspect(PortfolioSnapshotBatch).columns}
     assert {
@@ -199,7 +200,16 @@ def test_portfolio_fact_models_have_expected_identity_fields() -> None:
         "behavior_policy_version",
         "calculated_at",
         "input_identity",
+        "active_analysis_version",
+        "thesis_comparison_version",
+        "consistency_policy_version",
+        "attention_policy_version",
     } <= {column.name for column in inspect(InvestorBehaviorSnapshot).columns}
+    unique_constraints = {
+        constraint.name for constraint in InvestorBehaviorSnapshot.__table__.constraints
+    }
+    assert "investor_behavior_snapshot_input_identity" in unique_constraints
+    assert "investor_behavior_snapshot_identity" not in unique_constraints
 
 
 def test_asset_alias_is_scoped_to_asset_and_normalized_identity(db_session: Session) -> None:

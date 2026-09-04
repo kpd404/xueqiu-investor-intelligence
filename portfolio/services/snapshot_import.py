@@ -106,6 +106,7 @@ class PortfolioSnapshotImportService:
                     snapshot_time=command.snapshot_time,
                     source=command.source,
                     external_id=command.external_id,
+                    completeness=command.completeness,
                 )
             )
             snapshot_batch_id = batch.id

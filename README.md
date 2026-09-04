@@ -218,6 +218,30 @@ prediction, recommendation, Signal, or dashboard API. Portfolio Collector,
 advanced Portfolio Intelligence, Attention Momentum, and other downstream
 capabilities remain separate work.
 
+## Effective derived artifacts (Sprint 2E.3-G)
+
+PortfolioAction, InvestorActionConsistency, and InvestorBehaviorSnapshot are
+append-only derived artifacts with explicit effective-selection rules. Late
+SnapshotBatch or Opinion facts can supersede an earlier derived pairing without
+deleting its historical row. Effective downstream queries select only current
+adjacent batch transitions and current active Opinion/action matches.
+
+Behavior snapshots use a SHA-256 input identity containing the active policy
+versions and effective upstream artifact IDs. If late data changes those
+inputs, a new snapshot version is created; an identical input reuses the
+existing version. Snapshot completeness is `FULL` or `UNKNOWN`, and missing
+weights produce `POSITION_CHANGE_UNKNOWN`, never an inferred trade.
+
+## Sprint 2E.3-H closure
+
+Production BehaviorSnapshot reads one explicit Attention policy together with
+the active Opinion, Thesis comparison, and Consistency policies. Its
+`new_attention_count` fingerprint includes the first effective Attention
+identity for each asset represented in the window, so a late pre-window fact
+creates a new snapshot version and recalculates the metric. The 2E
+single-investor intelligence foundation is now correctness-closed; the next
+engineering phase is Cross-Investor Intelligence (Sprint 2F).
+
 Portfolio Fact ingestion now groups imported positions under a deterministic
 `PortfolioSnapshotBatch`. Repeating the same portfolio snapshot reuses both the
 batch and its position facts. Portfolio Collector、完整生产级 PortfolioAction

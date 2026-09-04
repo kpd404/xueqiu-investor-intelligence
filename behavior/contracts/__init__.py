@@ -5,6 +5,7 @@ from contracts.behavior import (
     InvestorBehaviorSnapshotCreate,
     InvestorBehaviorSnapshotResult,
     InvestorBehaviorSnapshotView,
+    build_behavior_snapshot_input_identity,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "InvestorBehaviorSnapshotCreate",
     "InvestorBehaviorSnapshotResult",
     "InvestorBehaviorSnapshotView",
+    "build_behavior_snapshot_input_identity",
 ]

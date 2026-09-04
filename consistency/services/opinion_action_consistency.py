@@ -29,10 +29,12 @@ class OpinionReader(Protocol):
 
 
 class ActionReader(Protocol):
-    def list_by_investor_asset(
+    def list_effective_by_investor_asset(
         self,
         investor_id: UUID,
         asset_id: UUID,
+        *,
+        as_of: datetime | None = None,
     ) -> list[PortfolioActionView]: ...
 
 
@@ -94,14 +96,11 @@ class OpinionActionConsistencyService:
                 opinions = [
                     opinion for opinion in opinions if opinion.published_time <= normalized_as_of
                 ]
-            actions = unit_of_work.portfolio_actions.list_by_investor_asset(
+            actions = unit_of_work.portfolio_actions.list_effective_by_investor_asset(
                 investor_id,
                 asset_id,
+                as_of=normalized_as_of,
             )
-            if normalized_as_of is not None:
-                actions = [
-                    action for action in actions if action.effective_time <= normalized_as_of
-                ]
 
             calculated_at = datetime.now(UTC)
             artifact_ids: list[UUID] = []

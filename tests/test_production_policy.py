@@ -7,6 +7,7 @@ from config import (
     ProductionPolicyConfigurationError,
     Settings,
     get_production_analysis_policy,
+    get_production_attention_policy_version,
 )
 from contracts import (
     OPINION_ANALYSIS_POLICY_VERSION,
@@ -47,6 +48,7 @@ def test_production_policy_is_explicit_and_adapts_to_effective_policy() -> None:
         policy=policy,
     )
     assert command.analysis_spec == policy.active_spec
+    assert get_production_attention_policy_version() == "attention-occurrence-v1"
 
 
 @pytest.mark.parametrize(

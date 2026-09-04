@@ -255,6 +255,66 @@ def test_repost_without_top_level_mention_is_repost_only(
         assert occurrence.opinion_id is None
 
 
+def test_effective_attention_filters_explicit_policy_version(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    published_time = datetime(2026, 8, 5, tzinfo=UTC)
+    with db_session_factory() as session:
+        investor = Investor(name="Investor", platform="manual", platform_user_id="policy")
+        asset = Asset(name="Policy Asset", symbol="POLICY", market="SH")
+        session.add_all([investor, asset])
+        session.flush()
+        events = [
+            RawEvent(
+                investor_id=investor.id,
+                event_type="POST",
+                source="manual",
+                url=f"https://example.test/attention/policy/{index}",
+                published_time=published_time,
+                content="policy fact",
+                raw_data={},
+                hash=uuid4().hex + uuid4().hex,
+                collected_time=published_time,
+            )
+            for index in range(2)
+        ]
+        session.add_all(events)
+        session.flush()
+        session.add_all(
+            [
+                AttentionOccurrence(
+                    investor_id=investor.id,
+                    asset_id=asset.id,
+                    event_id=event.id,
+                    published_time=published_time,
+                    evidence_types=[AttentionEvidenceType.EXPLICIT_MENTION.value],
+                    evidence=[
+                        {
+                            "evidence_type": AttentionEvidenceType.EXPLICIT_MENTION.value,
+                            "matched_by": "TEST",
+                            "reference": None,
+                            "details": {},
+                        }
+                    ],
+                    analysis_id=None,
+                    opinion_id=None,
+                    attention_policy_version=f"attention-occurrence-v{index + 1}",
+                    calculated_at=published_time,
+                )
+                for index, event in enumerate(events)
+            ]
+        )
+        session.commit()
+
+    with db_session_factory() as session:
+        repository = AttentionOccurrenceRepository(session)
+        v1 = repository.list_effective(POLICY, "attention-occurrence-v1")
+        v2 = repository.list_effective(POLICY, "attention-occurrence-v2")
+        assert len(v1) == 1
+        assert len(v2) == 1
+        assert v1[0].attention_policy_version != v2[0].attention_policy_version
+
+
 def test_nested_repost_text_does_not_create_explicit_mention(
     db_session_factory: sessionmaker[Session],
 ) -> None:

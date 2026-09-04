@@ -11,6 +11,7 @@ from contracts import (
     PortfolioActionType,
     PortfolioDTO,
     PortfolioSnapshotBatchDTO,
+    PortfolioSnapshotCompleteness,
     PortfolioSnapshotImportResult,
     PortfolioStatus,
     PositionSnapshotDTO,
@@ -115,6 +116,7 @@ def test_snapshot_batch_and_import_result_are_batch_scoped() -> None:
     assert batch.source == "xueqiu"
     assert batch.external_id == "batch-1"
     assert batch.snapshot_time == batch_time
+    assert batch.completeness is PortfolioSnapshotCompleteness.FULL
     assert result.batch_id == result.snapshot_batch_id
     with pytest.raises(ValidationError):
         result.position_snapshot_ids += (uuid4(),)

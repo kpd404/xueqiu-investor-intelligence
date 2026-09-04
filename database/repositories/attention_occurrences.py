@@ -6,6 +6,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from contracts import (
+    PRODUCTION_ATTENTION_POLICY_VERSION,
     AttentionOccurrenceCreate,
     AttentionOccurrenceView,
     AttentionOccurrenceWriteResult,
@@ -102,6 +103,9 @@ class AttentionOccurrenceRepository:
     def list_effective(
         self,
         policy: EffectiveAnalysisPolicy,
+        attention_policy_version: str = PRODUCTION_ATTENTION_POLICY_VERSION,
+        *,
+        as_of: datetime | None = None,
     ) -> list[AttentionOccurrenceView]:
         """Return occurrences whose interpretation evidence is active.
 
@@ -114,32 +118,7 @@ class AttentionOccurrenceRepository:
             select(AttentionOccurrence)
             .outerjoin(EventAnalysis, AttentionOccurrence.analysis_id == EventAnalysis.id)
             .where(
-                or_(
-                    AttentionOccurrence.analysis_id.is_(None),
-                    and_(
-                        EventAnalysis.analysis_version == policy.active_analysis_version,
-                        EventAnalysis.status.in_(
-                            [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
-                        ),
-                    ),
-                )
-            )
-            .order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
-        )
-        return [self._to_view(entity) for entity in self._session.scalars(statement)]
-
-    def list_effective_by_investor(
-        self,
-        investor_id: UUID,
-        policy: EffectiveAnalysisPolicy,
-    ) -> list[AttentionOccurrenceView]:
-        """Return one investor's active occurrences in published-time order."""
-
-        statement = (
-            select(AttentionOccurrence)
-            .outerjoin(EventAnalysis, AttentionOccurrence.analysis_id == EventAnalysis.id)
-            .where(
-                AttentionOccurrence.investor_id == investor_id,
+                AttentionOccurrence.attention_policy_version == attention_policy_version,
                 or_(
                     AttentionOccurrence.analysis_id.is_(None),
                     and_(
@@ -150,8 +129,42 @@ class AttentionOccurrenceRepository:
                     ),
                 ),
             )
-            .order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
         )
+        if as_of is not None:
+            statement = statement.where(AttentionOccurrence.published_time <= self._as_utc(as_of))
+        statement = statement.order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
+        return [self._to_view(entity) for entity in self._session.scalars(statement)]
+
+    def list_effective_by_investor(
+        self,
+        investor_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+        attention_policy_version: str = PRODUCTION_ATTENTION_POLICY_VERSION,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[AttentionOccurrenceView]:
+        """Return one investor's active occurrences in published-time order."""
+
+        statement = (
+            select(AttentionOccurrence)
+            .outerjoin(EventAnalysis, AttentionOccurrence.analysis_id == EventAnalysis.id)
+            .where(
+                AttentionOccurrence.investor_id == investor_id,
+                AttentionOccurrence.attention_policy_version == attention_policy_version,
+                or_(
+                    AttentionOccurrence.analysis_id.is_(None),
+                    and_(
+                        EventAnalysis.analysis_version == policy.active_analysis_version,
+                        EventAnalysis.status.in_(
+                            [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                        ),
+                    ),
+                ),
+            )
+        )
+        if as_of is not None:
+            statement = statement.where(AttentionOccurrence.published_time <= self._as_utc(as_of))
+        statement = statement.order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
         return [self._to_view(entity) for entity in self._session.scalars(statement)]
 
     @classmethod

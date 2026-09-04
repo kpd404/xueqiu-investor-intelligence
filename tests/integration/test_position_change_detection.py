@@ -9,6 +9,7 @@ from contracts import (
     PortfolioActionType,
     PortfolioDTO,
     PortfolioSnapshotBatchDTO,
+    PortfolioSnapshotCompleteness,
     PortfolioStatus,
     PositionSnapshotDTO,
 )
@@ -31,6 +32,9 @@ def _seed_transition(
     factory: sessionmaker[Session],
     previous: dict[str, float | None],
     current: dict[str, float | None],
+    *,
+    previous_completeness: PortfolioSnapshotCompleteness = PortfolioSnapshotCompleteness.FULL,
+    current_completeness: PortfolioSnapshotCompleteness = PortfolioSnapshotCompleteness.FULL,
 ) -> tuple[UUID, UUID, UUID, dict[str, UUID], dict[str, UUID]]:
     with factory() as session:
         investor = Investor(
@@ -58,6 +62,7 @@ def _seed_transition(
                 snapshot_time=SNAPSHOT_ONE,
                 source="manual",
                 external_id="snapshot-1",
+                completeness=previous_completeness,
             )
         )
         current_batch, _ = batches.get_or_create(
@@ -66,6 +71,7 @@ def _seed_transition(
                 snapshot_time=SNAPSHOT_TWO,
                 source="manual",
                 external_id="snapshot-2",
+                completeness=current_completeness,
             )
         )
         token_to_asset = {"A": asset_a.id, "B": asset_b.id}
@@ -193,7 +199,9 @@ def test_position_removed_has_previous_provenance(
         (0.10, 0.20, PortfolioActionType.POSITION_INCREASED),
         (0.20, 0.10, PortfolioActionType.POSITION_DECREASED),
         (0.10, 0.10, PortfolioActionType.POSITION_UNCHANGED),
-        (None, 0.10, PortfolioActionType.POSITION_UNCHANGED),
+        (None, 0.10, PortfolioActionType.POSITION_CHANGE_UNKNOWN),
+        (0.10, None, PortfolioActionType.POSITION_CHANGE_UNKNOWN),
+        (None, None, PortfolioActionType.POSITION_CHANGE_UNKNOWN),
     ],
 )
 def test_weight_change_classification_uses_only_snapshot_weight(
@@ -290,3 +298,89 @@ def test_detection_is_idempotent_and_repository_can_query_transition(
             action_type=PortfolioActionType.POSITION_ADDED,
         )
         assert added is not None
+
+
+def test_late_snapshot_replaces_superseded_transition_in_effective_timeline(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    (
+        portfolio_id,
+        first_batch_id,
+        last_batch_id,
+        _,
+        current_ids,
+    ) = _seed_transition(
+        db_session_factory,
+        {"A": 0.10},
+        {"A": 0.20},
+    )
+    service = _service(db_session_factory)
+    original = service.detect(first_batch_id, last_batch_id)
+
+    middle_time = datetime(2026, 9, 3, 15, tzinfo=UTC)
+    with db_session_factory() as session:
+        batches = PortfolioSnapshotBatchRepository(session)
+        middle_batch, created = batches.get_or_create(
+            PortfolioSnapshotBatchDTO(
+                portfolio_id=portfolio_id,
+                snapshot_time=middle_time,
+                source="manual",
+                external_id="snapshot-middle",
+            )
+        )
+        assert created is True
+        asset_id = session.get(PositionSnapshot, current_ids["A"]).asset_id
+        PositionSnapshotRepository(session).create(
+            PositionSnapshotDTO(
+                portfolio_id=portfolio_id,
+                snapshot_batch_id=middle_batch.id,
+                asset_id=asset_id,
+                weight=0.15,
+                snapshot_time=middle_time,
+                source_type="manual",
+                source_reference="middle-position",
+            )
+        )
+        session.commit()
+
+    service.detect(first_batch_id, middle_batch.id)
+    service.detect(middle_batch.id, last_batch_id)
+
+    with db_session_factory() as session:
+        repository = PortfolioActionRepository(session)
+        all_actions = repository.list_by_portfolio(portfolio_id)
+        effective = repository.list_effective_by_portfolio(portfolio_id)
+        assert len(all_actions) == 3
+        assert len(effective) == 2
+        assert original.action_ids[0] not in {action.id for action in effective}
+        assert {
+            (action.previous_snapshot_batch_id, action.current_snapshot_batch_id)
+            for action in effective
+        } == {
+            (first_batch_id, middle_batch.id),
+            (middle_batch.id, last_batch_id),
+        }
+        historical_at_middle = repository.list_effective_by_portfolio(
+            portfolio_id,
+            as_of=middle_time,
+        )
+        assert {
+            (action.previous_snapshot_batch_id, action.current_snapshot_batch_id)
+            for action in historical_at_middle
+        } == {(first_batch_id, middle_batch.id)}
+
+
+def test_unknown_snapshot_completeness_does_not_infer_add_or_remove(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    portfolio_id, previous_batch_id, current_batch_id, _, _ = _seed_transition(
+        db_session_factory,
+        {},
+        {"A": 0.10},
+        previous_completeness=PortfolioSnapshotCompleteness.UNKNOWN,
+    )
+
+    _service(db_session_factory).detect(previous_batch_id, current_batch_id)
+
+    action = _actions(db_session_factory, portfolio_id)[0]
+    assert action.action_type is PortfolioActionType.POSITION_CHANGE_UNKNOWN

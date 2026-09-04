@@ -76,7 +76,7 @@ class PortfolioAction(Base):
     )
     # Values are constrained by the provider-neutral PortfolioActionType contract.
     # A string column keeps the non-native PostgreSQL representation migration-stable.
-    action_type: Mapped[PortfolioActionType] = mapped_column(String(19), nullable=False)
+    action_type: Mapped[PortfolioActionType] = mapped_column(String(32), nullable=False)
     effective_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), index=True, nullable=False
     )

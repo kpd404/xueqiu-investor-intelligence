@@ -4,22 +4,22 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from contracts import BEHAVIOR_SNAPSHOT_POLICY_VERSION, InvestorBehaviorSnapshotCreate
+from contracts import (
+    BEHAVIOR_SNAPSHOT_POLICY_VERSION,
+    InvestorBehaviorSnapshotCreate,
+    build_behavior_snapshot_input_identity,
+)
 
 
 def _identity(investor_id, start: datetime, end: datetime, policy: str) -> str:
-    import json
-
-    return json.dumps(
-        {
-            "behavior_policy_version": policy,
-            "investor_id": str(investor_id),
-            "window_end": end.isoformat(),
-            "window_start": start.isoformat(),
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
+    return build_behavior_snapshot_input_identity(
+        investor_id=investor_id,
+        window_start=start,
+        window_end=end,
+        behavior_policy_version=policy,
+        active_analysis_version="legacy:unspecified",
+        thesis_comparison_version=None,
+        consistency_policy_version=None,
     )
 
 
@@ -77,11 +77,77 @@ def test_behavior_snapshot_rejects_reversed_window() -> None:
         _snapshot(window_start=start, window_end=end, as_of=start)
 
 
-def test_behavior_snapshot_rejects_non_canonical_identity() -> None:
-    with pytest.raises(ValidationError, match="input_identity"):
-        _snapshot(input_identity="not-canonical")
+def test_behavior_snapshot_accepts_deterministic_fingerprint() -> None:
+    snapshot = _snapshot(input_identity="a" * 64)
+
+    assert snapshot.input_identity == "a" * 64
 
 
 def test_behavior_snapshot_metrics_cannot_be_negative() -> None:
     with pytest.raises(ValidationError, match="attention_asset_count"):
         _snapshot(attention_asset_count=-1)
+
+
+def test_behavior_input_identity_changes_when_effective_inputs_change() -> None:
+    investor_id = uuid4()
+    start = datetime(2026, 9, 1, tzinfo=UTC)
+    end = datetime(2026, 9, 7, tzinfo=UTC)
+    first_id = uuid4()
+    second_id = uuid4()
+
+    first = build_behavior_snapshot_input_identity(
+        investor_id=investor_id,
+        window_start=start,
+        window_end=end,
+        behavior_policy_version=BEHAVIOR_SNAPSHOT_POLICY_VERSION,
+        active_analysis_version="analysis-v1",
+        thesis_comparison_version="thesis-v1",
+        consistency_policy_version="consistency-v1",
+        opinion_ids=(first_id,),
+    )
+    same_inputs_different_order = build_behavior_snapshot_input_identity(
+        investor_id=investor_id,
+        window_start=start,
+        window_end=end,
+        behavior_policy_version=BEHAVIOR_SNAPSHOT_POLICY_VERSION,
+        active_analysis_version="analysis-v1",
+        thesis_comparison_version="thesis-v1",
+        consistency_policy_version="consistency-v1",
+        opinion_ids=(first_id,),
+    )
+    changed_inputs = build_behavior_snapshot_input_identity(
+        investor_id=investor_id,
+        window_start=start,
+        window_end=end,
+        behavior_policy_version=BEHAVIOR_SNAPSHOT_POLICY_VERSION,
+        active_analysis_version="analysis-v1",
+        thesis_comparison_version="thesis-v1",
+        consistency_policy_version="consistency-v1",
+        opinion_ids=(second_id,),
+    )
+    changed_policy = build_behavior_snapshot_input_identity(
+        investor_id=investor_id,
+        window_start=start,
+        window_end=end,
+        behavior_policy_version=BEHAVIOR_SNAPSHOT_POLICY_VERSION,
+        active_analysis_version="analysis-v2",
+        thesis_comparison_version="thesis-v1",
+        consistency_policy_version="consistency-v1",
+        opinion_ids=(first_id,),
+    )
+    changed_attention_policy = build_behavior_snapshot_input_identity(
+        investor_id=investor_id,
+        window_start=start,
+        window_end=end,
+        behavior_policy_version=BEHAVIOR_SNAPSHOT_POLICY_VERSION,
+        active_analysis_version="analysis-v1",
+        thesis_comparison_version="thesis-v1",
+        consistency_policy_version="consistency-v1",
+        attention_policy_version="attention-occurrence-v2",
+        opinion_ids=(first_id,),
+    )
+
+    assert first == same_inputs_different_order
+    assert first != changed_inputs
+    assert first != changed_policy
+    assert first != changed_attention_policy

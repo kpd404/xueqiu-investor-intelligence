@@ -462,6 +462,35 @@ derived calculation time. Repository and UnitOfWork wiring stay in the
 application/infrastructure layer while the behavior service depends only on
 provider-neutral contracts.
 
+## 6.7 Effective derived artifact selection (Sprint 2E.3-G)
+
+Derived artifacts are preserved as an append-only history and queried through
+deterministic effective selectors:
+
+```text
+late PortfolioSnapshotBatch ─┐
+late active Opinion          ├─→ effective selectors
+policy / fact-time replay    ┘          ↓
+                              BehaviorSnapshot aggregation
+```
+
+PortfolioAction selection uses adjacent SnapshotBatch fact-time pairs. Consistency
+selection requires both an effective action and the latest active Opinion at or
+before that action. Behavior Snapshot consumes only these effective inputs and
+uses an upstream-ID fingerprint for immutable versioning. No selector falls back
+to superseded artifacts or uses calculation time as business time.
+
+## 6.8 Sprint 2E.3-H policy closure
+
+Production Attention policy is explicit and independent from the active Opinion
+analysis policy. BehaviorSnapshot carries all active policy versions in its
+provenance and never discovers or combines Attention policies from database
+rows. Its first-attention metric includes only relevant Investor × Asset
+history up to the requested `window_end`, so late historical evidence changes
+the input fingerprint without allowing future leakage. Snapshot completeness
+only gates absence-based added/removed inference; explicit positions with
+known weights remain comparable in an `UNKNOWN` batch.
+
 ---
 
 # 7. Investor Asset State Layer

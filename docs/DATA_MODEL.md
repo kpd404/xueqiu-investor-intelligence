@@ -474,6 +474,51 @@ behavior timestamps.
 The snapshot is an intelligence aggregation foundation, not Signal, ranking,
 portfolio performance, prediction, or recommendation logic.
 
+## Effective derived artifact semantics (Sprint 2E.3-G)
+
+PortfolioAction rows remain append-only. Effective action queries rebuild the
+PortfolioSnapshotBatch timeline by `snapshot_time` and deterministic identity
+tie-breakers, then retain only adjacent previous/current batch pairs. A late
+batch can therefore supersede an older `A -> C` action with `A -> B` and
+`B -> C`; the old row remains available for audit.
+
+PortfolioSnapshotBatch has `completeness = FULL | UNKNOWN`. Added/removed
+position facts are emitted only for FULL-to-FULL comparisons. An incomplete
+comparison emits `POSITION_CHANGE_UNKNOWN` rather than inferring a missing
+position. Missing weights also emit `POSITION_CHANGE_UNKNOWN`; this is not a
+BUY/SELL inference.
+
+InvestorActionConsistency effective queries require an effective PortfolioAction,
+an active Opinion, the latest Opinion at or before the action fact time, and the
+current consistency policy. Superseded Opinion/action pairings remain
+historical artifacts but are excluded from effective reads.
+
+InvestorBehaviorSnapshot is versioned by a deterministic SHA-256
+`input_identity`. The fingerprint includes the investor/window, behavior and
+active analysis policy versions, comparison policy versions, and sorted
+effective upstream artifact IDs. Its database uniqueness is on
+`input_identity`, so late facts create a new immutable snapshot version rather
+than reusing stale metrics.
+
+## Attention policy and historical dependency closure (Sprint 2E.3-H)
+
+Production BehaviorSnapshot uses the explicit application-approved Attention
+policy version. Effective Attention queries filter that version and still
+retain analysis-free `EXPLICIT_MENTION` / `REPOST` evidence; `OPINION` evidence
+must reference the active Opinion analysis.
+
+`new_attention_count` depends on the first effective Attention for each asset
+represented in the requested window. The Snapshot fingerprint therefore
+includes the complete effective Attention history up to `window_end` for those
+assets, including each first occurrence ID and fact time. A late pre-window
+occurrence can change the count and creates a new immutable Snapshot version;
+an unrelated asset does not affect the fingerprint.
+
+Snapshot completeness `FULL` / `UNKNOWN` only gates inference from absence.
+When both snapshots explicitly contain the same position, known weights remain
+eligible for increase, decrease, or unchanged classification even if either
+batch is `UNKNOWN`.
+
 ## 3.5 InvestorAssetState
 
 ### Purpose

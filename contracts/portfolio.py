@@ -24,6 +24,14 @@ class PortfolioActionType(StrEnum):
     POSITION_INCREASED = "POSITION_INCREASED"
     POSITION_DECREASED = "POSITION_DECREASED"
     POSITION_UNCHANGED = "POSITION_UNCHANGED"
+    POSITION_CHANGE_UNKNOWN = "POSITION_CHANGE_UNKNOWN"
+
+
+class PortfolioSnapshotCompleteness(StrEnum):
+    """How completely a snapshot represents the source portfolio."""
+
+    FULL = "FULL"
+    UNKNOWN = "UNKNOWN"
 
 
 class InvestorActionClaimType(StrEnum):
@@ -84,6 +92,7 @@ class PortfolioSnapshotBatchDTO(BaseModel):
     snapshot_time: AwareDatetime
     source: str = Field(min_length=1, max_length=64)
     external_id: str = Field(min_length=1, max_length=255)
+    completeness: PortfolioSnapshotCompleteness = PortfolioSnapshotCompleteness.FULL
     created_at: AwareDatetime = Field(default_factory=utc_now)
 
     @field_validator("source")
@@ -298,6 +307,7 @@ __all__ = [
     "PortfolioDTO",
     "PortfolioSnapshotBatchDTO",
     "PortfolioSnapshotBatchView",
+    "PortfolioSnapshotCompleteness",
     "PortfolioStatus",
     "PortfolioView",
     "PositionSnapshotDTO",

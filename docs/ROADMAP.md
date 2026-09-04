@@ -136,6 +136,22 @@ effective Thesis Change timeline.
 - Deterministic snapshot identity and idempotent persistence ✅
 - No scoring, ranking, prediction, Signal, or Dashboard ✅
 
+### Sprint 2E.3-G — Effective Derived Artifact & Snapshot Provenance Hardening ✅
+
+- Effective adjacent PortfolioAction timeline ✅
+- Snapshot completeness and unknown weight semantics ✅
+- Effective Opinion × PortfolioAction consistency selection ✅
+- Input-fingerprinted immutable BehaviorSnapshot versions ✅
+- Late-data and recovery isolation ✅
+
+### Sprint 2E.3-H — Behavior Input Dependency & Policy Closure ✅
+
+- Explicit production Attention policy ✅
+- Attention policy isolation in effective queries ✅
+- Historical first-attention dependency fingerprint ✅
+- FULL / UNKNOWN absence-inference closure ✅
+- 2E single-investor foundation correctness closure ✅
+
 ## Current / Next
 
 ### Sprint 2E.1 — Attention Momentum
@@ -160,6 +176,9 @@ thresholds are defined yet.
 
 Thesis Change V0 is available, but useful coverage remains limited by the current number of repeated effective Opinion
 pairs.
+
+Sprint 2E.3-H closes the single-investor Behavior Intelligence foundation.
+The next engineering phase is Sprint 2F Cross-Investor Intelligence.
 
 ## Planned
 
