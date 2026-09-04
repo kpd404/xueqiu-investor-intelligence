@@ -43,6 +43,7 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
         "investor_action_claims",
         "investor_action_consistencies",
         "investor_behavior_snapshots",
+        "cross_investor_asset_snapshots",
         "raw_events",
         "signals",
         "thesis_changes",

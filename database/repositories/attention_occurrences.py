@@ -167,6 +167,38 @@ class AttentionOccurrenceRepository:
         statement = statement.order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
         return [self._to_view(entity) for entity in self._session.scalars(statement)]
 
+    def list_effective_by_asset(
+        self,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+        attention_policy_version: str = PRODUCTION_ATTENTION_POLICY_VERSION,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[AttentionOccurrenceView]:
+        """Return effective occurrences for one Asset in fact-time order."""
+
+        statement = (
+            select(AttentionOccurrence)
+            .outerjoin(EventAnalysis, AttentionOccurrence.analysis_id == EventAnalysis.id)
+            .where(
+                AttentionOccurrence.asset_id == asset_id,
+                AttentionOccurrence.attention_policy_version == attention_policy_version,
+                or_(
+                    AttentionOccurrence.analysis_id.is_(None),
+                    and_(
+                        EventAnalysis.analysis_version == policy.active_analysis_version,
+                        EventAnalysis.status.in_(
+                            [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                        ),
+                    ),
+                ),
+            )
+        )
+        if as_of is not None:
+            statement = statement.where(AttentionOccurrence.published_time <= self._as_utc(as_of))
+        statement = statement.order_by(AttentionOccurrence.published_time, AttentionOccurrence.id)
+        return [self._to_view(entity) for entity in self._session.scalars(statement)]
+
     @classmethod
     def _to_view(cls, entity: AttentionOccurrence) -> AttentionOccurrenceView:
         return AttentionOccurrenceView(

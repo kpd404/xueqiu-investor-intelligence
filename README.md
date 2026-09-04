@@ -1,5 +1,10 @@
 # Xueqiu Investor Intelligence System
 
+Current delivery status includes Sprint 2E.3-G/H correctness closure and
+Sprint 2F.0 Data Reality Check and Sprint 2F.1 Cross-Investor Asset Evidence
+Snapshot Foundation. The latest calibration is data-limited:
+Attention Momentum remains paused pending natural multi-week coverage.
+
 面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening、Sprint 2E.2-B Production Analysis Policy & Projection Provenance、Sprint 2E.2 Thesis Change V0 和 Sprint 2E.3-A–F Portfolio / Behavior foundations。Attention Momentum 当前进入数据校准暂停阶段。
 
 ## Local setup
@@ -192,6 +197,8 @@ historical replay、Attention 和 Asset Intelligence 只消费 active analysis p
 - deterministic Portfolio Position Change Detection V0
 - Opinion × PortfolioAction Consistency V0
 - InvestorBehaviorSnapshot aggregation foundation
+- Sprint 2F.0 Data Reality Check / Intelligence Calibration (read-only audit)
+- CrossInvestorAssetSnapshot evidence aggregation foundation
 
 历史 unresolved analysis 可以在补充可信 Asset / Alias 后重新执行确定性 recovery：
 
@@ -210,8 +217,10 @@ Recovery 不重新调用 LLM。
 active AttentionOccurrence, Opinion, ThesisChange, PortfolioAction, and
 InvestorActionConsistency artifacts. All counters use their source fact times
 (`published_time` or `effective_time`); `calculated_at` records only when the
-snapshot was computed. Snapshot identity is the investor, inclusive window,
-and behavior policy version, so repeated calculation is idempotent.
+snapshot was computed. Snapshot scope is the investor and inclusive window;
+its immutable version identity is a deterministic SHA-256 fingerprint of active
+policies and effective upstream artifact IDs, so identical inputs are reused
+while late facts create a new version.
 
 This is an intelligence aggregation foundation. It is not a score, ranking,
 prediction, recommendation, Signal, or dashboard API. Portfolio Collector,
@@ -242,6 +251,50 @@ creates a new snapshot version and recalculates the metric. The 2E
 single-investor intelligence foundation is now correctness-closed; the next
 engineering phase is Cross-Investor Intelligence (Sprint 2F).
 
+## Sprint 2F.0 data reality check
+
+The read-only calibration audit is available at
+`scripts/audit_intelligence_data.py` and runs with:
+
+```powershell
+python scripts/audit_intelligence_data.py
+```
+
+The latest real PostgreSQL snowball audit (after one bounded Following Feed
+backfill and active-analysis closure) contains 42 Investors, 188 RawEvents,
+364 EventAnalyses, 14 canonical Assets, 22 effective AttentionOccurrences,
+14 effective Opinions, 14 effective ThesisChange artifacts, and no
+Portfolio/Snapshot/Action or Consistency facts. The observed `published_time` span is 7.98 days
+(2026-08-27 through 2026-09-04); the browser-native Feed stopped after one
+batch with `NO_PROGRESS`, so no deeper history was forced.
+
+Five Assets are currently observed across two Investors, while no Asset has
+three or more Investors. This is a calibration-scale overlap foundation, not
+yet a robust production Consensus/Divergence dataset. Portfolio evidence is
+currently absent and therefore auxiliary. Attention Momentum remains paused
+until natural multi-week coverage is available; this audit does not implement
+Momentum, scoring, ranking, or Signal.
+
+Sprint 2F.0.1 closed active Opinion coverage at 188/188 (including explicit
+FAILED results without fallback). The two new evidence-backed Assets were
+resolved deterministically and produced two Opinions; no additional LLM
+analysis was run after recovery.
+
+## Sprint 2F.1 Cross-Investor Asset Evidence Snapshot
+
+`CrossInvestorAssetSnapshot` is an asset-centric, fact-time aggregation of
+effective Attention, Opinion, ThesisChange, PortfolioAction, and Consistency
+artifacts. It preserves the per-Investor contribution IDs, latest window
+Opinion direction, first Attention identity/time, and active policy versions.
+Its deterministic SHA-256 input identity creates an immutable new version when
+late facts or policy inputs change, and reuses the same row for identical input.
+
+This is an evidence foundation only. It does not calculate consensus direction,
+divergence, warming, Momentum, scores, ranking, Signal, or Research Candidate.
+The Sprint 1D `AssetIntelligenceSnapshot` remains a separate Asset-level state
+and basic Consensus foundation; it is not replaced by this cross-Investor
+snapshot.
+
 Portfolio Fact ingestion now groups imported positions under a deterministic
 `PortfolioSnapshotBatch`. Repeating the same portfolio snapshot reuses both the
 batch and its position facts. Portfolio Collector、完整生产级 PortfolioAction
@@ -249,7 +302,7 @@ batch and its position facts. Portfolio Collector、完整生产级 PortfolioAct
 
 Position Change Detection V0 已实现两个 SnapshotBatch 之间的事实差异比较，输出
 `POSITION_ADDED`、`POSITION_REMOVED`、`POSITION_INCREASED`、`POSITION_DECREASED` 或
-`POSITION_UNCHANGED`，不推断 BUY/SELL 意图。完整 Portfolio Collector 与生产编排仍未实现。
+`POSITION_UNCHANGED`、`POSITION_CHANGE_UNKNOWN`，不推断 BUY/SELL 意图。完整 Portfolio Collector 与生产编排仍未实现。
 
 ## Current / Next
 

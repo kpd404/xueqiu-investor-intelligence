@@ -13,6 +13,7 @@ from contracts import (
     OpinionTimelineEntry,
 )
 from database.models.investor_action_consistency import InvestorActionConsistency
+from database.models.portfolio import Portfolio
 from database.repositories.opinions import OpinionRepository
 from database.repositories.portfolio_actions import PortfolioActionRepository
 
@@ -175,26 +176,59 @@ class InvestorActionConsistencyRepository:
         consistency_policy_version: str = CONSISTENCY_POLICY_VERSION,
         as_of: datetime | None = None,
     ) -> list[OpinionActionConsistencyView]:
-        investor_ids = self._session.scalars(
-            select(InvestorActionConsistency.investor_id)
-            .where(
-                InvestorActionConsistency.asset_id == asset_id,
-                InvestorActionConsistency.consistency_policy_version == consistency_policy_version,
-            )
-            .distinct()
+        actions = PortfolioActionRepository(self._session).list_effective_by_asset(
+            asset_id,
+            as_of=as_of,
         )
-        artifacts = [
-            artifact
-            for investor_id in investor_ids
-            for artifact in self.list_effective_by_investor_asset(
-                investor_id,
-                asset_id,
-                policy,
-                consistency_policy_version=consistency_policy_version,
-                as_of=as_of,
+        if not actions:
+            return []
+
+        portfolio_ids = {action.portfolio_id for action in actions}
+        portfolio_investors = dict(
+            self._session.execute(
+                select(Portfolio.id, Portfolio.investor_id).where(Portfolio.id.in_(portfolio_ids))
+            ).all()
+        )
+        opinion_repository = OpinionRepository(self._session)
+        opinions = opinion_repository.list_effective_timeline_by_asset(
+            asset_id,
+            policy,
+            as_of=as_of,
+        )
+        opinions_by_investor: dict[UUID, list[OpinionTimelineEntry]] = {}
+        for opinion in opinions:
+            opinions_by_investor.setdefault(opinion.investor_id, []).append(opinion)
+
+        action_ids = [action.id for action in actions]
+        statement = select(InvestorActionConsistency).where(
+            InvestorActionConsistency.asset_id == asset_id,
+            InvestorActionConsistency.portfolio_action_id.in_(action_ids),
+            InvestorActionConsistency.opinion_analysis_version == policy.active_analysis_version,
+            InvestorActionConsistency.consistency_policy_version == consistency_policy_version,
+        )
+        if as_of is not None:
+            statement = statement.where(
+                InvestorActionConsistency.effective_time <= self._as_utc(as_of)
             )
-        ]
-        return sorted(artifacts, key=lambda value: (value.effective_time, value.id.int))
+        candidates = {
+            (entity.portfolio_action_id, entity.opinion_id): self._to_view(entity)
+            for entity in self._session.scalars(statement)
+        }
+        effective: list[OpinionActionConsistencyView] = []
+        for action in actions:
+            investor_id = portfolio_investors.get(action.portfolio_id)
+            if investor_id is None:
+                continue
+            opinion = self._latest_opinion_before(
+                opinions_by_investor.get(investor_id, []),
+                action.effective_time,
+            )
+            if opinion is None:
+                continue
+            artifact = candidates.get((action.id, opinion.opinion_id))
+            if artifact is not None:
+                effective.append(artifact)
+        return sorted(effective, key=lambda value: (value.effective_time, value.id.int))
 
     def _effective_for_actions(
         self,

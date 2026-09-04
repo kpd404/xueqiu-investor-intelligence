@@ -1,5 +1,8 @@
 from database.repositories.assets import AssetRepository
 from database.repositories.attention_occurrences import AttentionOccurrenceRepository
+from database.repositories.cross_investor_asset_snapshots import (
+    CrossInvestorAssetSnapshotRepository,
+)
 from database.repositories.event_analyses import EventAnalysisRepository
 from database.repositories.investor_action_claims import InvestorActionClaimRepository
 from database.repositories.investor_action_consistency import InvestorActionConsistencyRepository
@@ -18,6 +21,7 @@ from database.repositories.thesis_changes import ThesisChangeRepository
 __all__ = [
     "AssetRepository",
     "AttentionOccurrenceRepository",
+    "CrossInvestorAssetSnapshotRepository",
     "EventAnalysisRepository",
     "InvestorAssetStateChangeRepository",
     "InvestorAssetStateRepository",

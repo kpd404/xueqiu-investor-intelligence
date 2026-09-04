@@ -44,6 +44,25 @@ and evidence foundation, but production calculation is paused for data calibrati
 Current Asset Intelligence remains a basic aggregation / Consensus foundation rather than a complete Intelligence
 Engine.
 
+The delivery status also includes Sprint 2E.3-G/H correctness closure and the
+Sprint 2F.0 Data Reality Check. This audit added no business model or table:
+it records the observed data limits before Cross-Investor Intelligence work.
+Sprint 2F.1 now adds the asset-centric evidence snapshot foundation without
+introducing consensus, scoring, Momentum, or Signal logic.
+
+## 6.9 Sprint 2F.0 data reality check
+
+Sprint 2F.0 adds only a read-only audit script; it introduces no domain model,
+table, policy, score, or Signal. The latest PostgreSQL calibration reports 42
+Investors, 188 RawEvents, 7.98 days of fact-time coverage, 22 effective
+AttentionOccurrences, 14 effective Opinions, 14 effective ThesisChange
+artifacts, and zero Portfolio facts. Active Analysis coverage is closed at
+188/188 with explicit FAILED rows and no fallback. Five Assets are shared by two Investors;
+none are shared by three or more. This is sufficient to discuss the shape of
+Cross-Investor Intelligence, but not to claim production Consensus/Divergence
+robustness or to activate Attention Momentum. Portfolio remains auxiliary until
+real snapshot facts exist.
+
 ---
 
 # 2. High-Level Architecture
@@ -362,7 +381,7 @@ The result is persisted as `PortfolioAction` with both batch IDs and previous /
 current PositionSnapshot provenance. `effective_time` is the current batch's
 `snapshot_time`; `calculated_at` is calculation time. The V0 action taxonomy is
 `POSITION_ADDED`, `POSITION_REMOVED`, `POSITION_INCREASED`,
-`POSITION_DECREASED`, and `POSITION_UNCHANGED`; it makes no trading-intent
+`POSITION_DECREASED`, `POSITION_UNCHANGED`, and `POSITION_CHANGE_UNKNOWN`; it makes no trading-intent
 claim and does not depend on Opinion, ThesisChange, Attention, LLM, or Signal.
 
 # 6. Investment Understanding Layer
@@ -490,6 +509,34 @@ history up to the requested `window_end`, so late historical evidence changes
 the input fingerprint without allowing future leakage. Snapshot completeness
 only gates absence-based added/removed inference; explicit positions with
 known weights remain comparable in an `UNKNOWN` batch.
+
+## 6.10 Cross-Investor Asset Evidence Snapshot (Sprint 2F.1)
+
+Cross-Investor aggregation remains inside the Intelligence layer. It is an
+asset-centric, fact-time window over effective AttentionOccurrence, Opinion,
+ThesisChange, PortfolioAction, and InvestorActionConsistency artifacts:
+
+```text
+effective artifacts + explicit production policies
+                    ↓
+CrossInvestorAssetSnapshotService
+                    ↓
+CrossInvestorAssetSnapshot
+                    └── per-Investor contributions
+```
+
+The snapshot stores artifact counts and structured Investor contributions,
+including source IDs, first Attention identity/time, latest window Opinion, and
+Thesis/Portfolio/Consistency provenance. Its SHA-256 input identity includes
+the Asset, window/as-of, all active policy versions, sorted effective IDs, and
+first-Attention history dependencies. Late facts or policy changes create a
+new immutable version; unchanged inputs are reused.
+
+This is evidence aggregation only. It does not calculate consensus direction,
+divergence, warming, Momentum, scores, rankings, or Signals. The existing
+Sprint 1D `AssetIntelligenceSnapshot` remains compatible and is a separate
+Asset-level state/consensus foundation; it is not replaced by this cross-
+Investor provenance artifact.
 
 ---
 

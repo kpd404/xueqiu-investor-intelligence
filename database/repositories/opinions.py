@@ -193,6 +193,8 @@ class OpinionRepository:
         self,
         asset_id: UUID,
         policy: EffectiveAnalysisPolicy,
+        *,
+        as_of: datetime | None = None,
     ) -> list[OpinionTimelineEntry]:
         statement = (
             select(Opinion, RawEvent.published_time)
@@ -202,7 +204,14 @@ class OpinionRepository:
                 Opinion.asset_id == asset_id,
                 *self._effective_analysis_predicates(policy),
             )
-            .order_by(Opinion.investor_id, RawEvent.published_time, RawEvent.id, Opinion.id)
+        )
+        if as_of is not None:
+            statement = statement.where(RawEvent.published_time <= self._as_utc(as_of))
+        statement = statement.order_by(
+            Opinion.investor_id,
+            RawEvent.published_time,
+            RawEvent.id,
+            Opinion.id,
         )
         return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
 

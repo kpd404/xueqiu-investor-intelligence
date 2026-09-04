@@ -234,6 +234,49 @@ class PortfolioActionRepository:
             if action.asset_id == asset_id
         ]
 
+    def list_effective_by_asset(
+        self,
+        asset_id: UUID,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[PortfolioActionView]:
+        """Return effective resolved-asset actions for one Asset.
+
+        Snapshot adjacency is computed in one batch query and then applied to
+        the asset-filtered actions, avoiding a per-Portfolio lookup loop.
+        """
+
+        normalized_as_of = self._as_utc(as_of) if as_of is not None else None
+        batches_statement = select(PortfolioSnapshotBatch)
+        if normalized_as_of is not None:
+            batches_statement = batches_statement.where(
+                PortfolioSnapshotBatch.snapshot_time <= normalized_as_of
+            )
+        batches_statement = batches_statement.order_by(
+            PortfolioSnapshotBatch.portfolio_id,
+            PortfolioSnapshotBatch.snapshot_time,
+            PortfolioSnapshotBatch.source,
+            PortfolioSnapshotBatch.external_id,
+            PortfolioSnapshotBatch.id,
+        )
+        timelines: dict[UUID, list[PortfolioSnapshotBatch]] = {}
+        for batch in self._session.scalars(batches_statement):
+            timelines.setdefault(batch.portfolio_id, []).append(batch)
+        adjacent = {
+            (previous.id, current.id)
+            for timeline in timelines.values()
+            for previous, current in zip(timeline, timeline[1:], strict=False)
+        }
+        statement = select(PortfolioAction).where(PortfolioAction.asset_id == asset_id)
+        if normalized_as_of is not None:
+            statement = statement.where(PortfolioAction.effective_time <= normalized_as_of)
+        statement = statement.order_by(PortfolioAction.effective_time, PortfolioAction.id)
+        return [
+            self._to_view(entity)
+            for entity in self._session.scalars(statement)
+            if (entity.previous_snapshot_batch_id, entity.current_snapshot_batch_id) in adjacent
+        ]
+
     def list(
         self,
         *,

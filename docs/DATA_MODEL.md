@@ -393,7 +393,7 @@ recording time and is not the fact time.
 `PortfolioAction` is a derived difference between two Snapshot Batches. Its `effective_time` is the current batch's
 `snapshot_time`; `calculated_at` records when the difference was calculated. Sprint 2E.3-D detects only factual
 position changes (`POSITION_ADDED`, `POSITION_REMOVED`, `POSITION_INCREASED`, `POSITION_DECREASED`,
-`POSITION_UNCHANGED`) and does not infer BUY/SELL intent.
+`POSITION_UNCHANGED`, `POSITION_CHANGE_UNKNOWN`) and does not infer BUY/SELL intent.
 
 Each action stores both batch IDs and the available previous/current PositionSnapshot IDs. Resolved positions match
 by `asset_id`; unresolved positions match by `asset_reference_id`; the two identity kinds never match each other.
@@ -456,8 +456,10 @@ not assign a score or investment recommendation.
 
 ### Identity and metrics
 
-The unique identity is
-`investor_id + window_start + window_end + behavior_policy_version`.
+The scope is
+`investor_id + window_start + window_end`, while the immutable version identity
+is the deterministic SHA-256 `input_identity` described below. Multiple input
+versions may therefore coexist for one scope after late data or policy changes.
 The snapshot stores attention asset/occurrence/new-attention counts, active
 Opinion and bullish/bearish counts, ThesisChange/reinforced/changed counts,
 PortfolioAction/increased/decreased counts, and positive/negative consistency
@@ -494,11 +496,11 @@ current consistency policy. Superseded Opinion/action pairings remain
 historical artifacts but are excluded from effective reads.
 
 InvestorBehaviorSnapshot is versioned by a deterministic SHA-256
-`input_identity`. The fingerprint includes the investor/window, behavior and
-active analysis policy versions, comparison policy versions, and sorted
-effective upstream artifact IDs. Its database uniqueness is on
-`input_identity`, so late facts create a new immutable snapshot version rather
-than reusing stale metrics.
+`input_identity`. The fingerprint includes the investor/window, behavior,
+Attention, active Opinion, Thesis comparison, and Consistency policy versions,
+and sorted effective upstream artifact IDs plus relevant first-Attention
+history dependencies. Its database uniqueness is on `input_identity`, so late
+facts create a new immutable snapshot version rather than reusing stale metrics.
 
 ## Attention policy and historical dependency closure (Sprint 2E.3-H)
 
@@ -518,6 +520,50 @@ Snapshot completeness `FULL` / `UNKNOWN` only gates inference from absence.
 When both snapshots explicitly contain the same position, known weights remain
 eligible for increase, decrease, or unchanged classification even if either
 batch is `UNKNOWN`.
+
+## Cross-Investor Asset Evidence Snapshot (Sprint 2F.1)
+
+`CrossInvestorAssetSnapshot` is an asset-centric, fact-time window aggregation
+of effective Attention, Opinion, ThesisChange, PortfolioAction, and
+InvestorActionConsistency artifacts. It is an evidence inventory, not a
+consensus decision, score, ranking, Momentum state, Signal, or recommendation.
+
+### Table and identity
+
+`cross_investor_asset_snapshots`
+
+The snapshot is identified by a deterministic SHA-256 `input_identity` over
+the canonical Asset, `as_of`, window, all active upstream policy versions, and
+sorted effective upstream artifact IDs. First-effective-Attention identities
+and fact times for Investors represented in the window are also included so a
+late historical Attention creates a new immutable version. The database
+uniqueness constraint is on `input_identity`; old versions remain available.
+
+### Metrics and contributions
+
+The row stores Attention occurrence/Investor counts and first-attention counts;
+Opinion counts plus distinct Investor direction counts (the last Opinion per
+Investor in the window); ThesisChange counts and distinct Investor counts;
+PortfolioAction and Consistency counts. Position-change metrics count only
+explicit increased/decreased actions; `POSITION_CHANGE_UNKNOWN` is not counted
+as either direction.
+
+`contributions` is structured JSON with one entry per contributing Investor.
+Each entry preserves Attention occurrence IDs and first identity/time, the
+latest window Opinion ID/direction/time, ThesisChange IDs/types, PortfolioAction
+IDs/types, and Consistency IDs/types. This keeps the aggregate answerable as
+“which Investors produced this evidence?” without reading `Investor.quality_score`
+or introducing weighting.
+
+Only production-effective policy versions are read. Attention uses the active
+Attention policy; Opinion and ThesisChange use the active Opinion and
+comparison policies; PortfolioAction and Consistency use their effective
+fact-time selectors. `published_time` / `effective_time` are behavior times,
+while `calculated_at` is calculation time. This snapshot is distinct from the
+Sprint 1D `AssetIntelligenceSnapshot`: the latter is an Asset-level state/
+consensus foundation, whereas Sprint 2F.1 preserves the cross-Investor
+evidence contributions and window provenance needed before any consensus or
+divergence logic.
 
 ## 3.5 InvestorAssetState
 

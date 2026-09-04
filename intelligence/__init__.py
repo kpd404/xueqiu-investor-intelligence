@@ -4,6 +4,7 @@ from intelligence.policies import aggregate_asset_intelligence, reduce_investor_
 from intelligence.services import (
     AssetIntelligenceService,
     AttentionOccurrenceService,
+    CrossInvestorAssetSnapshotService,
     StateUpdateService,
     ThesisChangeService,
     ThesisEventNotFoundError,
@@ -13,6 +14,7 @@ from intelligence.services import (
 __all__ = [
     "AssetIntelligenceService",
     "AttentionOccurrenceService",
+    "CrossInvestorAssetSnapshotService",
     "StateUpdateService",
     "ThesisChangeService",
     "ThesisEventNotFoundError",

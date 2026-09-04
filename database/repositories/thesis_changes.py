@@ -152,6 +152,26 @@ class ThesisChangeRepository:
             if artifact.investor_id == investor_id
         ]
 
+    def list_effective_by_asset(
+        self,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+        comparison_version: str | None = None,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[ThesisChangeView]:
+        """Return effective ThesisChange artifacts for one Asset."""
+
+        return [
+            artifact
+            for artifact in self.list_effective(
+                policy,
+                comparison_version,
+                as_of=as_of,
+            )
+            if artifact.asset_id == asset_id
+        ]
+
     def _expected_predecessors(
         self,
         policy: EffectiveAnalysisPolicy,

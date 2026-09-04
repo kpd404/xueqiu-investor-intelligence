@@ -152,6 +152,29 @@ effective Thesis Change timeline.
 - FULL / UNKNOWN absence-inference closure ✅
 - 2E single-investor foundation correctness closure ✅
 
+### Sprint 2F.0 — Data Reality Check / Intelligence Calibration ✅
+
+- Read-only PostgreSQL coverage audit ✅
+- Effective Attention / Opinion / Thesis / Portfolio inventory ✅
+- Cross-Investor overlap and sample-bias calibration ✅
+- One bounded browser-native Following Feed backfill (no LLM analysis) ✅
+- No new business models, tables, scores, or Signals ✅
+
+The current calibration dataset has 42 Investors, 188 RawEvents, and 7.98
+days of observed fact time. It has overlap across five Assets (two Investors
+each), but no three-Investor overlap and no Portfolio facts. Sprint 2F.0.1
+closed active Analysis coverage at 188/188 and added only two evidence-backed
+Assets through deterministic recovery. The audit supports 2F design
+discussion only; Momentum still requires natural multi-week data.
+
+### Sprint 2F.1 — Cross-Investor Asset Evidence Snapshot Foundation ✅
+
+- Asset-centric fact-time snapshot ✅
+- Effective Attention / Opinion / Thesis / Portfolio / Consistency aggregation ✅
+- Per-Investor contribution provenance ✅
+- Deterministic SHA-256 input identity and immutable versions ✅
+- No Consensus score, Divergence, Momentum, Ranking, Signal, or LLM ✅
+
 ## Current / Next
 
 ### Sprint 2E.1 — Attention Momentum
@@ -201,6 +224,7 @@ is intentionally not implemented yet:
 
 ### Sprint 2F — Cross-Investor Intelligence
 
+- 2F.0 calibration and 2F.1 evidence foundation are complete; broader data remains limited.
 - Enhanced Consensus / Divergence
 - Multi-investor attention warming
 - Industry Trend

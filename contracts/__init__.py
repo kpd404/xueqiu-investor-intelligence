@@ -70,6 +70,14 @@ from contracts.consistency import (
     OpinionActionConsistencyResult,
     OpinionActionConsistencyView,
 )
+from contracts.cross_investor import (
+    CROSS_INVESTOR_POLICY_VERSION,
+    CrossInvestorAssetSnapshotCreate,
+    CrossInvestorAssetSnapshotResult,
+    CrossInvestorAssetSnapshotView,
+    CrossInvestorContribution,
+    build_cross_investor_input_identity,
+)
 from contracts.enums import (
     AttentionLevel,
     ConsensusDirection,
@@ -206,10 +214,16 @@ __all__ = [
     "AttentionLevel",
     "CollectionRequest",
     "BEHAVIOR_SNAPSHOT_POLICY_VERSION",
+    "CROSS_INVESTOR_POLICY_VERSION",
+    "CrossInvestorAssetSnapshotCreate",
+    "CrossInvestorAssetSnapshotResult",
+    "CrossInvestorAssetSnapshotView",
+    "CrossInvestorContribution",
     "InvestorBehaviorSnapshotCreate",
     "InvestorBehaviorSnapshotResult",
     "InvestorBehaviorSnapshotView",
     "build_behavior_snapshot_input_identity",
+    "build_cross_investor_input_identity",
     "CONSISTENCY_POLICY_VERSION",
     "ConsistencyType",
     "InvestorActionConsistencyCreate",

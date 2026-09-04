@@ -144,6 +144,32 @@ SEED_ASSETS: tuple[AssetSeed, ...] = (
             "content contains 招商轮船(SH601872)"
         ),
     ),
+    AssetSeed(
+        name="金牛化工",
+        market="SH",
+        symbol="600722",
+        aliases=(
+            AliasSeed("金牛化工", "NAME", "SH"),
+            AliasSeed("SH600722", "SYMBOL", "SH"),
+        ),
+        evidence=(
+            "RawEvent event_id=2e3ddcc0-8dc1-4aa0-93fc-708153dcb386; "
+            "content contains 金牛化工(SH600722)"
+        ),
+    ),
+    AssetSeed(
+        name="赤天化",
+        market="SH",
+        symbol="600227",
+        aliases=(
+            AliasSeed("赤天化", "NAME", "SH"),
+            AliasSeed("SH600227", "SYMBOL", "SH"),
+        ),
+        evidence=(
+            "RawEvent event_id=2e3ddcc0-8dc1-4aa0-93fc-708153dcb386; "
+            "content contains 赤天化(SH600227)"
+        ),
+    ),
 )
 
 

@@ -216,6 +216,16 @@ Bullish
 - Position Confirmation
 - Industry Trend
 
+### Cross-Investor Asset Evidence Snapshot (Sprint 2F.1)
+
+`CrossInvestorAssetSnapshot` is an asset-centric, fact-time window
+aggregation of effective Attention, Opinion, ThesisChange, PortfolioAction,
+and Consistency artifacts. It preserves per-Investor contributions and policy
+provenance, but does not calculate consensus direction, scores, rankings,
+Momentum, or Signals. Production queries must select one explicit active
+policy version for each upstream artifact and must exclude superseded or
+inactive interpretations.
+
 ## Layer 6: Signal Engine
 
 职责：生成研究信号。

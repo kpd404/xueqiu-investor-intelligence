@@ -7,6 +7,9 @@ from intelligence.services.attention_occurrence import (
     AttentionOccurrenceService,
     AttentionRawEventNotFoundError,
 )
+from intelligence.services.cross_investor_asset_snapshot import (
+    CrossInvestorAssetSnapshotService,
+)
 from intelligence.services.state_update import OpinionNotFoundError, StateUpdateService
 from intelligence.services.thesis_change import (
     ThesisChangeService,
@@ -17,6 +20,7 @@ from intelligence.services.thesis_change import (
 __all__ = [
     "AssetIntelligenceService",
     "AttentionOccurrenceService",
+    "CrossInvestorAssetSnapshotService",
     "AttentionRawEventNotFoundError",
     "AssetNotFoundError",
     "InvestorNotFoundError",
