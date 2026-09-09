@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -94,12 +95,18 @@ class OpenAICompatibleThesisComparator(ThesisComparator):
     async def compare(self, input_data: ThesisComparisonInput) -> ThesisComparisonResult:
         try:
             client = self._client or self._build_client()
+            request_kwargs: dict[str, Any] = {
+                "model": self._config.model,
+                "instructions": self._prompt_text,
+                "input": self._request_input(input_data),
+                "text": self._structured_output_config(),
+            }
+            if self._config.provider_id == "deepseek":
+                request_kwargs["reasoning"] = {"effort": "none"}
+                request_kwargs["max_output_tokens"] = 4096
             response = await asyncio.to_thread(
                 client.responses.create,
-                model=self._config.model,
-                instructions=self._prompt_text,
-                input=self._request_input(input_data),
-                text=self._structured_output_config(),
+                **request_kwargs,
             )
         except LLMProviderError:
             raise
@@ -215,18 +222,36 @@ class OpenAICompatibleThesisComparator(ThesisComparator):
         }
 
     @staticmethod
-    def _make_strict_schema(node: object) -> None:
+    def _make_strict_schema(
+        node: object,
+        definitions: Mapping[str, object] | None = None,
+    ) -> None:
         if isinstance(node, dict):
+            local_definitions = definitions
+            if local_definitions is None:
+                candidate_definitions = node.get("$defs")
+                if isinstance(candidate_definitions, Mapping):
+                    local_definitions = candidate_definitions
+            reference = node.get("$ref")
+            if (
+                isinstance(reference, str)
+                and reference.startswith("#/$defs/")
+                and local_definitions is not None
+            ):
+                target = local_definitions.get(reference.removeprefix("#/$defs/"))
+                if isinstance(target, dict):
+                    node.clear()
+                    node.update(deepcopy(target))
             node.pop("default", None)
             properties = node.get("properties")
             if isinstance(properties, dict):
                 node["required"] = list(properties)
                 node["additionalProperties"] = False
             for value in node.values():
-                OpenAICompatibleThesisComparator._make_strict_schema(value)
+                OpenAICompatibleThesisComparator._make_strict_schema(value, local_definitions)
         elif isinstance(node, list):
             for value in node:
-                OpenAICompatibleThesisComparator._make_strict_schema(value)
+                OpenAICompatibleThesisComparator._make_strict_schema(value, definitions)
 
     def _validate_response_status(self, response: Any) -> None:
         status = str(self._value(response, "status") or "completed").lower()

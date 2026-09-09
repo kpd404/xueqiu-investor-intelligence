@@ -21,8 +21,8 @@ from contracts import (
 
 def _settings(**updates: object) -> Settings:
     values: dict[str, object] = {
-        "llm_provider_id": "volcengine-ark-coding",
-        "llm_base_url": "https://gateway.example.test/v1",
+        "llm_provider_id": "deepseek",
+        "llm_base_url": "https://api.deepseek.com",
         "llm_api_key": "test-key",
         "llm_model": "deepseek-v4-flash",
         "production_opinion_analysis_version": PRODUCTION_OPINION_ANALYSIS_VERSION,
@@ -36,7 +36,7 @@ def test_production_policy_is_explicit_and_adapts_to_effective_policy() -> None:
 
     assert policy.analysis_type is AnalysisType.OPINION_EXTRACTION
     assert policy.active_analysis_version == PRODUCTION_OPINION_ANALYSIS_VERSION
-    assert policy.active_spec.provider_id == "volcengine-ark-coding"
+    assert policy.active_spec.provider_id == "deepseek"
     assert policy.active_spec.model_version == "deepseek-v4-flash"
     assert policy.active_spec.prompt_version == OPINION_EXTRACTION_PROMPT_VERSION
     assert policy.active_spec.schema_version == OPINION_EXTRACTION_SCHEMA_VERSION

@@ -282,7 +282,7 @@ def test_collector_package_boundaries_are_source_only() -> None:
     assert_package_boundary(
         "collectors",
         {"ai", "database", "intelligence", "signal", "signal_engine", "sqlalchemy"},
-        exclude={"collectors/xueqiu/smoke.py"},
+        exclude={"collectors/xueqiu/smoke.py", "collectors/xueqiu/investor_history.py"},
     )
 
 

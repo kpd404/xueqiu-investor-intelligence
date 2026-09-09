@@ -188,6 +188,24 @@ def test_generic_adapter_uses_standard_responses_json_schema() -> None:
     assert "must-not-be-sent" not in str(call["input"])
 
 
+def test_generic_schema_inlines_local_refs_inside_any_of() -> None:
+    schema = OpenAICompatibleOpinionExtractor._structured_output_config()["format"]["schema"]
+
+    def assert_any_of_branches_have_types(node: object) -> None:
+        if isinstance(node, dict):
+            for branch in node.get("anyOf", []):
+                assert isinstance(branch, dict)
+                assert "type" in branch
+            for value in node.values():
+                assert_any_of_branches_have_types(value)
+        elif isinstance(node, list):
+            for value in node:
+                assert_any_of_branches_have_types(value)
+
+    assert_any_of_branches_have_types(schema)
+    assert "provider_metadata" not in schema["properties"]
+
+
 def test_fake_openai_compatible_http_server_accepts_arbitrary_provider_and_model() -> None:
     requests: list[httpx.Request] = []
 

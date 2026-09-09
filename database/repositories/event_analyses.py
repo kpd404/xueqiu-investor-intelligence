@@ -30,6 +30,7 @@ class EventAnalysisRepository:
 
     def save(self, command: EventAnalysisCreate) -> EventAnalysisView:
         existing = self._get_entity(command.event_id, command.spec.analysis_version)
+        entity = existing
         if existing is None:
             entity = EventAnalysis(
                 event_id=command.event_id,

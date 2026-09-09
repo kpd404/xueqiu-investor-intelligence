@@ -139,6 +139,23 @@ def test_comparator_is_provider_neutral_and_uses_independent_spec() -> None:
     assert call["text"]["format"]["name"] == "ThesisComparisonResult"
 
 
+def test_comparator_schema_inlines_local_refs_inside_any_of() -> None:
+    schema = OpenAICompatibleThesisComparator._structured_output_config()["format"]["schema"]
+
+    def assert_any_of_branches_have_types(node: object) -> None:
+        if isinstance(node, dict):
+            for branch in node.get("anyOf", []):
+                assert isinstance(branch, dict)
+                assert "type" in branch
+            for value in node.values():
+                assert_any_of_branches_have_types(value)
+        elif isinstance(node, list):
+            for value in node:
+                assert_any_of_branches_have_types(value)
+
+    assert_any_of_branches_have_types(schema)
+
+
 def test_comparator_request_contains_only_safe_comparison_fields() -> None:
     responses = _Responses(_Response(_result_payload()))
     comparator = OpenAICompatibleThesisComparator(

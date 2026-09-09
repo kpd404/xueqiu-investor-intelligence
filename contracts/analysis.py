@@ -16,13 +16,13 @@ OPINION_EXTRACTION_SCHEMA_VERSION = "opinion-extraction-result-v2"
 # Explicitly approved production identity. Provider defaults alone do not
 # activate an interpretation policy; the application must match this value.
 PRODUCTION_OPINION_ANALYSIS_VERSION = (
-    "opinion-analysis-v3:09ffeb296d9ff28099f3e746749eda14fc74b708efaf5ff59bcfc3c74fcada79"
+    "opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9"
 )
 THESIS_COMPARISON_PROMPT_VERSION = "thesis-comparison-v1"
 THESIS_COMPARISON_SCHEMA_VERSION = "thesis-comparison-result-v1"
 THESIS_COMPARISON_POLICY_VERSION = "thesis-comparison-policy-v1"
 PRODUCTION_THESIS_COMPARISON_VERSION = (
-    "thesis-comparison-policy-v1:3e914068dfdb8c36d40920788018159c9b62b3c1422b8ae7d77c9957b643596b"
+    "thesis-comparison-policy-v1:b11fa32abad7ca1b339170a41e1f38b18ef72e51e61f26961bd37db2e3982dc4"
 )
 LEGACY_PROVIDER_ID = "legacy"
 

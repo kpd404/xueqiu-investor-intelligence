@@ -10,7 +10,10 @@ from collectors.xueqiu.contracts import (
 from collectors.xueqiu.errors import (
     AuthenticationRequired,
     BrowserDependencyMissing,
+    CdpNotAvailable,
+    ManualVerificationRequired,
     NavigationFailed,
+    NetworkUnavailable,
     NoContent,
     ParseFailed,
     RateLimitedOrBlocked,
@@ -26,9 +29,12 @@ from collectors.xueqiu.parser import (
 __all__ = [
     "AuthenticationRequired",
     "BrowserDependencyMissing",
+    "CdpNotAvailable",
+    "ManualVerificationRequired",
     "FollowingFeedBatch",
     "FeedItemParseFailure",
     "NavigationFailed",
+    "NetworkUnavailable",
     "NoContent",
     "ParseFailed",
     "ParsedXueqiuPost",

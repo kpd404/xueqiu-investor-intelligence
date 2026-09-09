@@ -14,6 +14,8 @@ from contracts import (
     AssetOpinionExtraction,
     CollectionRequest,
     EffectiveAnalysisPolicy,
+    EventAnalysisCreate,
+    EventAnalysisStatus,
     LLMProviderConfig,
     OpinionDirection,
     OpinionExtractionResult,
@@ -243,6 +245,50 @@ def test_same_provider_model_is_idempotent_and_does_not_recall_provider(
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(EventAnalysis)) == 1
         assert session.scalar(select(func.count()).select_from(Opinion)) == 1
+
+
+def test_failed_analysis_can_be_retried_with_the_same_identity(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    _, _, event_id = seed_raw_event(db_session_factory)
+    spec = analysis_spec(CONFIG)
+    failed_at = datetime(2026, 8, 28, 2, 0, tzinfo=UTC)
+    with db_session_factory() as session:
+        EventAnalysisRepository(session).save(
+            EventAnalysisCreate(
+                event_id=event_id,
+                spec=spec,
+                status=EventAnalysisStatus.FAILED,
+                investment_related=False,
+                generated_time=failed_at,
+                calculated_at=failed_at,
+                confidence=0.0,
+                structured_output={"error_code": "TRANSIENT"},
+                error_code="TRANSIENT",
+            )
+        )
+        session.commit()
+
+    responses = FakeResponses(output_payload(CONFIG.model))
+    extractor = OpenAICompatibleOpinionExtractor(
+        CONFIG,
+        client=FakeClient(responses),
+        prompt_text="test prompt",
+    )
+    service = OpinionProcessingService(
+        extractor,
+        lambda: SqlAlchemyOpinionUnitOfWork(db_session_factory),
+    )
+
+    result = asyncio.run(service.process(event_id, analysis_spec=spec))
+
+    assert result.status == OpinionProcessingStatus.PROCESSED
+    assert len(result.opinion_ids) == 1
+    assert len(responses.calls) == 1
+    with db_session_factory() as session:
+        analysis = EventAnalysisRepository(session).get_by_identity(event_id, spec.analysis_version)
+        assert analysis is not None
+        assert analysis.status is EventAnalysisStatus.SUCCESS
 
 
 def test_different_provider_ids_can_coexist_for_one_raw_event(
