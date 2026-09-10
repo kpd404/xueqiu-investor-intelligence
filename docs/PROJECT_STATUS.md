@@ -1,6 +1,6 @@
 # Project Status
 
-Last verified from the repository: 2026-09-05
+Last verified from the repository: 2026-09-10
 
 This document is a repository-derived handoff for a new Codex session. The
 current files, migrations, tests, and PostgreSQL verification are authoritative;
@@ -10,8 +10,8 @@ old chat descriptions are not.
 
 The project is in Phase 2, Cross-Investor Intelligence.
 
-- Latest completed sprint: **Sprint 2F.2 — Opinion Coverage & Directional Alignment V0**.
-- Current checkpoint: 2F.2 is implemented and verified; Consensus/Divergence remains future work.
+- Latest completed sprint: **Sprint 2F.2.7 — Asset Resolution Reality Calibration & Safe Coverage Expansion**.
+- Current checkpoint: 2F.2.7 is implemented and verified; Consensus/Divergence remains future work.
 - Attention Momentum (2E.1) remains paused for temporal data calibration.
 - No Signal, ranking, recommendation, or portfolio-performance engine is implemented.
 
@@ -127,6 +127,54 @@ audit and are not overwritten.
   source snapshot identity; identical inputs reuse and policy changes append.
 - No Consensus, Divergence Score, weighting, Momentum, Signal, or LLM logic
   was introduced.
+
+### Sprint 2F.2.5 — Production Analysis Recovery & Intelligence Recalibration
+
+- The approved production Opinion identity remains
+  opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9.
+- The provider adapter owns one bounded retry policy with request timeout,
+  exponential backoff, and strict structured-output validation. It accepts the
+  existing DeepSeek Responses JSON Schema path without free-text fallback.
+- The first recovery pass processes only active FAILED Analysis rows. Missing
+  active Analysis rows remain explicitly unprocessed for a later, separately
+  authorized backfill.
+- Existing deterministic Opinion projection, Attention, ThesisChange,
+  CrossInvestorAssetSnapshot, and CrossInvestorAssetAlignment services are
+  orchestrated in that order after recovery. No new Intelligence semantics,
+  score, ranking, Momentum, Signal, or migration was added.
+- Data Reality Audit v2 is available at
+  scripts/audit_intelligence_data.py.
+
+### Sprint 2F.2.6 — Full Production Analysis Backfill & Recalibration
+
+- Preflight selected the missing active Analysis set dynamically; it was 569
+  RawEvents at run start.
+- All 569 missing analyses completed successfully under the unchanged
+  production identity. The run issued 617 Opinion-analysis calls, including
+  48 bounded retries, and retained zero FAILED rows.
+- Deterministic Asset recovery processed 249 active resolvable/partially
+  resolved analyses and created one additional Opinion without guessing any
+  Asset identity.
+- Effective Opinion projection, Attention, ThesisChange, CrossInvestor
+  Snapshot v2, and Alignment v1 were rebuilt. No new Intelligence semantic,
+  score, ranking, Momentum, or Signal was introduced.
+- Data Reality Audit v3 reports the complete active Analysis coverage and the
+  remaining Asset/overlap/Portfolio limitations.
+
+### Sprint 2F.2.7 — Asset Resolution Reality Calibration & Safe Coverage Expansion
+
+- Added a deterministic unresolved-reference taxonomy and multi-factor
+  prioritization audit at scripts/audit_asset_resolution.py.
+- Added 17 evidence-backed Assets and 17 market-scoped symbol Aliases. No
+  unsupported-market, fuzzy, name-only, or LLM-driven identity was added.
+- Deterministic recovery created 53 new Opinions without calling the Opinion
+  extractor; existing Attention, ThesisChange, CrossInvestor Snapshot v2, and
+  Alignment v1 artifacts were rebuilt.
+- Data Reality Audit v3 now reflects 31 canonical Assets, 45 Aliases, 75
+  effective Opinions, 111 Attention occurrences, 75 effective ThesisChange
+  artifacts, 13 Assets with 2+ Investors, and one Asset with 3+ Investors.
+- No Consensus, Momentum, Warming, Score, Ranking, Signal, or migration was
+  introduced.
 
 ## Current architecture and responsibilities
 
@@ -274,53 +322,56 @@ The latest read-only audit of the development `snowball` database reports:
 | Entity/metric | Count or value |
 | --- | ---: |
 | Investors | 42 |
-| RawEvents | 188 |
-| EventAnalyses | 364 |
-| Active Opinion Analysis rows | 188 / 188 |
-| Effective Opinions | 14 |
-| Effective AttentionOccurrences | 22 |
-| Effective ThesisChange | 14 |
-| Canonical Assets | 14 |
-| AssetAlias rows | 28 |
+| RawEvents | 618 |
+| EventAnalyses | 982 |
+| Active Opinion Analysis rows | 618 / 618 |
+| Effective Opinions | 75 |
+| Effective AttentionOccurrences | 111 |
+| Effective ThesisChange | 75 |
+| Canonical Assets | 31 |
+| AssetAlias rows | 45 |
 | Portfolio rows | 0 |
 | PortfolioSnapshotBatch rows | 0 |
 | PositionSnapshot rows | 0 |
 | PortfolioAction rows | 0 |
 | InvestorActionConsistency rows | 0 |
-| CrossInvestorAssetSnapshot rows | 10 (5 v1 + 5 v2) |
-| CrossInvestorAssetAlignment rows | 5 |
+| CrossInvestorAssetSnapshot rows | 51 (10 historical + 41 recovery) |
+| CrossInvestorAssetAlignment rows | 26 (5 historical + 21 recovery) |
 
-The observed RawEvent range is 2026-08-27 through 2026-09-04, approximately
-7.98 days. Active Analysis statuses are:
+The observed RawEvent range is 2026-08-11 through 2026-09-09, approximately
+29.54 days. Active Analysis statuses for the approved production identity are:
 
-- `NO_OPINION`: 137
-- `PARTIALLY_RESOLVED`: 41
-- `SUCCESS`: 7
-- `FAILED`: 3
+- `NO_OPINION`: 24
+- `PARTIALLY_RESOLVED`: 23
+- `SUCCESS`: 2
+- `FAILED`: 0
 
-The database has five Assets observed across two Investors, but no Asset with
-three or more Investors. Asset resolution still has 60 unresolved entries over
-50 names. Sample-bias fields are not sufficiently populated to infer investor
-style or industry concentration.
+The full backfill attempted 569 missing active Analysis rows, succeeded on all
+569, issued 617 Opinion-analysis calls including 48 retries, and left zero
+active FAILED rows. Safe Asset expansion then created 53 new Opinions without
+calling the Opinion extractor. The active data has 45 Investor × Asset
+Attention pairs, 13 Assets observed by two Investors, one Asset observed by
+three Investors, and seven mixed-direction attention cases. There are 394
+unresolved asset entries over 210 names (226 distinct name/symbol/market
+references); Portfolio facts remain absent.
 
-2F.2 calibration of the five v2 overlap snapshots:
+The active evidence has 45 Investor × Asset Attention pairs, 13 Assets
+observed by two Investors, and one Asset observed by three Investors.
+Sample-bias fields are not sufficiently populated to infer investor style or
+industry concentration.
 
-| Asset | Attention Investors | Opinion Investors | Opinion Coverage | Directional Alignment |
-| --- | ---: | ---: | --- | --- |
-| 中远海能 | 2 | 0 | NONE | INSUFFICIENT_EVIDENCE |
-| 紫金矿业 | 2 | 1 | PARTIAL | INSUFFICIENT_EVIDENCE |
-| 招商轮船 | 2 | 2 | COMPLETE | ALIGNED_BULLISH |
-| 上证指数 | 2 | 2 | COMPLETE | ALIGNED_BEARISH |
-| 特变电工 | 2 | 2 | COMPLETE | ALIGNED_BEARISH |
+2F.2.7 calibration of the active v2 snapshots:
 
-The real dataset has no mixed-direction overlap. `MIXED_DIRECTION` is
-validated only through synthetic tests.
+The active evidence has 13 Assets observed by two Investors and one Asset
+observed by three Investors. Latest alignment coverage is COMPLETE=10,
+PARTIAL=3, and NONE=2. Directional alignment includes ALIGNED_BULLISH=4,
+ALIGNED_BEARISH=1, and MIXED_DIRECTION=6; no ALIGNED_NEUTRAL case is present.
 
 ## Tests and verification
 
 The current repository verification is:
 
-- `pytest`: **390 passed**, with two non-failing environment warnings (FastAPI
+- `pytest`: **422 passed**, with two non-failing environment warnings (FastAPI
   test-client deprecation and `.pytest_cache` permission).
 - `ruff format --check .`: passed; 243 files formatted.
 - `ruff check .`: passed.
@@ -348,23 +399,27 @@ existing production entry points, outside pytest.
   Intelligence are not implemented; the current database has no Portfolio facts.
 - Opinion × Action expansion, performance analysis, Research Signal/Candidate,
   Scheduler, Dashboard, and Product API remain planned.
-- No unresolved-asset recovery automation or large securities master exists.
+- Bounded unresolved-asset recovery and safe expansion exist, but no large
+  securities master or automated external identity source exists.
 - No additional LLM prompt or model routing work is part of the current state.
 
 ## Known issues and technical debt
 
-1. **Temporal sparsity:** Following Feed history currently covers only about
-   eight days and has date gaps. This is insufficient for robust multi-week
-   Momentum calibration.
-2. **Asset coverage:** 60 unresolved entries remain. Name-only, partial-symbol,
+1. **Temporal sparsity:** Following Feed history currently covers about 29.54
+   days but still has date gaps. This is not yet sufficient for robust
+   multi-week Momentum calibration.
+2. **Asset coverage:** 394 unresolved entries remain across 210 names and 226
+   distinct name/symbol/market references.
+   Name-only, partial-symbol,
    cross-listing, concept, and extraction-error cases must not be guessed.
 3. **Portfolio absence:** Zero Portfolio rows means Portfolio evidence cannot
    yet validate Opinion × Action behavior at real-data scale.
-4. **Sparse overlap:** Five Assets have two-Investor overlap; none have 3+
-   Investors, limiting production-level Consensus/Divergence validation.
-5. **Failed analyses:** Three active Analysis rows are explicitly FAILED. The
-   system correctly does not fall back, but scheduler/retry orchestration is not
-   implemented.
+4. **Sparse overlap:** Thirteen Assets have two-Investor overlap and one has
+   3+ Investors; the sample is still too small for production-level
+   Consensus/Divergence validation.
+5. **Analysis quality:** Active Analysis coverage is complete and active
+   failures are zero, but most outputs remain PARTIALLY_RESOLVED because the
+   Asset Master does not yet cover the extracted references.
 6. **Manual operational checks:** Real PostgreSQL and browser/provider smoke
    checks are command-line/manual workflows; they are not part of pytest.
 7. **Environment-specific database tooling:** This Windows development setup
@@ -384,7 +439,8 @@ The practical blockers are data readiness:
 - Asset Master coverage limits the number of resolved Opinions and Attention
   facts.
 - No real Portfolio snapshot stream exists.
-- No 3+ Investor overlap exists yet.
+- Only one Asset has 3+ Investor overlap; broader overlap is still needed.
+- Asset resolution is the primary current data bottleneck.
 
 These are data/product-readiness limits, not reasons to add fallback inference,
 scores, or provider-specific logic.

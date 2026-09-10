@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     llm_structured_output: str = "json_schema"
     llm_timeout_seconds: float = Field(default=60.0, gt=0)
     llm_max_retries: int = Field(default=2, ge=0, le=10)
+    llm_retry_backoff_seconds: float = Field(default=1.0, ge=0, le=60)
+    llm_retry_invalid_structured_output: bool = True
     production_opinion_analysis_version: str = PRODUCTION_OPINION_ANALYSIS_VERSION
     production_thesis_comparison_version: str = PRODUCTION_THESIS_COMPARISON_VERSION
 

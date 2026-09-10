@@ -48,6 +48,8 @@ class LLMProviderConfig(BaseModel):
     structured_output: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA
     timeout_seconds: float = Field(default=60.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=10)
+    retry_backoff_seconds: float = Field(default=0.0, ge=0, le=60)
+    retry_invalid_structured_output: bool = False
     capabilities: ProviderCapabilities = Field(default_factory=ProviderCapabilities)
 
     @field_validator("provider_id", "model")

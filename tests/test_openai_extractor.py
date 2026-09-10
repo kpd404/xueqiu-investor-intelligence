@@ -324,6 +324,46 @@ def test_missing_usage_does_not_fail_extraction() -> None:
     assert result.provider_metadata["total_tokens"] is None
 
 
+def test_responses_output_may_be_a_structured_json_string() -> None:
+    response = FakeResponse(bullish_payload())
+    response.output = json.dumps(bullish_payload(), ensure_ascii=False)
+    response.output_text = None
+
+    result = asyncio.run(extractor(FakeResponses(response)).extract(raw_event()))
+
+    assert result.opinions[0].direction == OpinionDirection.BULLISH
+
+
+def test_invalid_structured_output_can_be_retried_by_adapter() -> None:
+    class SequencedResponses:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def create(self, **kwargs: object) -> FakeResponse:
+            self.calls += 1
+            if self.calls == 1:
+                return FakeResponse(None, raw_text="{broken")
+            return FakeResponse(bullish_payload())
+
+    responses = SequencedResponses()
+    provider_config = config()
+    provider_config = provider_config.model_copy(
+        update={"retry_invalid_structured_output": True, "retry_backoff_seconds": 0}
+    )
+    provider = OpenAICompatibleOpinionExtractor(
+        provider_config,
+        client=FakeClient(responses),
+        prompt_text="test prompt",
+    )
+
+    result = asyncio.run(provider.extract(raw_event()))
+
+    assert result.opinions
+    assert responses.calls == 2
+    assert provider.request_count == 2
+    assert provider.retry_count == 1
+
+
 @pytest.mark.parametrize(
     ("error_type", "expected_code", "retryable"),
     [

@@ -1,9 +1,11 @@
 # Xueqiu Investor Intelligence System
 
 Current delivery status includes Sprint 2E.3-G/H correctness closure and
-Sprint 2F.0 Data Reality Check and Sprint 2F.1 Cross-Investor Asset Evidence
-Snapshot Foundation, plus Sprint 2F.2 Opinion Coverage & Directional Alignment
-V0. The latest calibration is data-limited:
+Sprint 2F.0 Data Reality Check, Sprint 2F.1 Cross-Investor Asset Evidence
+Snapshot Foundation, Sprint 2F.2 Opinion Coverage & Directional Alignment V0,
+and Sprint 2F.2.6 Full Production Analysis Backfill & Recalibration, plus
+Sprint 2F.2.7 Asset Resolution Reality Calibration & Safe Coverage Expansion.
+The latest calibration remains data-limited:
 Attention Momentum remains paused pending natural multi-week coverage.
 
 面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening、Sprint 2E.2-B Production Analysis Policy & Projection Provenance、Sprint 2E.2 Thesis Change V0 和 Sprint 2E.3-A–F Portfolio / Behavior foundations。Attention Momentum 当前进入数据校准暂停阶段。
@@ -115,6 +117,23 @@ API Key。建议使用本地 `.env` 时确认该文件已被 `.gitignore` 忽略
 Provider 使用版本化 Prompt `opinion-extraction-v5`、`analysis_policy_version = opinion-analysis-v3` 和结构化 `OpinionExtractionResult`，只抽取 RawEvent 文本中的事件级观点；State、
 Consensus、Signal 等仍由确定性领域层计算。Provider 错误会区分认证、限流、超时、不可用和结构化输出失败，
 并标记是否可重试。
+
+## Production analysis recovery
+
+Full backfill 只处理当前 production AnalysisSpec 下缺少 Analysis 的 RawEvent；已经存在的有效 Analysis
+不会重跑，FAILED 会保留真实失败状态。命令支持通过重复执行从 remaining missing set 断点续跑；完成后会按
+既有边界依次重建 Opinion projection、Attention、ThesisChange、CrossInvestorAssetSnapshot 和
+CrossInvestorAssetAlignment：
+
+    python -m scripts.recover_production_analysis --batch-size 8 --analysis-concurrency 4 --attention-concurrency 6
+
+该命令不新增表、不删除旧 Analysis 或 Snapshot，也不实现 Consensus、Momentum、Ranking 或 Signal。
+
+Unresolved Asset taxonomy and the bounded safe expansion manifest can be
+reviewed with:
+
+    python -m scripts.audit_asset_resolution
+    python -m scripts.seed_asset_resolution_expansion --dry-run
 
 Opinion extraction receives a minimal current-author analysis view. For reposts
 and quote chains, text after the first `//@` marker and nested repost content

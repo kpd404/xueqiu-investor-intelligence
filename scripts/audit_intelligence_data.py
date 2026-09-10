@@ -1,4 +1,4 @@
-"""Read-only calibration audit for the Sprint 2F intelligence data foundation."""
+"""Read-only Data Reality Audit v3 for the Sprint 2F intelligence data foundation."""
 
 from __future__ import annotations
 
@@ -393,6 +393,34 @@ def _print_dataset(raw_count: int) -> tuple[datetime | None, datetime | None]:
     return (_utc(earliest) if earliest else None, _utc(latest) if latest else None)
 
 
+def _print_analysis(analysis_version: str, raw_count: int) -> None:
+    _section("Analysis")
+    active_count = int(
+        _fetchone(
+            "SELECT count(*) FROM event_analyses WHERE analysis_version = %s",
+            (analysis_version,),
+        )[0]
+    )
+    status_counts = Counter(
+        str(getattr(row[0], "value", row[0]))
+        for row in _fetchall(
+            "SELECT status FROM event_analyses WHERE analysis_version = %s",
+            (analysis_version,),
+        )
+    )
+    print(f"Active Analysis coverage: {active_count}/{raw_count}")
+    print(
+        f"Active Analysis coverage rate: {active_count / raw_count:.4f}"
+        if raw_count
+        else "Active Analysis coverage rate: n/a"
+    )
+    print(f"SUCCESS: {status_counts.get('SUCCESS', 0)}")
+    print(f"FAILED: {status_counts.get('FAILED', 0)}")
+    print(f"NO_OPINION: {status_counts.get('NO_OPINION', 0)}")
+    print(f"PARTIALLY_RESOLVED: {status_counts.get('PARTIALLY_RESOLVED', 0)}")
+    print(f"Missing active Analysis: {raw_count - active_count}")
+
+
 def _print_resolution(analysis_version: str) -> None:
     _section("Asset resolution")
     rows = _fetchall(
@@ -439,6 +467,14 @@ def _print_resolution(analysis_version: str) -> None:
         (analysis_version,),
     )[0]
     print(f"Active resolved Opinion rows: {resolved_rows}")
+    resolved_assets = _fetchone(
+        "SELECT count(DISTINCT o.asset_id) FROM opinions o "
+        "JOIN event_analyses ea ON ea.id = o.analysis_id "
+        "WHERE ea.analysis_version = %s "
+        "AND ea.status IN ('SUCCESS', 'PARTIALLY_RESOLVED')",
+        (analysis_version,),
+    )[0]
+    print(f"Resolved Assets referenced by effective Opinion: {resolved_assets}")
     print(f"Active unresolved entries: {len(unresolved)}")
     print(
         f"Active unique unresolved names: {len({item[0].strip().lower() for item in unresolved})}"
@@ -501,7 +537,12 @@ def _print_attention(
         evidence_type for row in attention for evidence_type in set(row.evidence_types)
     )
     print(f"AttentionOccurrence total: {len(attention)}")
+    print(f"Distinct active days: {len({row.published_time.date() for row in attention})}")
     print(f"Distinct Investor x Asset pairs: {len(pair_stats)}")
+    print(
+        "Repeated cross-day Investor x Asset pairs: "
+        f"{sum(count >= 2 and days >= 2 for count, days in pair_stats.values())}"
+    )
     print(f"New attention count (first observed pair in dataset): {len(pair_stats)}")
     print(f"Evidence membership: {_counter_text(evidence_membership)}")
     print("Occurrence_count x distinct_active_days distribution:")
@@ -557,7 +598,13 @@ def _print_thesis(
     _section("Effective ThesisChange")
     pair_counts = Counter((row.investor_id, row.asset_id) for row in thesis)
     print(f"Effective ThesisChange total: {len(thesis)}")
-    print(f"Change type distribution: {_counter_text(Counter(row.change_type for row in thesis))}")
+    change_counts = Counter(row.change_type for row in thesis)
+    print(f"Change type distribution: {_counter_text(change_counts)}")
+    for change_type in ("NEW_THESIS", "THESIS_REINFORCED", "THESIS_EXTENDED", "THESIS_CHANGED"):
+        print(f"{change_type}: {change_counts.get(change_type, 0)}")
+    known_types = {"NEW_THESIS", "THESIS_REINFORCED", "THESIS_EXTENDED", "THESIS_CHANGED"}
+    other_count = sum(count for key, count in change_counts.items() if key not in known_types)
+    print(f"Other ThesisChange states: {other_count}")
     print(
         f"Pairs with repeated thesis history: {sum(count >= 2 for count in pair_counts.values())}"
     )
@@ -587,6 +634,7 @@ def _print_overlap(
     latest: dict[tuple[UUID, UUID], OpinionRow] = {}
     for opinion in opinions:
         latest[(opinion.investor_id, opinion.asset_id)] = opinion
+    mixed_direction_assets = 0
     for asset_id, investors in sorted(
         investors_by_asset.items(), key=lambda item: (-len(item[1]), str(item[0]))
     )[:20]:
@@ -597,6 +645,8 @@ def _print_overlap(
             for investor_id in investors
             if (investor_id, asset_id) in latest
         ]
+        if len(set(directions)) > 1:
+            mixed_direction_assets += 1
         total_attention = sum(
             count
             for (investor_id, observed_asset), count in pair_counts.items()
@@ -610,6 +660,43 @@ def _print_overlap(
             f"names={'; '.join(names)} attention={total_attention} "
             f"latest_directions={','.join(sorted(directions)) or 'none'}"
         )
+    print(f"Mixed direction cases: {mixed_direction_assets}")
+
+
+def _print_alignment(analysis_version: str) -> None:
+    _section("Cross-investor alignment")
+    rows = _fetchall(
+        """
+        SELECT s.asset_id, a.opinion_coverage_state, a.directional_alignment_state,
+               s.calculated_at, a.id
+        FROM cross_investor_asset_alignments a
+        JOIN cross_investor_asset_snapshots s ON s.id = a.source_snapshot_id
+        WHERE s.opinion_analysis_version = %s
+          AND s.cross_investor_policy_version = 'cross-investor-asset-snapshot-v2'
+        ORDER BY s.calculated_at DESC, a.id DESC
+        """,
+        (analysis_version,),
+    )
+    latest_by_asset: dict[UUID, tuple[str, str]] = {}
+    for asset_id, coverage, alignment, _calculated_at, _alignment_id in rows:
+        asset_uuid = _uuid(asset_id)
+        if asset_uuid not in latest_by_asset:
+            latest_by_asset[asset_uuid] = (
+                str(getattr(coverage, "value", coverage)),
+                str(getattr(alignment, "value", alignment)),
+            )
+    coverage_counts = Counter(value[0] for value in latest_by_asset.values())
+    alignment_counts = Counter(value[1] for value in latest_by_asset.values())
+    print(f"Aligned current Asset snapshots: {len(latest_by_asset)}")
+    print(f"Opinion coverage distribution: {_counter_text(coverage_counts)}")
+    for state in (
+        "INSUFFICIENT_EVIDENCE",
+        "ALIGNED_BULLISH",
+        "ALIGNED_BEARISH",
+        "ALIGNED_NEUTRAL",
+        "MIXED_DIRECTION",
+    ):
+        print(f"{state}: {alignment_counts.get(state, 0)}")
 
 
 def _print_portfolio(
@@ -632,6 +719,11 @@ def _print_portfolio(
     consistency_total = _fetchone("SELECT count(*) FROM investor_action_consistencies")[0]
     print(f"InvestorActionConsistency rows: {consistency_total}")
     print(f"Effective InvestorActionConsistency count: {len(effective_consistency)}")
+    if not batches and not actions:
+        print(
+            "Portfolio facts: no real Portfolio facts are present; "
+            "Portfolio remains auxiliary evidence."
+        )
     print(
         "Portfolio classification: A. fact stream available"
         if effective and opinions
@@ -754,6 +846,7 @@ def _print_recommendation(
 
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
+    print("# Data Reality Audit v3")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args()
     policy = get_production_analysis_policy()
@@ -764,6 +857,7 @@ def main() -> int:
     _print_environment(analysis_version, attention_policy_version, thesis_version)
     raw_count = int(_fetchone("SELECT count(*) FROM raw_events")[0])
     earliest, latest = _print_dataset(raw_count)
+    _print_analysis(analysis_version, raw_count)
     opinions = _load_opinions(analysis_version)
     attention = _load_attention(analysis_version, attention_policy_version)
     thesis = _load_thesis(opinions, analysis_version, thesis_version)
@@ -776,6 +870,7 @@ def main() -> int:
     _print_opinion(opinions, raw_count, investors, assets)
     _print_thesis(thesis, investors, assets)
     _print_overlap(attention, opinions, investors, assets)
+    _print_alignment(analysis_version)
     effective_actions, effective_consistency_count = _print_portfolio(
         batches,
         actions,

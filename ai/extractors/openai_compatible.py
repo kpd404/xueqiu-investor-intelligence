@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Protocol
@@ -56,6 +56,8 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
             analysis_policy_version=OPINION_ANALYSIS_POLICY_VERSION,
         )
         self._prompt_text = prompt_text if prompt_text is not None else self._load_prompt()
+        self._request_count = 0
+        self._retry_count = 0
 
     @classmethod
     def from_settings(cls, settings: Settings | None = None) -> "OpenAICompatibleOpinionExtractor":
@@ -79,6 +81,8 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
                 structured_output=resolved.llm_structured_output,
                 timeout_seconds=resolved.llm_timeout_seconds,
                 max_retries=resolved.llm_max_retries,
+                retry_backoff_seconds=resolved.llm_retry_backoff_seconds,
+                retry_invalid_structured_output=resolved.llm_retry_invalid_structured_output,
             )
         except LLMProviderError:
             raise
@@ -100,7 +104,33 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
     def analysis_spec(self) -> AnalysisSpec:
         return self._analysis_spec
 
+    @property
+    def request_count(self) -> int:
+        """Number of provider requests issued by this adapter instance."""
+
+        return self._request_count
+
+    @property
+    def retry_count(self) -> int:
+        """Number of extra provider requests issued after retryable failures."""
+
+        return self._retry_count
+
     async def extract(self, event: CurrentAuthorEventView) -> OpinionExtractionResult:
+        for retry_index in range(self._config.max_retries + 1):
+            try:
+                return await self._extract_once(event)
+            except LLMProviderError as exc:
+                if not exc.retryable or retry_index >= self._config.max_retries:
+                    raise
+                self._retry_count += 1
+                delay = self._config.retry_backoff_seconds * (2**retry_index)
+                if delay:
+                    await asyncio.sleep(delay)
+
+        raise AssertionError("unreachable retry loop")
+
+    async def _extract_once(self, event: CurrentAuthorEventView) -> OpinionExtractionResult:
         request_input = self._request_input(event)
         try:
             client = self._client or self._build_client()
@@ -113,6 +143,7 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
             if self._config.provider_id == "deepseek":
                 request_kwargs["reasoning"] = {"effort": "none"}
                 request_kwargs["max_output_tokens"] = 4096
+            self._request_count += 1
             response = await asyncio.to_thread(
                 client.responses.create,
                 **request_kwargs,
@@ -145,7 +176,10 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
                 api_key=self._config.api_key,
                 base_url=self._config.base_url,
                 timeout=self._config.timeout_seconds,
-                max_retries=self._config.max_retries,
+                # Retry ownership lives in this adapter so response parsing
+                # failures and SDK transport failures share one bounded,
+                # exponential-backoff policy.
+                max_retries=0,
             )
         except Exception as exc:
             raise self._map_sdk_error(exc) from exc
@@ -244,7 +278,8 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
                 OpenAICompatibleOpinionExtractor._make_strict_schema(value, definitions)
 
     def _validate_response_status(self, response: Any) -> None:
-        status = str(self._value(response, "status") or "completed").lower()
+        raw_status = self._value(response, "status") or "completed"
+        status = str(getattr(raw_status, "value", raw_status)).lower()
         if status == "completed":
             pass
         elif status == "failed":
@@ -262,7 +297,7 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
             raise LLMProviderError(
                 f"provider response was {status}",
                 code=ProviderErrorCode.INCOMPLETE_RESPONSE,
-                retryable=False,
+                retryable=self._config.retry_invalid_structured_output,
                 provider=self._config.provider_id,
             )
 
@@ -296,10 +331,33 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
 
     @classmethod
     def _output_text(cls, response: Any) -> str | None:
+        raw_output = cls._value(response, "output")
+        if isinstance(raw_output, str):
+            return raw_output
+
+        output_items: Sequence[object]
+        if isinstance(raw_output, Mapping):
+            output_items = (raw_output,)
+        elif isinstance(raw_output, Sequence) and not isinstance(raw_output, (bytes, bytearray)):
+            output_items = raw_output
+        else:
+            output_items = ()
+
         fragments: list[str] = []
-        for item in cls._value(response, "output") or []:
-            for content in cls._value(item, "content") or []:
-                if cls._value(content, "type") == "output_text":
+        for item in output_items:
+            raw_content = cls._value(item, "content")
+            if isinstance(raw_content, Mapping):
+                contents: Sequence[object] = (raw_content,)
+            elif isinstance(raw_content, Sequence) and not isinstance(
+                raw_content, (bytes, bytearray)
+            ):
+                contents = raw_content
+            else:
+                contents = ()
+            for content in contents:
+                content_type = cls._value(content, "type")
+                normalized_type = str(getattr(content_type, "value", content_type))
+                if normalized_type == "output_text":
                     text = cls._value(content, "text")
                     if isinstance(text, str):
                         fragments.append(text)
@@ -330,7 +388,7 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
         return LLMProviderError(
             message,
             code=ProviderErrorCode.INVALID_STRUCTURED_OUTPUT,
-            retryable=False,
+            retryable=self._config.retry_invalid_structured_output,
             provider=self._config.provider_id,
         )
 
@@ -344,7 +402,8 @@ class OpenAICompatibleOpinionExtractor(OpinionExtractor):
         elif "timeout" in name:
             code, retryable = ProviderErrorCode.TIMEOUT, True
         elif "responsevalidation" in name or name in {"validationerror", "pydanticvalidationerror"}:
-            code, retryable = ProviderErrorCode.INVALID_STRUCTURED_OUTPUT, False
+            code = ProviderErrorCode.INVALID_STRUCTURED_OUTPUT
+            retryable = self._config.retry_invalid_structured_output
         elif "badrequest" in name or status_code in {400, 404, 422}:
             code, retryable = ProviderErrorCode.INVALID_REQUEST, False
         elif "connection" in name or (isinstance(status_code, int) and status_code >= 500):

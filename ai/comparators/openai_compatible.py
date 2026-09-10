@@ -46,6 +46,7 @@ class OpenAICompatibleThesisComparator(ThesisComparator):
         self._comparison_spec = comparison_spec or self._local_spec(config)
         self._prompt_text = prompt_text if prompt_text is not None else self._load_prompt()
         self._last_provider_metadata: dict[str, object] = {}
+        self._request_count = 0
 
     @classmethod
     def from_settings(cls, settings: Settings | None = None) -> "OpenAICompatibleThesisComparator":
@@ -92,6 +93,12 @@ class OpenAICompatibleThesisComparator(ThesisComparator):
     def last_provider_metadata(self) -> dict[str, object]:
         return dict(self._last_provider_metadata)
 
+    @property
+    def request_count(self) -> int:
+        """Number of outer provider requests issued by this comparator."""
+
+        return self._request_count
+
     async def compare(self, input_data: ThesisComparisonInput) -> ThesisComparisonResult:
         try:
             client = self._client or self._build_client()
@@ -104,6 +111,7 @@ class OpenAICompatibleThesisComparator(ThesisComparator):
             if self._config.provider_id == "deepseek":
                 request_kwargs["reasoning"] = {"effort": "none"}
                 request_kwargs["max_output_tokens"] = 4096
+            self._request_count += 1
             response = await asyncio.to_thread(
                 client.responses.create,
                 **request_kwargs,

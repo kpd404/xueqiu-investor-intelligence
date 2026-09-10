@@ -1,4 +1,4 @@
-"""Run the bounded production backfill workflow for selected Investors.
+"""Run the bounded failed-analysis recovery workflow for selected Investors.
 
 This is an operational composition of existing production services. It does
 not define a new policy, model, table, or intelligence rule.
@@ -97,7 +97,7 @@ def _load_analysis_candidates(
     return tuple(
         event
         for event in events
-        if (analysis := existing.get(event.id)) is None or analysis.status.value == "FAILED"
+        if (analysis := existing.get(event.id)) is not None and analysis.status.value == "FAILED"
     )
 
 
@@ -167,14 +167,12 @@ async def run(investor_ids: tuple[UUID, ...], *, analysis_concurrency: int = 6) 
             try:
                 state_updater.update(opinion_id)
             except Exception as exc:  # keep the bounded batch progressing
-                analysis_failures.append(
-                    f"{event.id}: state update {type(exc).__name__}: {exc}"
-                )
+                analysis_failures.append(f"{event.id}: state update {type(exc).__name__}: {exc}")
         print(f"analysis {index}/{len(candidates)} event={event.id} status={status}")
 
     recovery_statuses: Counter[str] = Counter()
     recovery_failures: list[str] = []
-    for index, event in enumerate(events, start=1):
+    for index, event in enumerate(candidates, start=1):
         try:
             result = reconciliation.reconcile(
                 event_id=event.id,

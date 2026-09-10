@@ -195,6 +195,36 @@ overlap; mixed direction is validated only by synthetic tests in this sprint.
 True Consensus/Divergence work waits for 3+ Investor overlap, real mixed
 direction, and longer time series.
 
+### Sprint 2F.2.5 — Production Analysis Recovery & Intelligence Recalibration ✅
+
+- Active FAILED Analysis recovery with bounded batches/concurrency ✅
+- DeepSeek/OpenAI-compatible adapter timeout, retry, exponential backoff, and
+  strict structured-output validation hardening ✅
+- Existing Opinion, Attention, ThesisChange, CrossInvestorAssetSnapshot, and
+  CrossInvestorAssetAlignment rebuild orchestration ✅
+- Data Reality Audit v2 coverage/overlap/asset/portfolio reporting ✅
+- No production identity, Opinion contract, RawEvent, historical Snapshot, or
+  new Intelligence feature changes ✅
+
+### Sprint 2F.2.6 — Full Production Analysis Backfill & Recalibration ✅
+
+- Dynamically selected and processed all missing active Analysis rows ✅
+- Preserved valid analyses and real FAILED semantics with bounded resume-safe
+  batches ✅
+- Rebuilt existing Asset, Opinion, Attention, ThesisChange, Snapshot v2, and
+  Alignment v1 artifacts ✅
+- Added Data Reality Audit v3 calibration metrics ✅
+- No Consensus, Momentum, Warming, Score, Ranking, or Signal implementation ✅
+
+### Sprint 2F.2.7 — Asset Resolution Reality Calibration & Safe Coverage Expansion ✅
+
+- Deterministic unresolved taxonomy and multi-factor prioritization ✅
+- 17 evidence-backed Assets and 17 market-scoped symbol Aliases ✅
+- Deterministic Opinion/Attention/Thesis/CrossInvestor recovery without Opinion
+  LLM reprocessing ✅
+- Real 3+ Investor overlap and MIXED_DIRECTION calibration surfaced ✅
+- No Consensus, Momentum, Warming, Score, Ranking, or Signal implementation ✅
+
 ## Current / Next
 
 ### Sprint 2E.1 — Attention Momentum
