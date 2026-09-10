@@ -10,6 +10,7 @@ from database.models import (
     Asset,
     AssetAlias,
     CrossInvestorAssetAlignment,
+    CrossInvestorConsensusEvidence,
     EventAnalysis,
     Investor,
     InvestorActionClaim,
@@ -46,6 +47,7 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
         "investor_behavior_snapshots",
         "cross_investor_asset_snapshots",
         "cross_investor_asset_alignments",
+        "cross_investor_consensus_evidences",
         "raw_events",
         "signals",
         "thesis_changes",
@@ -203,6 +205,24 @@ def test_portfolio_fact_models_have_expected_identity_fields() -> None:
         "calculated_at",
         "created_at",
     } <= {column.name for column in inspect(CrossInvestorAssetAlignment).columns}
+    assert {
+        "asset_id",
+        "source_snapshot_id",
+        "source_alignment_id",
+        "attention_investor_count",
+        "opinion_investor_count",
+        "consensus_state",
+        "contributing_investor_ids",
+        "latest_opinions",
+        "consensus_policy_version",
+        "input_identity",
+        "calculated_at",
+        "created_at",
+    } <= {column.name for column in inspect(CrossInvestorConsensusEvidence).columns}
+    consensus_constraints = {
+        constraint.name for constraint in CrossInvestorConsensusEvidence.__table__.constraints
+    }
+    assert "cross_investor_consensus_evidence_input_identity" in consensus_constraints
     alignment_constraints = {
         constraint.name for constraint in CrossInvestorAssetAlignment.__table__.constraints
     }

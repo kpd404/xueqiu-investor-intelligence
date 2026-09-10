@@ -3,6 +3,7 @@ from database.models.asset_alias import AssetAlias
 from database.models.attention_occurrence import AttentionOccurrence
 from database.models.cross_investor_asset_alignment import CrossInvestorAssetAlignment
 from database.models.cross_investor_asset_snapshot import CrossInvestorAssetSnapshot
+from database.models.cross_investor_consensus_evidence import CrossInvestorConsensusEvidence
 from database.models.event_analysis import EventAnalysis
 from database.models.investor import Investor
 from database.models.investor_action_claim import InvestorActionClaim
@@ -24,6 +25,7 @@ __all__ = [
     "AssetAlias",
     "AttentionOccurrence",
     "CrossInvestorAssetAlignment",
+    "CrossInvestorConsensusEvidence",
     "CrossInvestorAssetSnapshot",
     "EventAnalysis",
     "Investor",

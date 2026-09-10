@@ -5,6 +5,7 @@ Sprint 2F.0 Data Reality Check, Sprint 2F.1 Cross-Investor Asset Evidence
 Snapshot Foundation, Sprint 2F.2 Opinion Coverage & Directional Alignment V0,
 and Sprint 2F.2.6 Full Production Analysis Backfill & Recalibration, plus
 Sprint 2F.2.7 Asset Resolution Reality Calibration & Safe Coverage Expansion.
+Sprint 2F.3 Cross-Investor Consensus / Divergence Evidence V0 is also complete.
 The latest calibration remains data-limited:
 Attention Momentum remains paused pending natural multi-week coverage.
 
@@ -220,6 +221,7 @@ historical replay、Attention 和 Asset Intelligence 只消费 active analysis p
 - Sprint 2F.0 Data Reality Check / Intelligence Calibration (read-only audit)
 - CrossInvestorAssetSnapshot evidence aggregation foundation
 - CrossInvestorAssetAlignment deterministic Opinion Coverage / Directional Alignment V0
+- CrossInvestorConsensusEvidence deterministic Consensus / Divergence evidence V0
 
 历史 unresolved analysis 可以在补充可信 Asset / Alias 后重新执行确定性 recovery：
 
@@ -355,6 +357,41 @@ artifact; a new source snapshot or policy appends a new artifact.
 Directional Alignment != Consensus. This sprint implements no Consensus,
 Divergence Score, weighting, ranking, Momentum, Signal, or Research Candidate.
 
+## Sprint 2F.3 Consensus / Divergence Evidence V0
+
+CrossInvestorConsensusEvidence is an immutable, policy-versioned evidence
+artifact derived from one Snapshot v2 and its Alignment v1. It uses one latest
+Opinion direction per Investor and requires at least three Opinion Investors
+for an eligible classification. Lower coverage remains
+INSUFFICIENT_EVIDENCE while preserving the Attention/Opinion coverage.
+
+The original `cross-investor-consensus-evidence-v1` policy treats every
+combination of multiple direction sides as `DIVERGENT`. V1 artifacts remain
+immutable historical evidence and are never overwritten.
+
+## Sprint 2F.3.2 Consensus Evidence Semantic Hardening
+
+The active policy is
+`cross-investor-consensus-evidence-v2`. It still uses exactly one
+`latest_window_opinion_direction` per Investor and preserves the same
+provenance, counts, coverage, and source Snapshot/Alignment identity.
+
+V2 reserves `DIVERGENT` for a direct bullish-versus-bearish conflict.
+`BULLISH + NEUTRAL` and `BEARISH + NEUTRAL` are classified as
+`MIXED_WITH_NEUTRAL`; Neutral is not an opposing direction. `MIXED_DIRECTION`
+from Sprint 2F.2 remains the broader Alignment state meaning that multiple
+direction sides are present.
+
+The real calibration has one eligible Asset:
+`招商轮船 (SH:601872)`, with latest directions
+`BULLISH / NEUTRAL / NEUTRAL`, now classified as
+`MIXED_WITH_NEUTRAL`. There is no real v2 Consensus and no real v2
+`DIVERGENT` case. V1 and V2 artifacts coexist immutably through the policy
+version in their input identity.
+
+This boundary does not implement Consensus scores, Investor weighting,
+Ranking, Momentum, Warming, Signal, or Research Candidate.
+
 ## Current / Next
 
 ### Sprint 2E.2 — Thesis Change V0
@@ -406,7 +443,7 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 - Portfolio Collector
 - Portfolio position-change production orchestration
 - Portfolio Intelligence / Performance Analysis
-- enhanced Consensus / Divergence
+- broader Consensus / Divergence semantics
 - Multi-investor warming
 - Industry / Theme Trend
 - Research Signal / Research Candidate

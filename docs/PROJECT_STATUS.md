@@ -10,8 +10,8 @@ old chat descriptions are not.
 
 The project is in Phase 2, Cross-Investor Intelligence.
 
-- Latest completed sprint: **Sprint 2F.2.7 — Asset Resolution Reality Calibration & Safe Coverage Expansion**.
-- Current checkpoint: 2F.2.7 is implemented and verified; Consensus/Divergence remains future work.
+- Latest completed sprint: **Sprint 2F.3.2 — Consensus Evidence Semantic Hardening**.
+- Current checkpoint: 2F.3.2 is implemented and verified; v2 calibration is data-limited but now semantically separates Neutral mixes from direct divergence.
 - Attention Momentum (2E.1) remains paused for temporal data calibration.
 - No Signal, ranking, recommendation, or portfolio-performance engine is implemented.
 
@@ -176,6 +176,36 @@ audit and are not overwritten.
 - No Consensus, Momentum, Warming, Score, Ranking, Signal, or migration was
   introduced.
 
+### Sprint 2F.3 — Cross-Investor Consensus / Divergence Evidence V0
+
+- Added immutable, idempotent CrossInvestorConsensusEvidence derived from one
+  Snapshot v2 and its Alignment v1.
+- Eligibility is explicitly policy-versioned at three Opinion Investors.
+  Each Investor contributes only one latest window Opinion direction.
+- Source Asset, Snapshot, Alignment, contribution counts, membership, coverage,
+  and direction-count integrity are validated before persistence.
+- Real calibration processed 14 current overlap Snapshots, all
+  INSUFFICIENT_EVIDENCE, with zero eligible three-Opinion-Investor cases and
+  no Consensus/Divergent state. The database retains 15 immutable evidence
+  rows including one historical source.
+- No score, weighting, ranking, Momentum, Warming, Signal, or Research
+  Candidate logic was added.
+
+### Sprint 2F.3.2 — Consensus Evidence Semantic Hardening
+
+- Added active policy `cross-investor-consensus-evidence-v2` while preserving
+  all `cross-investor-consensus-evidence-v1` artifacts.
+- V1 retains its historical broad `DIVERGENT` rule; v2 reserves `DIVERGENT`
+  for direct bullish/bearish conflict.
+- V2 adds `MIXED_WITH_NEUTRAL` for bullish/neutral or bearish/neutral mixes
+  without the opposite directional side.
+- Strong bullish/bearish directions still map to bullish/bearish, and only the
+  latest window Opinion per Investor contributes one direction.
+- Real recalibration classifies `招商轮船 (SH:601872)` with
+  `BULLISH / NEUTRAL / NEUTRAL` as `MIXED_WITH_NEUTRAL`.
+- No LLM, score, weighting, ranking, Momentum, Warming, Signal, or Research
+  Candidate logic was added.
+
 ## Current architecture and responsibilities
 
 The high-level dependency flow is:
@@ -306,14 +336,16 @@ The latest migration chain is:
 | `20260904_0015` | Explicit Attention policy provenance |
 | `20260904_0016` | CrossInvestorAssetSnapshot |
 | `20260905_0017` | CrossInvestorAssetAlignment |
+| `20260910_0018` | CrossInvestor Consensus/Divergence Evidence |
 
 Real PostgreSQL verification currently reports:
 
-- Alembic revision: `20260905_0017 (head)`.
+- Alembic revision: `20260910_0018 (head)`.
 - `alembic check`: no new upgrade operations.
 - Tables `cross_investor_asset_snapshots` and
   `cross_investor_asset_alignments` exist.
-- Five v2 overlap snapshots have corresponding immutable alignment artifacts.
+- Fourteen current v2 overlap snapshots have corresponding immutable alignment
+  artifacts.
 
 ## Current real PostgreSQL data snapshot
 
@@ -322,12 +354,12 @@ The latest read-only audit of the development `snowball` database reports:
 | Entity/metric | Count or value |
 | --- | ---: |
 | Investors | 42 |
-| RawEvents | 618 |
-| EventAnalyses | 982 |
-| Active Opinion Analysis rows | 618 / 618 |
-| Effective Opinions | 75 |
-| Effective AttentionOccurrences | 111 |
-| Effective ThesisChange | 75 |
+| RawEvents | 1173 |
+| EventAnalyses | 1537 |
+| Active Opinion Analysis rows | 1173 / 1173 |
+| Effective Opinions | 76 |
+| Effective AttentionOccurrences | 122 |
+| Effective ThesisChange | 76 |
 | Canonical Assets | 31 |
 | AssetAlias rows | 45 |
 | Portfolio rows | 0 |
@@ -335,50 +367,58 @@ The latest read-only audit of the development `snowball` database reports:
 | PositionSnapshot rows | 0 |
 | PortfolioAction rows | 0 |
 | InvestorActionConsistency rows | 0 |
-| CrossInvestorAssetSnapshot rows | 51 (10 historical + 41 recovery) |
-| CrossInvestorAssetAlignment rows | 26 (5 historical + 21 recovery) |
+| CrossInvestorAssetSnapshot rows | 81 (51 prior + 30 recalculated) |
+| CrossInvestorAssetAlignment rows | 40 (26 prior + 14 recalculated) |
+| CrossInvestorConsensusEvidence rows | 43 (29 v1 + 14 v2) |
 
-The observed RawEvent range is 2026-08-11 through 2026-09-09, approximately
-29.54 days. Active Analysis statuses for the approved production identity are:
+The observed RawEvent range is 2026-08-11 through 2026-09-10, approximately
+30.64 days. Active Analysis statuses for the approved production identity are:
 
-- `NO_OPINION`: 24
-- `PARTIALLY_RESOLVED`: 23
-- `SUCCESS`: 2
+- `NO_OPINION`: 808
+- `PARTIALLY_RESOLVED`: 317
+- `SUCCESS`: 48
 - `FAILED`: 0
 
-The full backfill attempted 569 missing active Analysis rows, succeeded on all
-569, issued 617 Opinion-analysis calls including 48 retries, and left zero
-active FAILED rows. Safe Asset expansion then created 53 new Opinions without
-calling the Opinion extractor. The active data has 45 Investor × Asset
-Attention pairs, 13 Assets observed by two Investors, one Asset observed by
-three Investors, and seven mixed-direction attention cases. There are 394
-unresolved asset entries over 210 names (226 distinct name/symbol/market
-references); Portfolio facts remain absent.
+The 2F.3.1 targeted expansion added 555 RawEvents for one selected Investor;
+all 555 active Analyses succeeded with 610 Opinion-analysis calls including
+55 bounded retries. The active data has 47 Investor × Asset Attention pairs,
+11 Assets observed by two Investors, three Assets observed by three or more
+Investors, and one Asset observed by three or more Opinion Investors. There
+are 541 unresolved asset entries over 278 names; Portfolio facts remain
+absent.
 
-The active evidence has 45 Investor × Asset Attention pairs, 13 Assets
-observed by two Investors, and one Asset observed by three Investors.
+The active evidence has 14 Assets observed by two or more Attention Investors,
+three Assets observed by three or more Attention Investors, 11 Assets
+observed by two or more Opinion Investors, and one Asset observed by three
+Opinion Investors.
 Sample-bias fields are not sufficiently populated to infer investor style or
 industry concentration.
 
-2F.2.7 calibration of the active v2 snapshots:
+2F.3.2 calibration of the active Snapshot v2 / Alignment v1 inputs:
 
-The active evidence has 13 Assets observed by two Investors and one Asset
-observed by three Investors. Latest alignment coverage is COMPLETE=10,
-PARTIAL=3, and NONE=2. Directional alignment includes ALIGNED_BULLISH=4,
-ALIGNED_BEARISH=1, and MIXED_DIRECTION=6; no ALIGNED_NEUTRAL case is present.
+Latest alignment coverage is COMPLETE=10, PARTIAL=3, and NONE=2.
+Directional alignment includes ALIGNED_BULLISH=4, ALIGNED_BEARISH=1, and
+MIXED_DIRECTION=6; no ALIGNED_NEUTRAL case is present. Consensus evidence
+contains 29 immutable v1 artifacts and 14 immutable v2 artifacts for the same
+14 current overlap sources. V2 states are INSUFFICIENT_EVIDENCE=13 and
+MIXED_WITH_NEUTRAL=1; there is no current v2 Consensus or DIVERGENT case.
+The one eligible Asset is 招商轮船 (SH:601872), whose latest directions are
+BULLISH / NEUTRAL / NEUTRAL. Its v1 historical artifact remains DIVERGENT;
+its v2 artifact is MIXED_WITH_NEUTRAL.
 
 ## Tests and verification
 
 The current repository verification is:
 
-- `pytest`: **422 passed**, with two non-failing environment warnings (FastAPI
+- `pytest`: **450 passed**, with two non-failing environment warnings (FastAPI
   test-client deprecation and `.pytest_cache` permission).
-- `ruff format --check .`: passed; 243 files formatted.
+- `ruff format --check .`: passed; 263 files formatted.
 - `ruff check .`: passed.
-- Alembic current/check against real PostgreSQL: `20260905_0017 (head)`, no drift.
+- Alembic current/check against real PostgreSQL: `20260910_0018 (head)`, no drift.
 - CrossInvestor evidence tests are in
-  `tests/integration/test_cross_investor_asset_snapshot.py`; Coverage/
-  Alignment A-K tests and Repository provenance tests are in
+  `tests/integration/test_cross_investor_asset_snapshot.py` and
+  `tests/test_cross_investor_consensus_evidence.py`; Coverage/Alignment A-K
+  tests and Repository provenance tests are in
   `tests/integration/test_cross_investor_asset_alignment.py`; model metadata
   coverage is updated in `tests/test_models.py`.
 
@@ -390,8 +430,11 @@ existing production entry points, outside pytest.
 
 - Attention Momentum (`NEW`, `RISING`, `STABLE`, `COOLING`, `DORMANT`) remains
   paused; no thresholds or score are implemented.
-- Cross-investor Consensus/Divergence, multi-investor warming, Industry Trend,
-  and Theme Trend are not implemented.
+- Cross-investor Consensus/Divergence evidence v2 is implemented and
+  semantically calibrated. The current dataset has one eligible
+  `MIXED_WITH_NEUTRAL` case, but no v2 Consensus or direct v2 DIVERGENT case.
+  Consensus Change Over Time, warming, Industry Trend, and Theme Trend are not
+  implemented.
 - `CrossInvestorAssetSnapshot` remains an evidence foundation and
   `CrossInvestorAssetAlignment` remains a coverage/alignment view only; neither
   chooses a consensus winner or ranks Investors/Assets.
@@ -405,11 +448,10 @@ existing production entry points, outside pytest.
 
 ## Known issues and technical debt
 
-1. **Temporal sparsity:** Following Feed history currently covers about 29.54
+1. **Temporal sparsity:** Following Feed history currently covers about 30.64
    days but still has date gaps. This is not yet sufficient for robust
    multi-week Momentum calibration.
-2. **Asset coverage:** 394 unresolved entries remain across 210 names and 226
-   distinct name/symbol/market references.
+2. **Asset coverage:** 541 unresolved entries remain across 278 names.
    Name-only, partial-symbol,
    cross-listing, concept, and extraction-error cases must not be guessed.
 3. **Portfolio absence:** Zero Portfolio rows means Portfolio evidence cannot
@@ -447,16 +489,16 @@ scores, or provider-specific logic.
 
 ## Recommended next task
 
-The next implementation candidate is a future Consensus/Divergence evidence
-design, with a deliberately small scope:
+The next implementation candidate is broader evidence calibration:
 
-1. Freeze the current CrossInvestorAssetSnapshot contribution/effective-input
-   and CrossInvestorAssetAlignment contracts as the only inputs.
-2. Wait for 3+ Investor overlap, real mixed direction, and longer time series.
+1. Keep the current Snapshot, Alignment, and Consensus evidence contracts
+   frozen as the only inputs.
+2. Wait for more 3+ Investor overlap and longer time series before adding
+   broader Consensus/Divergence semantics.
 3. Keep Momentum paused until natural 14d/28d data exists, and treat Portfolio
    as optional auxiliary evidence until real snapshots arrive.
 
 Before that task, a new session should read `AGENTS.md`, this file, the current
 contracts/services/repositories, and run `git status`, `pytest`, Ruff, and
-Alembic checks. Do not start 2F.3, Signal, Scheduler, Dashboard, or Portfolio
+Alembic checks. Do not start Signal, Scheduler, Dashboard, or Portfolio
 Collector work unless explicitly requested.

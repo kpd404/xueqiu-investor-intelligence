@@ -190,10 +190,11 @@ discussion only; Momentum still requires natural multi-week data.
 - SHA-256 source-snapshot + policy identity and append-only idempotency ✅
 - No Consensus, Divergence Score, weighting, Momentum, Signal, or LLM ✅
 
-Directional Alignment != Consensus. The real dataset has no mixed-direction
-overlap; mixed direction is validated only by synthetic tests in this sprint.
-True Consensus/Divergence work waits for 3+ Investor overlap, real mixed
-direction, and longer time series.
+Directional Alignment != Consensus. Alignment `MIXED_DIRECTION` is a broad
+multi-side state; Consensus v2 `DIVERGENT` requires direct
+bullish/bearish conflict, while a directional side plus Neutral is
+`MIXED_WITH_NEUTRAL`. Consensus Change Over Time still waits for repeated
+eligible windows and longer time series.
 
 ### Sprint 2F.2.5 — Production Analysis Recovery & Intelligence Recalibration ✅
 
@@ -224,6 +225,30 @@ direction, and longer time series.
   LLM reprocessing ✅
 - Real 3+ Investor overlap and MIXED_DIRECTION calibration surfaced ✅
 - No Consensus, Momentum, Warming, Score, Ranking, or Signal implementation ✅
+
+### Sprint 2F.3 — Cross-Investor Consensus / Divergence Evidence V0 ✅
+
+- Immutable evidence artifact sourced from Snapshot v2 and Alignment v1 ✅
+- Three Opinion-Investor eligibility boundary ✅
+- Latest Opinion direction per Investor, with no Opinion-count voting ✅
+- Provenance, membership, aggregate-count, idempotency, and policy-version
+  validation ✅
+- Real calibration processed 14 current overlap Snapshots as
+  INSUFFICIENT_EVIDENCE; no eligible production Consensus/Divergence case yet ✅
+- No score, weighting, ranking, Momentum, Warming, Signal, or Research
+  Candidate implementation ✅
+
+### Sprint 2F.3.2 — Consensus Evidence Semantic Hardening ✅
+
+- Added active policy `cross-investor-consensus-evidence-v2` ✅
+- Preserved all v1 immutable artifacts and v1 classification semantics ✅
+- Reserved `DIVERGENT` for direct bullish/bearish conflict ✅
+- Added `MIXED_WITH_NEUTRAL` for bullish/neutral or bearish/neutral mixes ✅
+- Kept latest-per-Investor direction and strong-direction mapping unchanged ✅
+- Real calibration reclassified 招商轮船 from v1 `DIVERGENT` to v2
+  `MIXED_WITH_NEUTRAL` ✅
+- No LLM, score, weighting, ranking, Momentum, Signal, or Research Candidate
+  implementation ✅
 
 ## Current / Next
 

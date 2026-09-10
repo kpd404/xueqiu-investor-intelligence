@@ -6,6 +6,9 @@ from database.repositories.cross_investor_asset_alignments import (
 from database.repositories.cross_investor_asset_snapshots import (
     CrossInvestorAssetSnapshotRepository,
 )
+from database.repositories.cross_investor_consensus_evidences import (
+    CrossInvestorConsensusEvidenceRepository,
+)
 from database.repositories.event_analyses import EventAnalysisRepository
 from database.repositories.investor_action_claims import InvestorActionClaimRepository
 from database.repositories.investor_action_consistency import InvestorActionConsistencyRepository
@@ -26,6 +29,7 @@ __all__ = [
     "AttentionOccurrenceRepository",
     "CrossInvestorAssetAlignmentRepository",
     "CrossInvestorAssetSnapshotRepository",
+    "CrossInvestorConsensusEvidenceRepository",
     "EventAnalysisRepository",
     "InvestorAssetStateChangeRepository",
     "InvestorAssetStateRepository",

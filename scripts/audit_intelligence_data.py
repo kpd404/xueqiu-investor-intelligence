@@ -19,7 +19,14 @@ from config import (
     get_production_thesis_comparison_policy,
     get_settings,
 )
-from contracts import CONSISTENCY_POLICY_VERSION
+from contracts import (
+    CONSISTENCY_POLICY_VERSION,
+    CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION,
+    CROSS_INVESTOR_CONSENSUS_POLICY_VERSION,
+    CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V1,
+    CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V2,
+    CROSS_INVESTOR_POLICY_VERSION,
+)
 
 
 @dataclass(frozen=True)
@@ -631,6 +638,18 @@ def _print_overlap(
     print(f"Assets observed by 1 Investor: {overlap.get(1, 0)}")
     print(f"Assets observed by 2 Investors: {overlap.get(2, 0)}")
     print(f"Assets observed by 3+ Investors: {sum(v for k, v in overlap.items() if k >= 3)}")
+    opinion_investors_by_asset: dict[UUID, set[UUID]] = defaultdict(set)
+    for opinion in opinions:
+        opinion_investors_by_asset[opinion.asset_id].add(opinion.investor_id)
+    opinion_overlap = Counter(len(value) for value in opinion_investors_by_asset.values())
+    print(
+        "Assets with 2+ Opinion Investors: "
+        f"{sum(value for key, value in opinion_overlap.items() if key >= 2)}"
+    )
+    print(
+        "Assets with 3+ Opinion Investors: "
+        f"{sum(value for key, value in opinion_overlap.items() if key >= 3)}"
+    )
     latest: dict[tuple[UUID, UUID], OpinionRow] = {}
     for opinion in opinions:
         latest[(opinion.investor_id, opinion.asset_id)] = opinion
@@ -672,10 +691,10 @@ def _print_alignment(analysis_version: str) -> None:
         FROM cross_investor_asset_alignments a
         JOIN cross_investor_asset_snapshots s ON s.id = a.source_snapshot_id
         WHERE s.opinion_analysis_version = %s
-          AND s.cross_investor_policy_version = 'cross-investor-asset-snapshot-v2'
+          AND s.cross_investor_policy_version = %s
         ORDER BY s.calculated_at DESC, a.id DESC
         """,
-        (analysis_version,),
+        (analysis_version, CROSS_INVESTOR_POLICY_VERSION),
     )
     latest_by_asset: dict[UUID, tuple[str, str]] = {}
     for asset_id, coverage, alignment, _calculated_at, _alignment_id in rows:
@@ -697,6 +716,163 @@ def _print_alignment(analysis_version: str) -> None:
         "MIXED_DIRECTION",
     ):
         print(f"{state}: {alignment_counts.get(state, 0)}")
+
+
+def _load_current_consensus_snapshot_ids(analysis_version: str) -> set[UUID]:
+    """Return latest snapshots whose Attention contribution is still current."""
+
+    snapshot_rows = _fetchall(
+        """
+        SELECT id, asset_id, contributions
+        FROM cross_investor_asset_snapshots
+        WHERE opinion_analysis_version = %s
+          AND cross_investor_policy_version = %s
+        ORDER BY asset_id, calculated_at DESC, id DESC
+        """,
+        (analysis_version, CROSS_INVESTOR_POLICY_VERSION),
+    )
+    current_attention_rows = _fetchall(
+        """
+        SELECT ao.asset_id, ao.id
+        FROM attention_occurrences ao
+        LEFT JOIN event_analyses ea ON ea.id = ao.analysis_id
+        WHERE ao.attention_policy_version = 'attention-occurrence-v1'
+          AND (
+              ao.analysis_id IS NULL
+              OR (
+                  ea.analysis_version = %s
+                  AND ea.status IN ('SUCCESS', 'PARTIALLY_RESOLVED')
+              )
+          )
+        """,
+        (analysis_version,),
+    )
+    attention_by_asset: dict[UUID, set[str]] = defaultdict(set)
+    for asset_id, occurrence_id in current_attention_rows:
+        attention_by_asset[_uuid(asset_id)].add(str(occurrence_id))
+
+    current_snapshot_ids: set[UUID] = set()
+    seen_assets: set[UUID] = set()
+    for snapshot_id, asset_id, contributions in snapshot_rows:
+        asset_uuid = _uuid(asset_id)
+        if asset_uuid in seen_assets:
+            continue
+        seen_assets.add(asset_uuid)
+        current_ids = attention_by_asset.get(asset_uuid, set())
+        if len(current_ids) < 2:
+            continue
+        snapshot_attention_ids = {
+            str(occurrence_id)
+            for contribution in (contributions if isinstance(contributions, list) else [])
+            if isinstance(contribution, dict)
+            for occurrence_id in contribution.get("attention_occurrence_ids", [])
+        }
+        snapshot_attention_investor_ids = {
+            str(contribution.get("investor_id"))
+            for contribution in (contributions if isinstance(contributions, list) else [])
+            if isinstance(contribution, dict) and contribution.get("attention_occurrence_ids")
+        }
+        if len(snapshot_attention_investor_ids) >= 2 and snapshot_attention_ids == current_ids:
+            current_snapshot_ids.add(_uuid(snapshot_id))
+    return current_snapshot_ids
+
+
+def _print_consensus(analysis_version: str) -> None:
+    _section("Cross-investor Consensus/Divergence evidence")
+    rows = _fetchall(
+        """
+        SELECT id, source_snapshot_id, source_alignment_id,
+               consensus_policy_version, consensus_state, opinion_coverage_state
+        FROM cross_investor_consensus_evidences
+        ORDER BY created_at, id
+        """
+    )
+    current_snapshot_ids = _load_current_consensus_snapshot_ids(analysis_version)
+    current_alignment_rows = _fetchall(
+        """
+        SELECT id, source_snapshot_id
+        FROM cross_investor_asset_alignments
+        WHERE alignment_policy_version = %s
+        """,
+        (CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION,),
+    )
+    current_alignment_ids = {
+        _uuid(alignment_id): _uuid(snapshot_id)
+        for alignment_id, snapshot_id in current_alignment_rows
+    }
+
+    policy_counts: Counter[str] = Counter()
+    current_state_counts: Counter[str] = Counter()
+    current_coverage_counts: Counter[str] = Counter()
+    historical_state_counts: Counter[str] = Counter()
+    historical_coverage_counts: Counter[str] = Counter()
+    current_total = 0
+    historical_total = 0
+    for (
+        _evidence_id,
+        source_snapshot_id,
+        source_alignment_id,
+        policy_version,
+        state,
+        coverage,
+    ) in rows:
+        policy_value = str(getattr(policy_version, "value", policy_version))
+        state_value = str(getattr(state, "value", state))
+        coverage_value = str(getattr(coverage, "value", coverage))
+        policy_counts[policy_value] += 1
+        source_snapshot_uuid = _uuid(source_snapshot_id)
+        is_current = (
+            policy_value == CROSS_INVESTOR_CONSENSUS_POLICY_VERSION
+            and source_snapshot_uuid in current_snapshot_ids
+            and current_alignment_ids.get(_uuid(source_alignment_id)) == source_snapshot_uuid
+        )
+        if is_current:
+            current_total += 1
+            current_state_counts[state_value] += 1
+            current_coverage_counts[coverage_value] += 1
+        else:
+            historical_total += 1
+            historical_state_counts[state_value] += 1
+            historical_coverage_counts[coverage_value] += 1
+
+    eligible_states = {
+        "CONSENSUS_BULLISH",
+        "CONSENSUS_BEARISH",
+        "CONSENSUS_NEUTRAL",
+        "DIVERGENT",
+        "MIXED_WITH_NEUTRAL",
+    }
+    policy_total = policy_counts.get(CROSS_INVESTOR_CONSENSUS_POLICY_VERSION, 0)
+    print(f"Consensus evidence rows (all policy versions): {len(rows)}")
+    print(f"Consensus evidence rows by policy: {_counter_text(policy_counts)}")
+    print(f"Current policy rows: {policy_total}")
+    print(f"V1 immutable rows: {policy_counts.get(CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V1, 0)}")
+    print(f"V2 immutable rows: {policy_counts.get(CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V2, 0)}")
+    print(f"Current/effective ConsensusEvidence rows: {current_total}")
+    print(f"Historical/non-current immutable rows: {historical_total}")
+    print(
+        "Current Consensus eligibility (Opinion Investors >=3): "
+        f"{sum(current_state_counts[state] for state in eligible_states)}"
+    )
+    print(f"Current coverage distribution: {_counter_text(current_coverage_counts)}")
+    print(
+        f"Historical/non-current coverage distribution: {_counter_text(historical_coverage_counts)}"
+    )
+    print(
+        "Semantic boundary: Alignment MIXED_DIRECTION means multiple direction "
+        "sides; Consensus DIVERGENT requires bullish and bearish sides; "
+        "v2 directional side plus neutral is MIXED_WITH_NEUTRAL."
+    )
+    for state in (
+        "INSUFFICIENT_EVIDENCE",
+        "CONSENSUS_BULLISH",
+        "CONSENSUS_BEARISH",
+        "CONSENSUS_NEUTRAL",
+        "DIVERGENT",
+        "MIXED_WITH_NEUTRAL",
+    ):
+        print(f"{state} current/effective: {current_state_counts.get(state, 0)}")
+        print(f"{state} historical/non-current: {historical_state_counts.get(state, 0)}")
 
 
 def _print_portfolio(
@@ -871,6 +1047,7 @@ def main() -> int:
     _print_thesis(thesis, investors, assets)
     _print_overlap(attention, opinions, investors, assets)
     _print_alignment(analysis_version)
+    _print_consensus(analysis_version)
     effective_actions, effective_consistency_count = _print_portfolio(
         batches,
         actions,

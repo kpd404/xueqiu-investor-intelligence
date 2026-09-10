@@ -24,6 +24,11 @@ from contracts.thesis_change import ThesisChangeType
 
 CROSS_INVESTOR_POLICY_VERSION = "cross-investor-asset-snapshot-v2"
 CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION = "cross-investor-directional-alignment-v1"
+CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V1 = "cross-investor-consensus-evidence-v1"
+CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V2 = "cross-investor-consensus-evidence-v2"
+# The active production Consensus policy. V1 remains available for immutable
+# historical artifacts and explicit compatibility recalculation.
+CROSS_INVESTOR_CONSENSUS_POLICY_VERSION = CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V2
 # Descriptive alias retained for callers that name the derived dimension.
 CROSS_INVESTOR_DIRECTIONAL_ALIGNMENT_POLICY_VERSION = CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION
 
@@ -105,6 +110,28 @@ def build_cross_investor_alignment_input_identity(
 
     payload = {
         "alignment_policy_version": alignment_policy_version,
+        "source_snapshot_input_identity": source_snapshot_input_identity,
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def build_cross_investor_consensus_input_identity(
+    *,
+    source_snapshot_input_identity: str,
+    source_alignment_input_identity: str,
+    consensus_policy_version: str,
+) -> str:
+    """Return the fingerprint for one snapshot/alignment/policy input."""
+
+    payload = {
+        "consensus_policy_version": consensus_policy_version,
+        "source_alignment_input_identity": source_alignment_input_identity,
         "source_snapshot_input_identity": source_snapshot_input_identity,
     }
     canonical = json.dumps(
@@ -320,8 +347,177 @@ class CrossInvestorAssetAlignmentResult(BaseModel):
     created: bool
 
 
+class ConsensusInvestorContribution(BaseModel):
+    """Latest effective Opinion contribution of one Attention Investor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    investor_id: UUID
+    window_opinion_count: int = Field(ge=1)
+    latest_opinion_id: UUID
+    latest_opinion_direction: OpinionDirection
+
+
+class ConsensusEvidenceState(StrEnum):
+    """Versioned evidence classification, not a score or recommendation."""
+
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+    CONSENSUS_BULLISH = "CONSENSUS_BULLISH"
+    CONSENSUS_BEARISH = "CONSENSUS_BEARISH"
+    CONSENSUS_NEUTRAL = "CONSENSUS_NEUTRAL"
+    DIVERGENT = "DIVERGENT"
+    MIXED_WITH_NEUTRAL = "MIXED_WITH_NEUTRAL"
+
+
+def classify_consensus_evidence_state(
+    *,
+    opinion_investor_count: int,
+    bullish_investor_count: int,
+    bearish_investor_count: int,
+    neutral_investor_count: int,
+    consensus_policy_version: str,
+) -> ConsensusEvidenceState:
+    """Classify latest-per-Investor directions under one policy version.
+
+    V1 treats every mixture of directional sides as DIVERGENT. V2 keeps that
+    state only for a direct bullish/bearish conflict and distinguishes a
+    directional side mixed with neutral evidence.
+    """
+
+    if opinion_investor_count < 3:
+        return ConsensusEvidenceState.INSUFFICIENT_EVIDENCE
+
+    if consensus_policy_version == CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V2:
+        if bullish_investor_count and bearish_investor_count:
+            return ConsensusEvidenceState.DIVERGENT
+        if (bullish_investor_count and neutral_investor_count) or (
+            bearish_investor_count and neutral_investor_count
+        ):
+            return ConsensusEvidenceState.MIXED_WITH_NEUTRAL
+
+    sides = sum(
+        value > 0
+        for value in (
+            bullish_investor_count,
+            bearish_investor_count,
+            neutral_investor_count,
+        )
+    )
+    if sides > 1:
+        return ConsensusEvidenceState.DIVERGENT
+    if bullish_investor_count:
+        return ConsensusEvidenceState.CONSENSUS_BULLISH
+    if bearish_investor_count:
+        return ConsensusEvidenceState.CONSENSUS_BEARISH
+    return ConsensusEvidenceState.CONSENSUS_NEUTRAL
+
+
+class CrossInvestorConsensusEvidenceCreate(BaseModel):
+    """Immutable deterministic Consensus/Divergence evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    asset_id: UUID
+    source_snapshot_id: UUID
+    source_alignment_id: UUID
+    attention_investor_count: int = Field(ge=0)
+    opinion_investor_count: int = Field(ge=0)
+    bullish_investor_count: int = Field(ge=0)
+    bearish_investor_count: int = Field(ge=0)
+    neutral_investor_count: int = Field(ge=0)
+    opinion_coverage_state: OpinionCoverageState
+    consensus_state: ConsensusEvidenceState
+    contributing_investor_ids: tuple[UUID, ...]
+    latest_opinions: tuple[ConsensusInvestorContribution, ...] = ()
+    consensus_policy_version: str = Field(min_length=1, max_length=64)
+    input_identity: str = Field(
+        min_length=64,
+        max_length=64,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    calculated_at: AwareDatetime = Field(default_factory=utc_now)
+    created_at: AwareDatetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> CrossInvestorConsensusEvidenceCreate:
+        if len(self.contributing_investor_ids) != len(set(self.contributing_investor_ids)):
+            raise ValueError("contributing_investor_ids must be unique")
+        attention_ids = set(self.contributing_investor_ids)
+        opinion_ids = {item.investor_id for item in self.latest_opinions}
+        if not opinion_ids <= attention_ids:
+            raise ValueError("Opinion Investors must be a subset of Attention Investors")
+        if self.attention_investor_count != len(attention_ids):
+            raise ValueError("attention_investor_count must match contributing investors")
+        if self.opinion_investor_count != len(opinion_ids):
+            raise ValueError("opinion_investor_count must match latest Opinions")
+        expected_coverage = (
+            OpinionCoverageState.NONE
+            if self.opinion_investor_count == 0
+            else OpinionCoverageState.PARTIAL
+            if self.opinion_investor_count < self.attention_investor_count
+            else OpinionCoverageState.COMPLETE
+        )
+        if self.opinion_coverage_state is not expected_coverage:
+            raise ValueError("opinion coverage state does not match Investor counts")
+
+        bullish = sum(
+            item.latest_opinion_direction
+            in {OpinionDirection.BULLISH, OpinionDirection.STRONG_BULLISH}
+            for item in self.latest_opinions
+        )
+        bearish = sum(
+            item.latest_opinion_direction
+            in {OpinionDirection.BEARISH, OpinionDirection.STRONG_BEARISH}
+            for item in self.latest_opinions
+        )
+        neutral = sum(
+            item.latest_opinion_direction is OpinionDirection.NEUTRAL
+            for item in self.latest_opinions
+        )
+        if (
+            self.bullish_investor_count,
+            self.bearish_investor_count,
+            self.neutral_investor_count,
+        ) != (
+            bullish,
+            bearish,
+            neutral,
+        ):
+            raise ValueError("direction counts must match latest Opinion contributions")
+        expected = classify_consensus_evidence_state(
+            opinion_investor_count=self.opinion_investor_count,
+            bullish_investor_count=bullish,
+            bearish_investor_count=bearish,
+            neutral_investor_count=neutral,
+            consensus_policy_version=self.consensus_policy_version,
+        )
+        if self.consensus_state is not expected:
+            raise ValueError("consensus state does not match latest Opinion directions")
+        return self
+
+
+class CrossInvestorConsensusEvidenceView(CrossInvestorConsensusEvidenceCreate):
+    id: UUID
+
+
+class CrossInvestorConsensusEvidenceResult(BaseModel):
+    """Result of calculating one immutable Consensus/Divergence artifact."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    evidence_id: UUID
+    asset_id: UUID
+    source_snapshot_id: UUID
+    source_alignment_id: UUID
+    consensus_policy_version: str = Field(min_length=1, max_length=64)
+    created: bool
+
+
 __all__ = [
     "CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION",
+    "CROSS_INVESTOR_CONSENSUS_POLICY_VERSION",
+    "CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V1",
+    "CROSS_INVESTOR_CONSENSUS_POLICY_VERSION_V2",
     "CROSS_INVESTOR_DIRECTIONAL_ALIGNMENT_POLICY_VERSION",
     "CROSS_INVESTOR_POLICY_VERSION",
     "CrossInvestorAssetAlignmentCreate",
@@ -331,8 +527,15 @@ __all__ = [
     "CrossInvestorAssetSnapshotCreate",
     "CrossInvestorAssetSnapshotResult",
     "CrossInvestorAssetSnapshotView",
+    "ConsensusEvidenceState",
+    "ConsensusInvestorContribution",
+    "CrossInvestorConsensusEvidenceCreate",
+    "CrossInvestorConsensusEvidenceResult",
+    "CrossInvestorConsensusEvidenceView",
     "DirectionalAlignmentState",
     "OpinionCoverageState",
     "build_cross_investor_alignment_input_identity",
+    "build_cross_investor_consensus_input_identity",
     "build_cross_investor_input_identity",
+    "classify_consensus_evidence_state",
 ]

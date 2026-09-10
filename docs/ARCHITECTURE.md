@@ -926,3 +926,40 @@ the Attention layer.
 `opinion-analysis-v3` and `opinion-extraction-v5` identify this attribution
 policy. Missing catalysts, risks, or time horizon are
 `UNKNOWN`/`NOT_EXTRACTED`, not thesis removal or weakening.
+
+## Sprint 2F.3.2 Cross-Investor Consensus Evidence Semantic Hardening
+
+Consensus/Divergence is a separate immutable evidence artifact derived from
+exactly one CrossInvestorAssetSnapshot v2 and its CrossInvestorAssetAlignment
+v1. It is separate because the Snapshot is an evidence inventory while this
+artifact is a policy-versioned deterministic classification.
+
+Both policy versions remain readable:
+
+    CrossInvestorAssetSnapshot v2
+                 +
+    CrossInvestorAssetAlignment v1
+                 ↓
+    CrossInvestorConsensusEvidence v1 or v2
+
+Only the latest window Opinion direction from each Investor contribution is
+used. Three or more Opinion Investors are required for an eligible v2
+classification; fewer produce INSUFFICIENT_EVIDENCE while retaining
+the Attention/Opinion coverage. The artifact stores source IDs, contribution
+IDs/directions, counts, coverage, and a deterministic input identity that
+includes the Consensus policy version.
+
+The original policy
+`cross-investor-consensus-evidence-v1` classifies any combination of
+multiple direction sides as `DIVERGENT` and is preserved as immutable
+historical evidence. The active policy
+`cross-investor-consensus-evidence-v2` reserves `DIVERGENT` for a
+direct bullish/bearish conflict. Bullish or bearish combined only with
+Neutral is `MIXED_WITH_NEUTRAL`; Neutral is not an opposing direction.
+
+The Alignment state `MIXED_DIRECTION` remains broader: it means that
+multiple direction sides are present in the Alignment view. It is not
+equivalent to Consensus `DIVERGENT`.
+
+This layer does not calculate a score, weight Investors, rank Assets, calculate
+Momentum/Warming, call an LLM, or produce a Signal or Research Candidate.

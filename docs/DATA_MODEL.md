@@ -933,3 +933,52 @@ thesis, catalysts, risks, or time horizon. Repost attention may still be
 recorded separately. Missing catalysts, risks, or time horizon mean
 UNKNOWN/NOT_EXTRACTED and must not be interpreted as removed, weakened, or
 invalidated in future thesis comparisons.
+
+## Cross-Investor Consensus / Divergence Evidence V0 and Semantic Hardening
+
+CrossInvestorConsensusEvidence is a versioned immutable interpretation of one
+CrossInvestorAssetSnapshot v2 and its CrossInvestorAssetAlignment v1. It is a
+separate artifact because the Snapshot preserves evidence contributions while
+Consensus/Divergence applies a recomputable policy-specific classification.
+
+### Table
+
+cross_investor_consensus_evidences
+
+### Stored provenance and evidence
+
+The row stores asset_id, source_snapshot_id, source_alignment_id,
+attention_investor_count, opinion_investor_count, bullish/bearish/neutral
+Investor counts, opinion_coverage_state, consensus_state,
+contributing_investor_ids, latest_opinions, consensus_policy_version,
+input_identity, calculated_at, and created_at.
+
+latest_opinions contains one entry per Opinion Investor with its Investor ID,
+window Opinion count, latest Opinion ID, and latest Opinion direction.
+contributing_investor_ids contains the Attention Investor set, so coverage
+such as 3 Opinions out of 5 Attention Investors remains explicit.
+
+### Versioned policies
+
+Both Consensus policies are immutable and remain queryable. V1 is
+`cross-investor-consensus-evidence-v1`; it is retained for historical
+reproduction and classifies any multiple direction sides as `DIVERGENT`.
+
+The active policy is `cross-investor-consensus-evidence-v2`. Fewer than
+three Opinion Investors produce `INSUFFICIENT_EVIDENCE`. With at least three,
+all latest directions on one side produce `CONSENSUS_BULLISH`,
+`CONSENSUS_BEARISH`, or `CONSENSUS_NEUTRAL`. A direct bullish and bearish
+combination produces `DIVERGENT`; bullish/neutral or bearish/neutral without
+the opposite directional side produces `MIXED_WITH_NEUTRAL`.
+
+`STRONG_BULLISH` maps to bullish and `STRONG_BEARISH` maps to bearish.
+Only the latest window Opinion from each Investor contributes a direction;
+repeated Opinions from one Investor never add votes. Neutral is not an
+opposing direction, and Alignment `MIXED_DIRECTION` is broader than
+Consensus `DIVERGENT`.
+
+The input identity is a SHA-256 fingerprint of the source Snapshot input
+identity, source Alignment input identity, and Consensus policy version.
+Identical inputs reuse one row; new source or policy inputs append a new row.
+No score, weighting, ranking, Momentum, Warming, Signal, or LLM logic belongs
+to this artifact.

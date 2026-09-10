@@ -16,6 +16,12 @@ from intelligence.services.cross_investor_asset_alignment import (
 from intelligence.services.cross_investor_asset_snapshot import (
     CrossInvestorAssetSnapshotService,
 )
+from intelligence.services.cross_investor_consensus_evidence import (
+    CrossInvestorConsensusAlignmentNotFoundError,
+    CrossInvestorConsensusEvidenceIntegrityError,
+    CrossInvestorConsensusEvidenceService,
+    CrossInvestorConsensusSnapshotNotFoundError,
+)
 from intelligence.services.state_update import OpinionNotFoundError, StateUpdateService
 from intelligence.services.thesis_change import (
     ThesisChangeService,
@@ -30,6 +36,10 @@ __all__ = [
     "CrossInvestorAssetAlignmentIntegrityError",
     "CrossInvestorAssetAlignmentService",
     "CrossInvestorAssetSnapshotNotFoundError",
+    "CrossInvestorConsensusAlignmentNotFoundError",
+    "CrossInvestorConsensusEvidenceIntegrityError",
+    "CrossInvestorConsensusEvidenceService",
+    "CrossInvestorConsensusSnapshotNotFoundError",
     "classify_cross_investor_asset_snapshot",
     "AttentionRawEventNotFoundError",
     "AssetNotFoundError",
