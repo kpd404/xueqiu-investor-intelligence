@@ -56,6 +56,24 @@ _CURSOR_KEYS = (
     "cursor",
     "since_id",
 )
+_HISTORY_STATUS_CONTAINER_KEYS = (
+    "statuses",
+    "user_timeline",
+    "timeline",
+    "items",
+    "list",
+    "data",
+)
+_NON_CHRONOLOGICAL_FLAG_KEYS = (
+    "is_top",
+    "is_sticky",
+    "is_pinned",
+    "pinned",
+    "sticky",
+    "top",
+    "top_status",
+    "sticky_status",
+)
 
 
 def utc_now() -> datetime:
@@ -69,6 +87,7 @@ class InvestorHistoryStopReason(StrEnum):
     MAX_PAGES = "MAX_PAGES"
     NO_PROGRESS = "NO_PROGRESS"
     PAGE_CONTROL_NOT_FOUND = "PAGE_CONTROL_NOT_FOUND"
+    FIRST_PAGE_UNAVAILABLE = "FIRST_PAGE_UNAVAILABLE"
     TIMEOUT = "TIMEOUT"
     NO_CONTENT = "NO_CONTENT"
     AUTH_REQUIRED = "AUTH_REQUIRED"
@@ -176,6 +195,10 @@ class InvestorHistoryProbeResult(BaseModel):
     newest_published_time: AwareDatetime | None = None
     oldest_published_time: AwareDatetime | None = None
     actual_history_span_days: float | None = Field(default=None, ge=0)
+    cutoff_proven: bool = False
+    cutoff_evidence_count: int = Field(default=0, ge=0)
+    first_page_bootstrap_attempted: bool = False
+    first_page_bootstrap_succeeded: bool = False
     stop_reason: InvestorHistoryStopReason
     observed_endpoint_paths: tuple[str, ...] = ()
     pagination_trace: tuple[HistoryPaginationTrace, ...] = ()
@@ -194,6 +217,7 @@ class ParsedHistoryPage:
     endpoint_path: str
     status_ids: tuple[str, ...] = ()
     status_times: tuple[tuple[str, AwareDatetime], ...] = ()
+    chronology_reliable: bool = False
 
 
 class HistoryPaginationTrace(BaseModel):
@@ -271,6 +295,10 @@ class InvestorHistoryCapture(BaseModel):
     newest_published_time: AwareDatetime | None = None
     oldest_published_time: AwareDatetime | None = None
     actual_history_span_days: float | None = Field(default=None, ge=0)
+    cutoff_proven: bool = False
+    cutoff_evidence_count: int = Field(default=0, ge=0)
+    first_page_bootstrap_attempted: bool = False
+    first_page_bootstrap_succeeded: bool = False
     observed_endpoint_paths: tuple[str, ...] = ()
     connected_context_count: int = Field(default=0, ge=0)
     connected_page_count: int = Field(default=0, ge=0)
@@ -301,20 +329,67 @@ def browser_config(
     )
 
 
+def _truthy_history_marker(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().casefold() in {
+            "1",
+            "true",
+            "yes",
+            "top",
+            "sticky",
+            "pinned",
+            "置顶",
+        }
+    return False
+
+
+def _is_non_chronological_item(item: Mapping[str, object]) -> bool:
+    if any(_truthy_history_marker(item.get(key)) for key in _NON_CHRONOLOGICAL_FLAG_KEYS):
+        return True
+    mark_description = item.get("mark_desc")
+    if isinstance(mark_description, str):
+        marker = mark_description.casefold()
+        return any(value in marker for value in ("sticky", "pinned", "置顶"))
+    return False
+
+
+def _looks_like_history_status(value: object) -> bool:
+    return (
+        isinstance(value, Mapping)
+        and "id" in value
+        and any(
+            key in value
+            for key in ("created_at", "timeBefore", "text", "description", "user_id", "user")
+        )
+    )
+
+
+def _history_status_values(payload: Mapping[str, object]) -> list[object]:
+    for key in _HISTORY_STATUS_CONTAINER_KEYS:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+
+    candidate_lists = [
+        value
+        for value in payload.values()
+        if isinstance(value, list) and any(_looks_like_history_status(item) for item in value)
+    ]
+    return candidate_lists[0] if len(candidate_lists) == 1 else []
+
+
 def _candidate_status_items(payload: Mapping[str, object]) -> list[Mapping[str, object]]:
-    candidates: list[Mapping[str, object]] = []
-    for value in payload.values():
-        if not isinstance(value, list):
-            continue
-        for item in value:
-            if not isinstance(item, Mapping) or "id" not in item:
-                continue
-            if any(
-                key in item
-                for key in ("created_at", "timeBefore", "text", "description", "user_id", "user")
-            ):
-                candidates.append(item)
-    return candidates
+    return [
+        item
+        for item in _history_status_values(payload)
+        if _looks_like_history_status(item)
+        and isinstance(item, Mapping)
+        and not _is_non_chronological_item(item)
+    ]
 
 
 def _raw_author_id(item: Mapping[str, object]) -> str | None:
@@ -781,6 +856,10 @@ def parse_history_payload(
         if post.author_id != expected_user_id:
             continue
         posts.append(post)
+    post_times = [post.published_time.astimezone(UTC) for post in posts]
+    chronology_reliable = len(post_times) >= 2 and all(
+        earlier >= later for earlier, later in zip(post_times, post_times[1:], strict=False)
+    )
     return ParsedHistoryPage(
         posts=tuple(posts),
         parse_failures=parse_failures,
@@ -790,7 +869,27 @@ def parse_history_payload(
         status_times=tuple(
             (status_id, timestamp.astimezone(UTC)) for status_id, timestamp in status_times
         ),
+        chronology_reliable=chronology_reliable,
     )
+
+
+def _cutoff_evidence_ids(
+    pages: Sequence[ParsedHistoryPage],
+    request: InvestorHistoryCollectionRequest,
+) -> set[str]:
+    """Return independent, chronologically ordered posts proving the cutoff."""
+
+    since = request.since.astimezone(UTC)
+    until = request.until.astimezone(UTC)
+    evidence_ids: set[str] = set()
+    for page in pages:
+        if not page.chronology_reliable:
+            continue
+        for post in page.posts:
+            published_time = post.published_time.astimezone(UTC)
+            if published_time <= since and published_time <= until:
+                evidence_ids.add(post.source_event_id)
+    return evidence_ids
 
 
 def summarize_history_pages(
@@ -824,6 +923,7 @@ def summarize_history_pages(
     newest = max(times) if times else None
     oldest = min(times) if times else None
     span = (newest - oldest).total_seconds() / 86400 if newest and oldest else None
+    cutoff_evidence_ids = _cutoff_evidence_ids(pages, request)
     endpoint_paths = tuple(
         sorted(
             set(observed_endpoint_paths)
@@ -839,6 +939,8 @@ def summarize_history_pages(
         newest_published_time=newest,
         oldest_published_time=oldest,
         actual_history_span_days=span,
+        cutoff_proven=len(cutoff_evidence_ids) >= 2,
+        cutoff_evidence_count=len(cutoff_evidence_ids),
         observed_endpoint_paths=endpoint_paths,
     )
 
@@ -972,6 +1074,8 @@ class XueqiuInvestorHistoryBrowser:
         connected_page_count = 0
         selected_page_url = None
         selected_page_title = None
+        first_page_bootstrap_attempted = False
+        first_page_bootstrap_succeeded = False
 
         async def settle_response_tasks() -> None:
             if response_tasks:
@@ -1005,11 +1109,24 @@ class XueqiuInvestorHistoryBrowser:
             )
             if not has_challenge:
                 return current_body, current_title
-            if not request.human_assisted:
+            if not request.human_assisted or request.attach_cdp_endpoint is not None:
                 if any(marker in current_body for marker in AUTHENTICATION_MARKERS):
-                    self._last_stop_reason = InvestorHistoryStopReason.AUTH_REQUIRED
+                    self._last_stop_reason = (
+                        InvestorHistoryStopReason.MANUAL_VERIFICATION_REQUIRED
+                        if request.attach_cdp_endpoint is not None
+                        else InvestorHistoryStopReason.AUTH_REQUIRED
+                    )
+                    if request.attach_cdp_endpoint is not None:
+                        raise ManualVerificationRequired(
+                            "MANUAL_VERIFICATION_REQUIRED: CDP page requires login"
+                        )
                     raise AuthenticationRequired("Xueqiu authentication is missing or expired")
                 self._last_stop_reason = InvestorHistoryStopReason.BLOCKED
+                if request.attach_cdp_endpoint is not None:
+                    self._last_stop_reason = InvestorHistoryStopReason.MANUAL_VERIFICATION_REQUIRED
+                    raise ManualVerificationRequired(
+                        "MANUAL_VERIFICATION_REQUIRED: CDP page requires verification"
+                    )
                 raise RateLimitedOrBlocked("Xueqiu requested verification; history probe stopped")
 
             access_blocked = False
@@ -1030,6 +1147,15 @@ class XueqiuInvestorHistoryBrowser:
                     "MANUAL_VERIFICATION_REQUIRED: the verification state is still visible"
                 )
             return refreshed_body, refreshed_title
+
+        async def ensure_cdp_bootstrap_safety(page: object) -> tuple[str, str]:
+            body, current_title = await read_page_state(page)
+            body, current_title = await ensure_page_state(page, body, current_title)
+            validate_current_investor_url(
+                str(getattr(page, "url", "")),
+                request.platform_user_id,
+            )
+            return body, current_title
 
         async with async_playwright() as playwright:
             try:
@@ -1203,18 +1329,10 @@ class XueqiuInvestorHistoryBrowser:
                         return progress
 
                     def target_reached() -> bool:
-                        return bool(
-                            pages
-                            and any(
-                                page_item.posts
-                                and any(
-                                    post.published_time.astimezone(UTC)
-                                    <= request.since.astimezone(UTC)
-                                    for post in page_item.posts
-                                )
-                                for page_item in pages
-                            )
-                        )
+                        # One anomalously old or pinned item must not prove the
+                        # historical boundary. Require two distinct posts from
+                        # a page whose target-author chronology is ordered.
+                        return len(_cutoff_evidence_ids(pages, request)) >= 2
 
                     def latest_timeline_page() -> int | None:
                         if timeline_endpoint_path is None:
@@ -1264,6 +1382,24 @@ class XueqiuInvestorHistoryBrowser:
 
                         nonlocal idle_cycles, progress_oldest
                         while True:
+                            if not pages:
+                                page_control_traces.append(
+                                    HistoryPageControlTrace(
+                                        sequence=len(page_control_traces) + 1,
+                                        current_page=None,
+                                        next_page=None,
+                                        has_pagination_control=False,
+                                        next_available=False,
+                                        control_role=None,
+                                        control_selector=None,
+                                        disabled=None,
+                                        end_state=False,
+                                        clicked=False,
+                                        page_advanced=False,
+                                        progress=False,
+                                    )
+                                )
+                                return InvestorHistoryStopReason.FIRST_PAGE_UNAVAILABLE
                             if target_reached():
                                 return InvestorHistoryStopReason.TARGET_REACHED
                             if len(pages) >= request.max_pages:
@@ -1393,26 +1529,28 @@ class XueqiuInvestorHistoryBrowser:
                                 return InvestorHistoryStopReason.NO_PROGRESS
 
                     if request.attach_cdp_endpoint is not None:
-                        manual_before = await _read_scroll_state(page)
-                        manual_trace_start = len(pagination_traces)
-                        await asyncio.to_thread(
-                            input,
-                            "CDP 已接管目标 tab，network listener 已就绪。"
-                            "若页面在 attach 前已经加载，"
-                            "可手动刷新一次并停留在目标 Investor 页面第一个历史页，"
-                            "不要切换 tab 或手动构造请求；程序会使用页面分页控件，完成后按 Enter：",
-                        )
+                        bootstrap_before = await _read_scroll_state(page)
+                        bootstrap_trace_start = len(pagination_traces)
                         await settle_response_tasks()
+                        body_text, title = await ensure_cdp_bootstrap_safety(page)
+                        if not pages:
+                            first_page_bootstrap_attempted = True
+                            await page.reload(  # type: ignore[attr-defined]
+                                wait_until="domcontentloaded",
+                                timeout=self._config.navigation_timeout_ms,
+                            )
+                            await wait_bounded(self._config.response_wait_ms)
+                            await settle_response_tasks()
+                            body_text, title = await ensure_cdp_bootstrap_safety(page)
+                            first_page_bootstrap_succeeded = bool(pages)
                         await record_scroll_trace(
-                            mode="MANUAL_SETUP",
-                            before_state=manual_before,
-                            trace_start=manual_trace_start,
-                        )
-                        body_text, title = await read_page_state(page)
-                        body_text, title = await ensure_page_state(page, body_text, title)
-                        validate_current_investor_url(
-                            str(getattr(page, "url", "")),
-                            request.platform_user_id,
+                            mode=(
+                                "AUTO_RELOAD_BOOTSTRAP"
+                                if first_page_bootstrap_attempted
+                                else "CDP_SETUP"
+                            ),
+                            before_state=bootstrap_before,
+                            trace_start=bootstrap_trace_start,
                         )
                     elif request.human_assisted:
                         await asyncio.to_thread(
@@ -1552,6 +1690,8 @@ class XueqiuInvestorHistoryBrowser:
                 "pagination_trace": tuple(pagination_traces),
                 "scroll_trace": tuple(scroll_traces),
                 "page_control_trace": tuple(page_control_traces),
+                "first_page_bootstrap_attempted": first_page_bootstrap_attempted,
+                "first_page_bootstrap_succeeded": first_page_bootstrap_succeeded,
             }
         )
 
@@ -1676,6 +1816,10 @@ async def run_history_probe(
             newest_published_time=capture.newest_published_time,
             oldest_published_time=capture.oldest_published_time,
             actual_history_span_days=capture.actual_history_span_days,
+            cutoff_proven=capture.cutoff_proven,
+            cutoff_evidence_count=capture.cutoff_evidence_count,
+            first_page_bootstrap_attempted=capture.first_page_bootstrap_attempted,
+            first_page_bootstrap_succeeded=capture.first_page_bootstrap_succeeded,
             stop_reason=capture.stop_reason,
             observed_endpoint_paths=capture.observed_endpoint_paths,
         )
@@ -1696,6 +1840,10 @@ async def run_history_probe(
             duplicate_raw_events=0,
             duplicate_posts_in_capture=0,
             parse_failures=0,
+            cutoff_proven=False,
+            cutoff_evidence_count=0,
+            first_page_bootstrap_attempted=False,
+            first_page_bootstrap_succeeded=False,
             stop_reason=_failure_reason(exc),
             error=str(exc),
         )

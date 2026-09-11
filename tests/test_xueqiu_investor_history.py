@@ -158,6 +158,69 @@ def test_history_summary_filters_lookback_and_deduplicates_posts():
     assert result.actual_history_span_days == 1.0
 
 
+def test_single_old_post_does_not_prove_history_cutoff():
+    request = _request(lookback_days=7)
+    page = parse_history_payload(
+        {
+            "statuses": [
+                _status("recent", END - timedelta(days=1)),
+                _status("single-old", END - timedelta(days=8)),
+            ]
+        },
+        expected_user_id=PLATFORM_USER_ID,
+        now=END,
+        endpoint_path="/v4/statuses/user_timeline.json",
+    )
+
+    result = summarize_history_pages(
+        [page],
+        request,
+        stop_reason=InvestorHistoryStopReason.TARGET_REACHED,
+    )
+
+    assert result.cutoff_proven is False
+    assert result.cutoff_evidence_count == 1
+
+
+def test_two_ordered_old_posts_prove_history_cutoff():
+    request = _request(lookback_days=7)
+    page = parse_history_payload(
+        {
+            "statuses": [
+                _status("recent", END - timedelta(days=1)),
+                _status("old-1", END - timedelta(days=8)),
+                _status("old-2", END - timedelta(days=9)),
+            ]
+        },
+        expected_user_id=PLATFORM_USER_ID,
+        now=END,
+        endpoint_path="/v4/statuses/user_timeline.json",
+    )
+
+    result = summarize_history_pages(
+        [page],
+        request,
+        stop_reason=InvestorHistoryStopReason.TARGET_REACHED,
+    )
+
+    assert result.cutoff_proven is True
+    assert result.cutoff_evidence_count == 2
+
+
+def test_explicit_sticky_status_is_excluded_from_history_chronology():
+    sticky = _status("sticky-old", END - timedelta(days=365))
+    sticky["is_top"] = 1
+    page = parse_history_payload(
+        {"statuses": [sticky, _status("recent", END - timedelta(days=1))]},
+        expected_user_id=PLATFORM_USER_ID,
+        now=END,
+        endpoint_path="/v4/statuses/user_timeline.json",
+    )
+
+    assert [post.source_event_id for post in page.posts] == ["recent"]
+    assert page.status_ids == ("recent",)
+
+
 class _FakeCaptureBrowser:
     def __init__(self, capture):
         self.capture_result = capture
@@ -268,12 +331,17 @@ class _FakeHistoryPage:
         page_control_pages: tuple[int, ...] | None = None,
         page_ages: dict[int, int] | None = None,
         repeat_page_ids: bool = False,
+        emit_initial_response: bool = False,
+        emit_reload_response: bool = True,
+        reload_url: str | None = None,
+        reload_body_text: str | None = None,
     ):
         self.handlers = {"response": []}
         self.wheel_calls = 0
         self.mouse = self
         self.url = "about:blank"
         self.goto_calls = 0
+        self.reload_calls = 0
         self.body_text = "Investor profile"
         self.old_age_days = old_age_days
         self.emit_scroll_response = emit_scroll_response
@@ -284,9 +352,20 @@ class _FakeHistoryPage:
         self.page_ages = page_ages or {}
         self.repeat_page_ids = repeat_page_ids
         self.page_control_page = 1
+        self.emit_initial_response = emit_initial_response
+        self.emit_reload_response = emit_reload_response
+        self.reload_url = reload_url
+        self.reload_body_text = reload_body_text
 
     def on(self, event, callback):
         self.handlers[event].append(callback)
+        if event == "response" and self.emit_initial_response:
+            self.emit_response(
+                _FakeResponse(
+                    _FakeRequest(f"{self.endpoint}?page=1"),
+                    {"statuses": [_status("initial-page", END - timedelta(days=1))]},
+                )
+            )
 
     def emit_response(self, response):
         for callback in self.handlers["response"]:
@@ -314,6 +393,20 @@ class _FakeHistoryPage:
                 {"statuses": [_status("new", END - timedelta(days=1))]},
             )
         )
+
+    async def reload(self, **kwargs):
+        self.reload_calls += 1
+        if self.reload_url is not None:
+            self.url = self.reload_url
+        if self.reload_body_text is not None:
+            self.body_text = self.reload_body_text
+        if self.emit_reload_response:
+            self.emit_response(
+                _FakeResponse(
+                    _FakeRequest(f"{self.endpoint}?page=1"),
+                    {"statuses": [_status("reload-page", END - timedelta(days=1))]},
+                )
+            )
 
     async def wait_for_timeout(self, timeout_ms):
         await asyncio.sleep(0)
@@ -721,7 +814,7 @@ def test_cdp_attach_reuses_existing_page_without_new_context_or_goto(
 ):
     import playwright.async_api as playwright_api
 
-    page = _FakeHistoryPage(old_age_days=30)
+    page = _FakeHistoryPage(old_age_days=30, emit_initial_response=True)
     page.url = f"https://xueqiu.com/u/{PLATFORM_USER_ID}"
     manager = _FakePlaywrightManager(page)
 
@@ -757,7 +850,104 @@ def test_cdp_attach_reuses_existing_page_without_new_context_or_goto(
     assert result.connected_context_count == 1
     assert result.connected_page_count == 1
     assert result.selected_page_url == f"https://xueqiu.com/u/{PLATFORM_USER_ID}"
-    assert result.stop_reason is InvestorHistoryStopReason.TARGET_REACHED
+    assert result.stop_reason is InvestorHistoryStopReason.PAGE_CONTROL_NOT_FOUND
+    assert result.cutoff_proven is False
+    assert page.reload_calls == 0
+
+
+def test_cdp_bootstrap_reloads_existing_tab_after_listener_when_first_page_missing(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import playwright.async_api as playwright_api
+
+    page = _FakeHistoryPage()
+    page.url = f"https://xueqiu.com/u/{PLATFORM_USER_ID}"
+    manager = _FakePlaywrightManager(page)
+
+    async def confirm(_function, *_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(asyncio, "to_thread", confirm)
+    monkeypatch.setattr(playwright_api, "async_playwright", lambda: manager)
+    request = InvestorHistoryCollectionRequest.for_lookback(
+        investor_id=INVESTOR_ID,
+        platform_user_id=PLATFORM_USER_ID,
+        lookback_days=30,
+        max_pages=3,
+        max_idle_cycles=1,
+        max_duration_seconds=5,
+        human_assisted=True,
+        attach_cdp_endpoint="http://127.0.0.1:9222",
+        until=END,
+    )
+
+    result = asyncio.run(
+        XueqiuInvestorHistoryBrowser(XueqiuBrowserConfig(response_wait_ms=0)).capture(request)
+    )
+
+    assert page.reload_calls == 1
+    assert result.first_page_bootstrap_attempted is True
+    assert result.first_page_bootstrap_succeeded is True
+    assert result.pages == 1
+    assert len(result.posts) == 1
+
+
+def test_cdp_bootstrap_refuses_redirect_after_reload(monkeypatch: pytest.MonkeyPatch):
+    import playwright.async_api as playwright_api
+
+    page = _FakeHistoryPage(reload_url="https://xueqiu.com/u/other-user")
+    page.url = f"https://xueqiu.com/u/{PLATFORM_USER_ID}"
+    manager = _FakePlaywrightManager(page)
+
+    async def confirm(_function, *_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(asyncio, "to_thread", confirm)
+    monkeypatch.setattr(playwright_api, "async_playwright", lambda: manager)
+    request = InvestorHistoryCollectionRequest.for_lookback(
+        investor_id=INVESTOR_ID,
+        platform_user_id=PLATFORM_USER_ID,
+        lookback_days=30,
+        max_pages=3,
+        human_assisted=True,
+        attach_cdp_endpoint="http://127.0.0.1:9222",
+        until=END,
+    )
+
+    with pytest.raises(NavigationFailed):
+        asyncio.run(
+            XueqiuInvestorHistoryBrowser(XueqiuBrowserConfig(response_wait_ms=0)).capture(request)
+        )
+    assert page.reload_calls == 1
+
+
+def test_cdp_bootstrap_stops_on_verification_after_reload(monkeypatch: pytest.MonkeyPatch):
+    import playwright.async_api as playwright_api
+
+    page = _FakeHistoryPage(reload_body_text="滑动验证")
+    page.url = f"https://xueqiu.com/u/{PLATFORM_USER_ID}"
+    manager = _FakePlaywrightManager(page)
+
+    async def confirm(_function, *_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(asyncio, "to_thread", confirm)
+    monkeypatch.setattr(playwright_api, "async_playwright", lambda: manager)
+    request = InvestorHistoryCollectionRequest.for_lookback(
+        investor_id=INVESTOR_ID,
+        platform_user_id=PLATFORM_USER_ID,
+        lookback_days=30,
+        max_pages=3,
+        human_assisted=True,
+        attach_cdp_endpoint="http://127.0.0.1:9222",
+        until=END,
+    )
+
+    with pytest.raises(ManualVerificationRequired):
+        asyncio.run(
+            XueqiuInvestorHistoryBrowser(XueqiuBrowserConfig(response_wait_ms=0)).capture(request)
+        )
+    assert page.reload_calls == 1
 
 
 def test_cdp_page_control_advances_page_and_stops_at_30d(
@@ -804,11 +994,13 @@ def test_cdp_page_control_advances_page_and_stops_at_30d(
     assert result.pages == 3
     assert len(result.posts) == 3
     assert result.oldest_published_time == END - timedelta(days=30)
-    assert result.stop_reason is InvestorHistoryStopReason.TARGET_REACHED
-    assert [trace.response_page for trace in result.page_control_trace] == [2, 3]
+    assert result.stop_reason is InvestorHistoryStopReason.END_OF_PAGINATION
+    assert result.cutoff_proven is False
+    assert [trace.response_page for trace in result.page_control_trace] == [2, 3, None]
     assert result.page_control_trace[0].control_role == "link"
     assert result.page_control_trace[0].control_selector == 'role=link name="下一页"'
-    assert all(trace.progress for trace in result.page_control_trace)
+    assert all(trace.progress for trace in result.page_control_trace[:-1])
+    assert result.page_control_trace[-1].progress is False
 
 
 def test_cdp_page_control_disabled_state_is_end_of_pagination(
@@ -937,6 +1129,41 @@ def test_cdp_page_control_missing_stops_without_scroll_fallback(
     assert page.wheel_calls == 0
     assert result.stop_reason is InvestorHistoryStopReason.PAGE_CONTROL_NOT_FOUND
     assert result.page_control_trace[-1].has_pagination_control is False
+
+
+def test_cdp_attach_without_first_page_response_is_explicit_first_page_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import playwright.async_api as playwright_api
+
+    page = _FakeHistoryPage(emit_reload_response=False)
+    page.url = f"https://xueqiu.com/u/{PLATFORM_USER_ID}"
+    manager = _FakePlaywrightManager(page)
+
+    async def confirm(_function, *_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(asyncio, "to_thread", confirm)
+    monkeypatch.setattr(playwright_api, "async_playwright", lambda: manager)
+    request = InvestorHistoryCollectionRequest.for_lookback(
+        investor_id=INVESTOR_ID,
+        platform_user_id=PLATFORM_USER_ID,
+        lookback_days=30,
+        max_pages=5,
+        max_idle_cycles=2,
+        max_duration_seconds=5,
+        human_assisted=True,
+        attach_cdp_endpoint="http://127.0.0.1:9222",
+        until=END,
+    )
+
+    result = asyncio.run(
+        XueqiuInvestorHistoryBrowser(XueqiuBrowserConfig(response_wait_ms=0)).capture(request)
+    )
+
+    assert result.pages == 0
+    assert result.posts == ()
+    assert result.stop_reason is InvestorHistoryStopReason.FIRST_PAGE_UNAVAILABLE
 
 
 def test_cdp_attach_rejects_non_target_existing_page(monkeypatch: pytest.MonkeyPatch):
