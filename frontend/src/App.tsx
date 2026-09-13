@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, getAsset, getAssetList, getAssetTimeline } from "./api";
+import { DiscoveryPage } from "./DiscoveryPage";
+import { OverviewPage } from "./OverviewPage";
 import type {
   AssetListItem,
   AttentionObservation,
@@ -15,6 +17,7 @@ import {
   directionLabel,
   evidenceLabel,
   eventLabel,
+  filterAssets,
   formatLag,
   formatTime,
   limitationLabel,
@@ -22,9 +25,22 @@ import {
   thesisLabel
 } from "./presentation";
 
-function routeAssetId(): string | null {
-  const match = window.location.pathname.match(/^\/assets\/([^/]+)$/);
-  return match?.[1] ?? null;
+interface RouteState {
+  assetId: string | null;
+  overview: boolean;
+  discovery: boolean;
+  queryString: string;
+}
+
+function readRouteState(): RouteState {
+  const path = window.location.pathname;
+  const match = path.match(/^\/assets\/([^/]+)$/);
+  return {
+    assetId: match?.[1] ?? null,
+    overview: path === "/",
+    discovery: path === "/assets",
+    queryString: window.location.search
+  };
 }
 
 function navigateToAsset(assetId: string): void {
@@ -32,18 +48,30 @@ function navigateToAsset(assetId: string): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function navigateToDiscovery(queryString = ""): void {
+  window.history.pushState({}, "", "/assets" + (queryString ? "?" + queryString : ""));
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function navigateToOverview(): void {
+  window.history.pushState({}, "", "/");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 export default function App() {
   const [assets, setAssets] = useState<AssetListItem[]>([]);
-  const [assetId, setAssetId] = useState<string | null>(routeAssetId());
+  const [assetQuery, setAssetQuery] = useState("");
+  const [route, setRoute] = useState<RouteState>(readRouteState);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<Error | null>(null);
   const [view, setView] = useState<CombinedAssetView | null>(null);
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewError, setViewError] = useState<Error | null>(null);
+  const assetId = route.assetId;
 
   useEffect(() => {
-    const handlePopState = () => setAssetId(routeAssetId());
+    const handlePopState = () => setRoute(readRouteState());
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
@@ -56,7 +84,6 @@ export default function App() {
         if (!active) return;
         setAssets(payload.items);
         setCatalogError(null);
-        if (!routeAssetId() && payload.items[0]) navigateToAsset(payload.items[0].asset_id);
       })
       .catch((error: unknown) => {
         if (active) setCatalogError(error instanceof Error ? error : new Error("API unavailable"));
@@ -102,6 +129,10 @@ export default function App() {
     () => assets.find((item) => item.asset_id === assetId) ?? null,
     [assets, assetId]
   );
+  const visibleAssets = useMemo(
+    () => filterAssets(assets, assetQuery),
+    [assets, assetQuery]
+  );
 
   const handleSelect = (nextAssetId: string) => {
     if (nextAssetId) navigateToAsset(nextAssetId);
@@ -124,13 +155,42 @@ export default function App() {
 
         <div className="sidebar-divider" />
         <div className="sidebar-kicker">WORKSPACE</div>
-        <div className="sidebar-nav-item active">
+        <button
+          type="button"
+          className={"sidebar-nav-item" + (route.overview ? " active" : "")}
+          onClick={navigateToOverview}
+        >
+          <span className="nav-dot" />
+          Overview
+        </button>
+        <button
+          type="button"
+          className={"sidebar-nav-item" + (route.discovery ? " active" : "")}
+          onClick={() => navigateToDiscovery()}
+        >
+          <span className="nav-dot" />
+          Asset Discovery
+        </button>
+        <button
+          type="button"
+          className={"sidebar-nav-item" + (!route.overview && !route.discovery ? " active" : "")}
+          disabled={!assetId && assets.length === 0}
+          onClick={() => navigateToAsset(assetId ?? assets[0]?.asset_id ?? "")}
+        >
           <span className="nav-dot" />
           Asset Intelligence
-        </div>
+        </button>
 
         <div className="asset-selector">
-          <label htmlFor="asset-select">Asset selector</label>
+          <label htmlFor="asset-select">Jump to Asset</label>
+          <input
+            id="asset-search"
+            aria-label="Search assets"
+            type="search"
+            placeholder="Search name, market, symbol"
+            value={assetQuery}
+            onChange={(event) => setAssetQuery(event.target.value)}
+          />
           <select
             id="asset-select"
             value={assetId ?? ""}
@@ -140,20 +200,24 @@ export default function App() {
             <option value="" disabled>
               {catalogLoading ? "Loading assets…" : "Select an asset"}
             </option>
-            {assets.map((asset) => (
+            {visibleAssets.map((asset) => (
               <option key={asset.asset_id} value={asset.asset_id}>
                 {asset.asset_name} · {asset.market}:{asset.symbol}
               </option>
             ))}
           </select>
           <span className="selector-count">
-            {catalogLoading ? "Syncing evidence…" : assets.length + " evidence-bearing assets"}
+            {catalogLoading
+              ? "Syncing evidence…"
+              : visibleAssets.length === assets.length
+                ? assets.length + " evidence-bearing assets"
+                : visibleAssets.length + " of " + assets.length + " assets"}
           </span>
         </div>
 
         <div className="quick-list">
           <div className="sidebar-kicker">QUICK ACCESS</div>
-          {assets.slice(0, 7).map((asset) => (
+          {visibleAssets.slice(0, 7).map((asset) => (
             <button
               className={"quick-item" + (asset.asset_id === assetId ? " selected" : "")}
               key={asset.asset_id}
@@ -181,7 +245,9 @@ export default function App() {
           <div className="breadcrumb">
             <span>INTELLIGENCE</span>
             <b>/</b>
-            <span className="muted">ASSET VIEW</span>
+            <span className="muted">
+              {route.overview ? "OVERVIEW" : route.discovery ? "ASSET DISCOVERY" : "ASSET VIEW"}
+            </span>
           </div>
           <div className="topbar-status">
             <span className="live-dot" />
@@ -191,7 +257,24 @@ export default function App() {
           </div>
         </div>
 
-        {catalogError && !assetId ? (
+        {route.overview ? (
+          <OverviewPage
+            assets={assets}
+            loading={catalogLoading}
+            error={catalogError}
+            onOpenAsset={handleSelect}
+            onOpenDiscovery={navigateToDiscovery}
+          />
+        ) : route.discovery ? (
+          <DiscoveryPage
+            assets={assets}
+            loading={catalogLoading}
+            error={catalogError}
+            queryString={route.queryString}
+            onOpenAsset={handleSelect}
+            onQueryChange={navigateToDiscovery}
+          />
+        ) : catalogError && !assetId ? (
           <PageState
             kind="error"
             title="API unavailable"
@@ -322,8 +405,14 @@ function AssetPage({
                 <div className="sequence-step-wrap" key={observation.attention_occurrence_id}>
                   {index > 0 && (
                     <div className="sequence-connector">
-                      <span className="connector-arrow">↓</span>
-                      <span>{formatLag(observation.lag_days)}</span>
+                      <span className="connector-arrow">
+                        {observation.lag_days === 0 ? "＝" : "↓"}
+                      </span>
+                      <span>
+                        {observation.lag_days === 0
+                          ? "Observed at same time"
+                          : formatLag(observation.lag_days)}
+                      </span>
                     </div>
                   )}
                   <AttentionNode
@@ -364,24 +453,21 @@ function AssetPage({
             <ContextCard
               label="DIRECTIONAL ALIGNMENT"
               value={view.alignment?.directional_alignment_state ?? "UNAVAILABLE"}
-              tone={view.alignment?.directional_alignment_state === "MIXED_DIRECTION" ? "split" : "teal"}
-              description={
-                view.alignment
-                  ? "Existing Alignment evidence for this observed window."
-                  : "No active cross-investor lineage for this window."
+              tone={
+                view.alignment?.directional_alignment_state === "MIXED_DIRECTION"
+                  ? "split"
+                  : "teal"
               }
+              description={contextDescription(
+                view.alignment?.directional_alignment_state,
+                "alignment"
+              )}
             />
             <ContextCard
               label="CONSENSUS V2"
               value={view.consensus?.consensus_state ?? "UNAVAILABLE"}
               tone={view.consensus?.consensus_state === "DIVERGENT" ? "split" : "teal"}
-              description={
-                view.consensus?.consensus_state === "DIVERGENT"
-                  ? "Observed latest Opinions include both bullish-side and bearish-side directions."
-                  : view.consensus
-                    ? "Existing Consensus evidence for this observed window."
-                    : "No active Consensus lineage for this window."
-              }
+              description={contextDescription(view.consensus?.consensus_state, "consensus")}
             />
           </div>
           <div className="coverage-callout">
@@ -406,15 +492,7 @@ function AssetPage({
           subtitle="Evidence events ordered by published time"
           action={<span className="timeline-legend">Serialization order ≠ causal order</span>}
         />
-        {timeline.events.length ? (
-          <div className="unified-timeline">
-            {timeline.events.map((event, index) => (
-              <TimelineRow event={event} key={eventKey(event, index)} />
-            ))}
-          </div>
-        ) : (
-          <EmptyInline text="No timeline events in the selected window." />
-        )}
+        <UnifiedTimeline timeline={timeline} />
       </section>
 
       <footer className="page-footer">
@@ -477,6 +555,7 @@ function AttentionNode({
   observation: AttentionObservation;
   first: boolean;
 }) {
+  const simultaneous = !first && observation.lag_days === 0;
   return (
     <div className="sequence-node">
       <div className={"node-marker" + (first ? " first" : "")}>
@@ -484,7 +563,9 @@ function AttentionNode({
       </div>
       <div className="node-body">
         <div className="node-topline">
-          <span className="node-state">{first ? "FIRST OBSERVED" : "OBSERVED LATER"}</span>
+          <span className="node-state">
+            {first ? "FIRST OBSERVED" : simultaneous ? "OBSERVED AT SAME TIME" : "OBSERVED LATER"}
+          </span>
           {observation.first_opinion_direction && (
             <DirectionPill direction={observation.first_opinion_direction} />
           )}
@@ -506,24 +587,51 @@ function AttentionNode({
 }
 
 function InvestorCard({ investor, index }: { investor: InvestorView; index: number }) {
-  const [open, setOpen] = useState(index === 0);
+  const [open, setOpen] = useState(false);
   const timeline = investor.thesis_timeline;
+  const detailId = "investor-detail-" + investor.investor_id;
   return (
     <div className={"investor-card" + (open ? " expanded" : "")}>
-      <button className="investor-card-header" onClick={() => setOpen((value) => !value)}>
+      <button
+        type="button"
+        className="investor-card-header"
+        aria-expanded={open}
+        aria-controls={detailId}
+        onClick={() => setOpen((value) => !value)}
+      >
         <div className="investor-avatar">{investor.investor_name.slice(0, 1)}</div>
         <div className="investor-heading">
           <strong>{investor.investor_name}</strong>
           <span>{relationLabel(investor.attention_opinion_relation)}</span>
         </div>
         <div className="investor-latest">
-          <span className="latest-label">LATEST OBSERVED</span>
+          <span className="latest-label">LATEST OBSERVED OPINION</span>
           <DirectionPill direction={investor.latest_observed_direction} />
+          <small className="latest-time">{formatTime(investor.latest_opinion_time)}</small>
         </div>
         <span className={"chevron" + (open ? " up" : "")}>⌄</span>
       </button>
 
-      <div className="investor-card-body">
+      <div className="investor-quick-summary">
+        <div>
+          <strong>{investor.attention_occurrence_count}</strong>
+          <span>Attention</span>
+        </div>
+        <div>
+          <strong>{investor.opinion_count}</strong>
+          <span>Opinions</span>
+        </div>
+        <div>
+          <strong>{investor.thesis_change_count}</strong>
+          <span>Thesis changes</span>
+        </div>
+        <div>
+          <strong>{formatTime(investor.first_attention_time)}</strong>
+          <span>First observed</span>
+        </div>
+      </div>
+
+      <div id={detailId} className="investor-card-body">
         <div className="investor-stat-grid">
           <Stat label="Attention" value={String(investor.attention_occurrence_count)} />
           <Stat label="Opinions" value={String(investor.opinion_count)} />
@@ -637,7 +745,12 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 }
 
 function DirectionPill({ direction }: { direction: Direction | null }) {
-  return <span className={"direction-pill " + directionClass(direction)}>{directionLabel(direction)}</span>;
+  const strong = direction?.startsWith("STRONG_") ? " strong-direction" : "";
+  return (
+    <span className={"direction-pill " + directionClass(direction) + strong}>
+      {directionLabel(direction)}
+    </span>
+  );
 }
 
 function EvidenceChip({ evidence }: { evidence: "OPINION" | "EXPLICIT_MENTION" | "REPOST" }) {
@@ -669,6 +782,27 @@ function ContextCard({
 
 function DataQualityPanel({ view }: { view: CombinedAssetView }) {
   const flags = view.data_quality.unresolved_semantic_limitations;
+  const persistentFlags = flags.filter((flag) =>
+    [
+      "HISTORICAL_COMPLETENESS_UNKNOWN",
+      "ABSENCE_INFERENCE_UNSUPPORTED",
+      "LATEST_DIRECTION_IS_LATEST_OBSERVED_ONLY"
+    ].includes(flag)
+  );
+  const assetFlags = flags.filter(
+    (flag) =>
+      ![
+        "HISTORICAL_COMPLETENESS_UNKNOWN",
+        "ABSENCE_INFERENCE_UNSUPPORTED",
+        "LATEST_DIRECTION_IS_LATEST_OBSERVED_ONLY"
+      ].includes(flag)
+  );
+  if (
+    view.investor_views.length > 0 &&
+    !view.investor_views.some((investor) => investor.opinion_count > 0)
+  ) {
+    assetFlags.push("NO_OPINION_COVERAGE");
+  }
   return (
     <div className="panel quality-panel">
       <SectionHeading number="Q" title="Data Quality" subtitle="Limitations stay visible" />
@@ -679,15 +813,113 @@ function DataQualityPanel({ view }: { view: CombinedAssetView }) {
           <span>Historical completeness: UNKNOWN</span>
         </div>
       </div>
-      <div className="quality-list">
-        {flags.map((flag) => (
-          <div className="quality-row" key={flag}>
-            <span className="quality-check">•</span>
-            <span>{limitationLabel(flag)}</span>
-          </div>
-        ))}
-      </div>
+      <QualityGroup title="PERSISTENT LIMITATIONS" flags={persistentFlags} />
+      <QualityGroup title="ASSET-SPECIFIC GAPS" flags={assetFlags} />
     </div>
+  );
+}
+
+function QualityGroup({ title, flags }: { title: string; flags: string[] }) {
+  return (
+    <div className="quality-group">
+      <span className="quality-group-title">{title}</span>
+      {flags.length ? (
+        <div className="quality-list">
+          {flags.map((flag) => (
+            <div className="quality-row" key={flag}>
+              <span className="quality-check">•</span>
+              <span>{limitationLabel(flag)}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="quality-none">None observed</div>
+      )}
+    </div>
+  );
+}
+
+function contextDescription(value: string | undefined, kind: "alignment" | "consensus"): string {
+  if (!value) {
+    return kind === "alignment"
+      ? "No active cross-investor lineage for this window."
+      : "No active Consensus lineage for this window.";
+  }
+  if (value === "MIXED_DIRECTION") return "Observed Opinions span multiple direction sides.";
+  if (value === "DIVERGENT") {
+    return "Observed latest Opinions include both bullish-side and bearish-side directions.";
+  }
+  if (value === "INSUFFICIENT_EVIDENCE") {
+    return "Current Opinion coverage does not meet the active consensus evidence requirement.";
+  }
+  return kind === "alignment"
+    ? "Existing Alignment evidence for this observed window."
+    : "Existing Consensus evidence for this observed window.";
+}
+
+type TimelineFilter = "ALL" | "ATTENTION" | "OPINION" | "THESIS";
+
+function UnifiedTimeline({ timeline }: { timeline: TimelineResponse }) {
+  const [filter, setFilter] = useState<TimelineFilter>("ALL");
+  const [showAll, setShowAll] = useState(false);
+  const filteredEvents = timeline.events.filter((event) => {
+    if (filter === "ALL") return true;
+    if (filter === "ATTENTION") return event.event_type.startsWith("ATTENTION");
+    if (filter === "OPINION") return event.event_type === "OPINION_OBSERVED";
+    return event.event_type === "THESIS_CHANGE_OBSERVED";
+  });
+  const visibleEvents = showAll ? filteredEvents : filteredEvents.slice(0, 12);
+  const filters: Array<[TimelineFilter, string]> = [
+    ["ALL", "All"],
+    ["ATTENTION", "Attention"],
+    ["OPINION", "Opinion"],
+    ["THESIS", "Thesis"]
+  ];
+
+  return (
+    <>
+      <div className="timeline-controls">
+        <div className="timeline-filters" role="group" aria-label="Timeline event filters">
+          {filters.map(([value, label]) => (
+            <button
+              type="button"
+              className={"filter-pill" + (filter === value ? " active" : "")}
+              aria-pressed={filter === value}
+              key={value}
+              onClick={() => {
+                setFilter(value);
+                setShowAll(false);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="timeline-control-meta">
+          <span>
+            Showing {visibleEvents.length} of {filteredEvents.length}
+          </span>
+          {filteredEvents.length > 12 && (
+            <button
+              type="button"
+              className="show-all-button"
+              onClick={() => setShowAll((value) => !value)}
+            >
+              {showAll ? "Show first 12" : "Show all"}
+            </button>
+          )}
+        </div>
+      </div>
+      {visibleEvents.length ? (
+        <div className="unified-timeline">
+          {visibleEvents.map((event, index) => (
+            <TimelineRow event={event} key={eventKey(event, index)} />
+          ))}
+        </div>
+      ) : (
+        <EmptyInline text="No timeline events match this filter." />
+      )}
+    </>
   );
 }
 

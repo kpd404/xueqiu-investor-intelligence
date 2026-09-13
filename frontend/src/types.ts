@@ -26,6 +26,12 @@ export interface AssetListItem {
   opinion_count: number;
   earliest_observed_time: string | null;
   latest_evidence_time: string | null;
+  temporal_span_days: number | null;
+  thesis_change_count: number;
+  has_repeated_thesis: boolean;
+  has_thesis_changed: boolean;
+  has_direction_reversal: boolean;
+  attention_opinion_gap: boolean;
   latest_alignment: string | null;
   latest_consensus: string | null;
   completeness: "UNKNOWN";

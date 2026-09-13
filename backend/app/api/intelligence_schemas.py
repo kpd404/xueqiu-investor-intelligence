@@ -31,6 +31,12 @@ class AssetIntelligenceSummaryResponse(BaseModel):
     opinion_count: int = Field(ge=0)
     earliest_observed_time: datetime | None
     latest_evidence_time: datetime | None
+    temporal_span_days: float | None = Field(default=None, ge=0)
+    thesis_change_count: int = Field(ge=0)
+    has_repeated_thesis: bool
+    has_thesis_changed: bool
+    has_direction_reversal: bool
+    attention_opinion_gap: bool
     latest_alignment: DirectionalAlignmentState | None
     latest_consensus: ConsensusEvidenceState | None
     completeness: ObservedAttentionCompleteness
@@ -51,6 +57,9 @@ class AssetIntelligenceSummaryResponse(BaseModel):
             for item in view.investor_views
             if item.latest_opinion_time is not None
         )
+        thesis_timelines = [
+            item.thesis_timeline for item in view.investor_views if item.thesis_timeline is not None
+        ]
         flags = list(view.data_quality.unresolved_semantic_limitations)
         if (
             view.data_quality.missing_thesis_comparison_count
@@ -73,6 +82,14 @@ class AssetIntelligenceSummaryResponse(BaseModel):
             opinion_count=opinion_count,
             earliest_observed_time=view.attention_summary.earliest_observed_time,
             latest_evidence_time=max(evidence_times) if evidence_times else None,
+            temporal_span_days=view.attention_summary.observed_span_days,
+            thesis_change_count=sum(item.thesis_change_count for item in view.investor_views),
+            has_repeated_thesis=any(item.opinion_count >= 2 for item in thesis_timelines),
+            has_thesis_changed=any(item.changed_count > 0 for item in view.investor_views),
+            has_direction_reversal=any(item.reversal_count > 0 for item in view.investor_views),
+            attention_opinion_gap=(
+                view.attention_summary.attention_investor_count > opinion_investor_count
+            ),
             latest_alignment=(
                 view.alignment.directional_alignment_state if view.alignment else None
             ),

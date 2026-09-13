@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import type { AssetListResponse, CombinedAssetView, TimelineResponse } from "./types";
@@ -19,6 +19,12 @@ const listPayload: AssetListResponse = {
       opinion_count: 4,
       earliest_observed_time: "2026-08-27T10:16:06Z",
       latest_evidence_time: "2026-09-10T20:16:54Z",
+      temporal_span_days: 13.42,
+      thesis_change_count: 4,
+      has_repeated_thesis: false,
+      has_thesis_changed: false,
+      has_direction_reversal: false,
+      attention_opinion_gap: false,
       latest_alignment: "MIXED_DIRECTION",
       latest_consensus: "MIXED_WITH_NEUTRAL",
       completeness: "UNKNOWN",
@@ -204,22 +210,31 @@ const timelinePayload: TimelineResponse = {
   data_quality_flags: ["HISTORICAL_COMPLETENESS_UNKNOWN"]
 };
 
-function mockSuccessfulApi() {
+function mockSuccessfulApi(
+  detail: unknown = detailPayload,
+  timeline: TimelineResponse = timelinePayload,
+  list: AssetListResponse = listPayload
+) {
   return vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
     if (url.endsWith("/timeline")) {
-      return Promise.resolve({ ok: true, status: 200, json: async () => timelinePayload });
+      return Promise.resolve({ ok: true, status: 200, json: async () => timeline });
     }
     if (url.endsWith("/assets/" + assetId)) {
-      return Promise.resolve({ ok: true, status: 200, json: async () => detailPayload });
+      return Promise.resolve({ ok: true, status: 200, json: async () => detail });
     }
-    return Promise.resolve({ ok: true, status: 200, json: async () => listPayload });
+    return Promise.resolve({ ok: true, status: 200, json: async () => list });
   });
 }
 
 beforeEach(() => {
   window.history.replaceState({}, "", "/assets/" + assetId);
   vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("Asset Intelligence Page V0", () => {
@@ -245,6 +260,18 @@ describe("Asset Intelligence Page V0", () => {
     );
   });
 
+  it("opens the Discovery route and navigates into the existing detail route", async () => {
+    window.history.replaceState({}, "", "/assets");
+    vi.stubGlobal("fetch", mockSuccessfulApi());
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Asset Discovery" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open 招商轮船 SH:601872" }));
+    expect(window.location.pathname).toBe("/assets/" + assetId);
+    expect(await screen.findByRole("heading", { name: "招商轮船" })).toBeInTheDocument();
+  });
+
   it("shows loading and a calm API error state", async () => {
     let rejectRequest: ((reason?: unknown) => void) | undefined;
     const pending = new Promise<never>((_, reject) => {
@@ -257,5 +284,159 @@ describe("Asset Intelligence Page V0", () => {
 
     rejectRequest?.(new Error("backend unavailable"));
     await waitFor(() => expect(screen.getByText("API unavailable")).toBeInTheDocument());
+  });
+
+  it("supports listing search and compact Investor card expansion", async () => {
+    const searchPayload: AssetListResponse = {
+      ...listPayload,
+      items: [
+        ...listPayload.items,
+        {
+          ...listPayload.items[0],
+          asset_id: "asset-hk-01787",
+          asset_name: "山东黄金",
+          market: "HK",
+          symbol: "01787"
+        },
+        {
+          ...listPayload.items[0],
+          asset_id: "asset-sh-600547",
+          asset_name: "山东黄金",
+          market: "SH",
+          symbol: "600547"
+        }
+      ],
+      total: 3
+    };
+    const fetchMock = mockSuccessfulApi(detailPayload, timelinePayload, searchPayload);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "招商轮船" });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search assets" }), {
+      target: { value: "01787" }
+    });
+    expect(screen.getByRole("option", { name: /山东黄金.*01787/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /601872/ })).not.toBeInTheDocument();
+
+    const investorToggle = screen.getByRole("button", { name: /笨笨的投资者2/ });
+    expect(investorToggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(investorToggle);
+    expect(investorToggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("filters and expands a dense unified timeline without changing event order", async () => {
+    const longTimeline: TimelineResponse = {
+      ...timelinePayload,
+      events: Array.from({ length: 14 }, (_, index) => ({
+        ...timelinePayload.events[0],
+        published_time: new Date(Date.UTC(2026, 7, 27 + index, 10, 16, 6)).toISOString(),
+        raw_event_id: "raw-" + index,
+        attention_occurrence_id: "attention-" + index
+      }))
+    };
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/timeline")) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => longTimeline });
+      }
+      if (url.endsWith("/assets/" + assetId)) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => detailPayload });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => listPayload });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "招商轮船" });
+    expect(screen.getByText("Showing 12 of 14")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(screen.getByText("Showing 14 of 14")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Thesis" }));
+    expect(screen.getByText("No timeline events match this filter.")).toBeInTheDocument();
+  });
+
+  it("keeps DIVERGENT and INSUFFICIENT EVIDENCE states explicit", async () => {
+    const divergentDetail = {
+      ...detailPayload,
+      alignment: {
+        directional_alignment_state: "MIXED_DIRECTION",
+        opinion_coverage_state: "COMPLETE"
+      },
+      consensus: {
+        consensus_state: "DIVERGENT",
+        opinion_coverage_state: "COMPLETE"
+      }
+    } as CombinedAssetView;
+    vi.stubGlobal("fetch", mockSuccessfulApi(divergentDetail));
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "招商轮船" });
+
+    expect(screen.getByText("DIVERGENT")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Observed latest Opinions include both bullish-side and bearish-side directions."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("shows missing Thesis comparison as a limitation, not a system error", async () => {
+    const missingDetail = {
+      ...detailPayload,
+      alignment: null,
+      consensus: null,
+      investor_views: [
+        {
+          ...detailPayload.investor_views[0],
+          opinion_count: 14,
+          thesis_change_count: 13,
+          missing_thesis_comparison_count: 1
+        }
+      ],
+      data_quality: {
+        ...detailPayload.data_quality,
+        cross_investor_evidence_available: false,
+        missing_thesis_comparison_count: 1,
+        unresolved_semantic_limitations: [
+          "HISTORICAL_COMPLETENESS_UNKNOWN",
+          "ABSENCE_INFERENCE_UNSUPPORTED",
+          "MISSING_THESIS_COMPARISON",
+          "CROSS_INVESTOR_LINEAGE_UNAVAILABLE"
+        ]
+      }
+    } as CombinedAssetView;
+    vi.stubGlobal("fetch", mockSuccessfulApi(missingDetail));
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "招商轮船" });
+    expect(document.querySelector(".metric.amber strong")).toHaveTextContent("1");
+
+    fireEvent.click(screen.getByRole("button", { name: /笨笨的投资者2/ }));
+    expect(screen.getByText("1 comparison unavailable")).toBeInTheDocument();
+    expect(screen.getByText("No active cross-investor lineage for this window")).toBeInTheDocument();
+  });
+
+  it("renders the 404 no-evidence state without inventing a direction", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/assets?")) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => listPayload });
+      }
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({ detail: "no intelligence evidence in the requested window" })
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByText("No evidence in selected window")).toBeInTheDocument();
+    expect(screen.queryByText("No interest")).not.toBeInTheDocument();
+    expect(screen.queryByText("BEARISH")).not.toBeInTheDocument();
   });
 });

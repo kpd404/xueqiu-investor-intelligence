@@ -373,6 +373,19 @@ def test_asset_list_filters_are_query_filters(api_client: TestClient, api_servic
     assert api_service.calls[-1][1][2:] == (2, 1)
 
 
+def test_asset_list_exposes_thin_discovery_facts(api_client: TestClient) -> None:
+    response = api_client.get("/api/v1/intelligence/assets")
+
+    assert response.status_code == 200
+    item = next(value for value in response.json()["items"] if value["asset_name"] == "招商轮船")
+    assert item["temporal_span_days"] == 6.0
+    assert item["thesis_change_count"] == 0
+    assert item["has_repeated_thesis"] is False
+    assert item["has_thesis_changed"] is False
+    assert item["has_direction_reversal"] is False
+    assert item["attention_opinion_gap"] is True
+
+
 def test_detail_returns_combined_view_and_preserves_sequence(api_client: TestClient) -> None:
     response = api_client.get(f"/api/v1/intelligence/assets/{_uuid(1)}")
 

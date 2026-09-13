@@ -1,4 +1,5 @@
 import type {
+  AssetListItem,
   Direction,
   EvidenceType,
   ThesisChangeType,
@@ -61,6 +62,7 @@ export function limitationLabel(flag: string): string {
     ABSENCE_INFERENCE_UNSUPPORTED: "Absence-based inference is unsupported",
     MISSING_THESIS_COMPARISON: "One thesis comparison is unavailable",
     CROSS_INVESTOR_LINEAGE_UNAVAILABLE: "No active cross-investor lineage for this window",
+    NO_OPINION_COVERAGE: "No effective Opinion coverage for this Asset",
     LATEST_DIRECTION_IS_LATEST_OBSERVED_ONLY:
       "Direction is the latest observed Opinion only"
   };
@@ -70,4 +72,14 @@ export function limitationLabel(flag: string): string {
 export function shortId(value: string | null): string {
   if (!value) return "—";
   return value.slice(0, 8) + "…";
+}
+
+export function filterAssets(assets: AssetListItem[], query: string): AssetListItem[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return assets;
+  return assets.filter((asset) =>
+    [asset.asset_name, asset.market, asset.symbol].some((value) =>
+      value.toLocaleLowerCase().includes(normalized)
+    )
+  );
 }
