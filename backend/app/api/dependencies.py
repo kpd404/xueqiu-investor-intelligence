@@ -8,6 +8,7 @@ from database.unit_of_work import SqlAlchemyObservedAttentionUnitOfWork
 from intelligence.services.combined_asset_intelligence import (
     CombinedAssetIntelligenceService,
 )
+from intelligence.services.investor_intelligence import InvestorIntelligenceService
 
 
 def _read_only_session() -> Session:
@@ -32,3 +33,12 @@ def get_combined_asset_intelligence_service() -> CombinedAssetIntelligenceServic
         return SqlAlchemyObservedAttentionUnitOfWork(_read_only_session)
 
     return CombinedAssetIntelligenceService.from_production(unit_of_work_factory)
+
+
+def get_investor_intelligence_service() -> InvestorIntelligenceService:
+    """Compose Investor views from the same rollback-only production read scope."""
+
+    def unit_of_work_factory() -> SqlAlchemyObservedAttentionUnitOfWork:
+        return SqlAlchemyObservedAttentionUnitOfWork(_read_only_session)
+
+    return InvestorIntelligenceService.from_production(unit_of_work_factory)

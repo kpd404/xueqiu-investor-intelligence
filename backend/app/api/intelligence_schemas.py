@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from contracts import (
     ConsensusEvidenceState,
     DirectionalAlignmentState,
+    InvestorIntelligenceView,
     ObservedAttentionCompleteness,
 )
 from contracts.combined_asset_intelligence import (
@@ -141,3 +142,38 @@ class AssetIntelligenceTimelineResponse(BaseModel):
             missing_thesis_comparison_count=(view.data_quality.missing_thesis_comparison_count),
             data_quality_flags=view.data_quality.unresolved_semantic_limitations,
         )
+
+
+class InvestorIntelligenceSummaryResponse(BaseModel):
+    """Lightweight Investor list projection without per-Asset detail."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    investor_id: UUID
+    investor_name: str
+    attention_asset_count: int = Field(ge=0)
+    opinion_asset_count: int = Field(ge=0)
+    repeated_opinion_asset_count: int = Field(ge=0)
+    latest_observed_evidence_time: datetime | None
+    completeness: ObservedAttentionCompleteness
+
+    @classmethod
+    def from_view(cls, view: InvestorIntelligenceView) -> "InvestorIntelligenceSummaryResponse":
+        return cls(
+            investor_id=view.investor_id,
+            investor_name=view.investor_name,
+            attention_asset_count=view.attention_asset_count,
+            opinion_asset_count=view.opinion_asset_count,
+            repeated_opinion_asset_count=view.repeated_opinion_asset_count,
+            latest_observed_evidence_time=view.latest_observed_evidence_time,
+            completeness=view.completeness,
+        )
+
+
+class InvestorIntelligenceListResponse(BaseModel):
+    """Stable, bounded Investor list response."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: tuple[InvestorIntelligenceSummaryResponse, ...]
+    total: int = Field(ge=0)

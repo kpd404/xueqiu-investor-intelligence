@@ -9,16 +9,25 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
 
-from backend.app.api.dependencies import get_combined_asset_intelligence_service
+from backend.app.api.dependencies import (
+    get_combined_asset_intelligence_service,
+    get_investor_intelligence_service,
+)
 from backend.app.api.intelligence_schemas import (
     AssetIntelligenceListResponse,
     AssetIntelligenceSummaryResponse,
     AssetIntelligenceTimelineResponse,
+    InvestorIntelligenceListResponse,
+    InvestorIntelligenceSummaryResponse,
 )
-from contracts import CombinedAssetIntelligenceView
+from contracts import CombinedAssetIntelligenceView, InvestorIntelligenceView
 from intelligence.services.combined_asset_intelligence import (
     CombinedAssetIntelligenceService,
     CombinedAssetNotFoundError,
+)
+from intelligence.services.investor_intelligence import (
+    InvestorIntelligenceInvestorNotFoundError,
+    InvestorIntelligenceService,
 )
 
 logger = getLogger(__name__)
@@ -30,6 +39,10 @@ router = APIRouter(
 ServiceDependency = Annotated[
     CombinedAssetIntelligenceService,
     Depends(get_combined_asset_intelligence_service),
+]
+InvestorServiceDependency = Annotated[
+    InvestorIntelligenceService,
+    Depends(get_investor_intelligence_service),
 ]
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 50
@@ -44,6 +57,11 @@ def _read[T](operation: Callable[[], T]) -> T:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="asset not found",
+        ) from exc
+    except InvestorIntelligenceInvestorNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="investor not found or has no effective observed intelligence",
         ) from exc
     except ValueError as exc:
         raise HTTPException(
@@ -226,3 +244,81 @@ def get_intelligence_asset(
             detail="no intelligence evidence in the requested window",
         )
     return view
+
+
+@router.get(
+    "/investors",
+    response_model=InvestorIntelligenceListResponse,
+    summary="List Investor intelligence summaries",
+    description=(
+        "Returns Investors with effective observed Attention or Opinion evidence. "
+        "The view is composed from the existing Asset intelligence read model; "
+        "historical completeness is UNKNOWN and no absence, holdings, influence, "
+        "score, or ranking inference is made."
+    ),
+    responses={
+        422: {"description": "Invalid time window or minimum Asset filter."},
+        500: {"description": "Unexpected read failure."},
+    },
+)
+def list_intelligence_investors(
+    service: InvestorServiceDependency,
+    window_start: Annotated[
+        datetime | None,
+        Query(description="Inclusive timezone-aware published-time lower bound."),
+    ] = None,
+    window_end: Annotated[
+        datetime | None,
+        Query(description="Inclusive timezone-aware published-time upper bound."),
+    ] = None,
+    min_attention_assets: Annotated[
+        int | None,
+        Query(ge=0, description="Query-only minimum observed Attention Asset count."),
+    ] = None,
+    min_opinion_assets: Annotated[
+        int | None,
+        Query(ge=0, description="Query-only minimum observed Opinion Asset count."),
+    ] = None,
+) -> InvestorIntelligenceListResponse:
+    views = _read(
+        lambda: service.list_investor_views(
+            window_start,
+            window_end,
+            min_attention_assets=min_attention_assets,
+            min_opinion_assets=min_opinion_assets,
+        )
+    )
+    return InvestorIntelligenceListResponse(
+        items=tuple(InvestorIntelligenceSummaryResponse.from_view(view) for view in views),
+        total=len(views),
+    )
+
+
+@router.get(
+    "/investors/{investor_id}",
+    response_model=InvestorIntelligenceView,
+    summary="Get one Investor's observed intelligence view",
+    description=(
+        "Returns observed Attention, Opinion, Thesis, and shared-Asset evidence "
+        "for one Investor. Historical completeness is UNKNOWN. The response makes "
+        "no absence, holdings, current-belief, influence, score, or ranking inference."
+    ),
+    responses={
+        404: {"description": "Investor not found or has no effective observed evidence."},
+        422: {"description": "Invalid time window."},
+        500: {"description": "Unexpected read failure."},
+    },
+)
+def get_intelligence_investor(
+    investor_id: UUID,
+    service: InvestorServiceDependency,
+    window_start: Annotated[
+        datetime | None,
+        Query(description="Inclusive timezone-aware published-time lower bound."),
+    ] = None,
+    window_end: Annotated[
+        datetime | None,
+        Query(description="Inclusive timezone-aware published-time upper bound."),
+    ] = None,
+) -> InvestorIntelligenceView:
+    return _read(lambda: service.get_investor_view(investor_id, window_start, window_end))

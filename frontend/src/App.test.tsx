@@ -272,6 +272,19 @@ describe("Asset Intelligence Page V0", () => {
     expect(await screen.findByRole("heading", { name: "招商轮船" })).toBeInTheDocument();
   });
 
+  it("serves the Observed Intelligence Overview at the product root", async () => {
+    window.history.replaceState({}, "", "/");
+    vi.stubGlobal("fetch", mockSuccessfulApi());
+
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { name: "Observed Intelligence Overview" })
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
+    expect(screen.getByRole("button", { name: "Overview" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Asset Discovery" })).toBeInTheDocument();
+  });
+
   it("shows loading and a calm API error state", async () => {
     let rejectRequest: ((reason?: unknown) => void) | undefined;
     const pending = new Promise<never>((_, reject) => {
