@@ -60,6 +60,15 @@ from contracts.collection import (
     FeedPostKind,
     PostKind,
 )
+from contracts.combined_asset_intelligence import (
+    CombinedAssetAttentionSummary,
+    CombinedAssetDataQuality,
+    CombinedAssetIntelligenceView,
+    CombinedAssetInvestorView,
+    CombinedAssetTimelineEvent,
+    CombinedAssetTimelineEventType,
+    CombinedAttentionOpinionRelation,
+)
 from contracts.consistency import (
     CONSISTENCY_POLICY_VERSION,
     ConsistencyType,
@@ -107,6 +116,14 @@ from contracts.intelligence import (
     AssetIntelligenceSnapshot,
     InvestorStateAggregationInput,
     InvestorStateContribution,
+)
+from contracts.observed_attention import (
+    ObservedAttentionCompleteness,
+    ObservedAttentionDirectionRelation,
+    ObservedAttentionEdge,
+    ObservedAttentionObservation,
+    ObservedAttentionSequence,
+    ObservedAttentionTemporalRelation,
 )
 from contracts.opinion import (
     AssetOpinionExtraction,
@@ -191,6 +208,14 @@ from contracts.thesis_change import (
     ThesisComparisonSpec,
     ThesisOpinionView,
 )
+from contracts.thesis_evolution import (
+    ThesisComparisonStatus,
+    ThesisEvolutionCompleteness,
+    ThesisEvolutionDirectionTransition,
+    ThesisEvolutionEntry,
+    ThesisEvolutionOpinionView,
+    ThesisEvolutionTimeline,
+)
 
 __all__ = [
     "ANALYSIS_POLICY_VERSION",
@@ -231,6 +256,13 @@ __all__ = [
     "AssetIntelligenceSnapshot",
     "AttentionLevel",
     "CollectionRequest",
+    "CombinedAssetAttentionSummary",
+    "CombinedAssetDataQuality",
+    "CombinedAssetIntelligenceView",
+    "CombinedAssetInvestorView",
+    "CombinedAssetTimelineEvent",
+    "CombinedAssetTimelineEventType",
+    "CombinedAttentionOpinionRelation",
     "BEHAVIOR_SNAPSHOT_POLICY_VERSION",
     "CROSS_INVESTOR_POLICY_VERSION",
     "CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION",
@@ -292,6 +324,12 @@ __all__ = [
     "OpinionProcessingStatus",
     "OpinionTimelineEntry",
     "OpinionWriteResult",
+    "ObservedAttentionCompleteness",
+    "ObservedAttentionDirectionRelation",
+    "ObservedAttentionEdge",
+    "ObservedAttentionObservation",
+    "ObservedAttentionSequence",
+    "ObservedAttentionTemporalRelation",
     "InvestorActionClaimDTO",
     "InvestorActionClaimType",
     "InvestorActionClaimView",
@@ -339,6 +377,12 @@ __all__ = [
     "ThesisComparisonSpec",
     "ThesisComparator",
     "ThesisOpinionView",
+    "ThesisComparisonStatus",
+    "ThesisEvolutionCompleteness",
+    "ThesisEvolutionDirectionTransition",
+    "ThesisEvolutionEntry",
+    "ThesisEvolutionOpinionView",
+    "ThesisEvolutionTimeline",
     "InvestorAssetStateSnapshot",
     "LEGACY_PROVIDER_ID",
     "UnresolvedAsset",

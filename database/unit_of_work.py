@@ -451,3 +451,38 @@ class SqlAlchemyIntelligenceUnitOfWork:
         self._session.rollback()
         self._session.close()
         self._session = None
+
+
+class SqlAlchemyObservedAttentionUnitOfWork:
+    """Rollback-only repository scope for observed Attention read queries."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+
+    def __enter__(self) -> "SqlAlchemyObservedAttentionUnitOfWork":
+        self._session = self._session_factory()
+        self.raw_events = RawEventRepository(self._session)
+        self.assets = AssetRepository(self._session)
+        self.investors = InvestorRepository(self._session)
+        self.attention_occurrences = AttentionOccurrenceRepository(self._session)
+        self.opinions = OpinionRepository(self._session)
+        self.thesis_changes = ThesisChangeRepository(self._session)
+        self.cross_investor_asset_snapshots = CrossInvestorAssetSnapshotRepository(self._session)
+        self.cross_investor_asset_alignments = CrossInvestorAssetAlignmentRepository(self._session)
+        self.cross_investor_consensus_evidences = CrossInvestorConsensusEvidenceRepository(
+            self._session
+        )
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        self._session.rollback()
+        self._session.close()
+        self._session = None

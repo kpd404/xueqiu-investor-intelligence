@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,17 @@ class RawEventRepository:
             raw_data=event.raw_data,
             hash=event.hash,
             collected_time=self._as_utc(event.collected_time),
+        )
+
+    def published_time_bounds(self) -> tuple[datetime | None, datetime | None]:
+        """Return the observed RawEvent published-time bounds without mutation."""
+
+        earliest, latest = self._session.execute(
+            select(func.min(RawEvent.published_time), func.max(RawEvent.published_time))
+        ).one()
+        return (
+            self._as_utc(earliest) if earliest is not None else None,
+            self._as_utc(latest) if latest is not None else None,
         )
 
     def add_if_absent(self, dto: RawEventDTO) -> RawEventWriteResult:

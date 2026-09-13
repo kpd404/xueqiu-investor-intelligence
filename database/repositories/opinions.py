@@ -12,6 +12,7 @@ from contracts import (
     OpinionCreate,
     OpinionTimelineEntry,
     OpinionWriteResult,
+    ThesisEvolutionOpinionView,
     ThesisOpinionView,
 )
 from database.models.asset import Asset
@@ -215,6 +216,27 @@ class OpinionRepository:
         )
         return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
 
+    def list_effective_evolution_timeline(
+        self,
+        policy: EffectiveAnalysisPolicy,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[ThesisEvolutionOpinionView]:
+        """Return effective Opinions with complete Thesis-timeline provenance."""
+
+        return self._list_effective_evolution_timeline(policy, as_of=as_of)
+
+    def list_effective_evolution_timeline_by_asset(
+        self,
+        asset_id: UUID,
+        policy: EffectiveAnalysisPolicy,
+        *,
+        as_of: datetime | None = None,
+    ) -> list[ThesisEvolutionOpinionView]:
+        """Return one Asset's effective Opinions with analysis provenance."""
+
+        return self._list_effective_evolution_timeline(policy, asset_id=asset_id, as_of=as_of)
+
     def list_effective_by_event(
         self,
         event_id: UUID,
@@ -313,6 +335,40 @@ class OpinionRepository:
             predicates.append(Opinion.analysis_id == analysis_id)
         return self._session.scalar(select(Opinion).where(*predicates))
 
+    def _list_effective_evolution_timeline(
+        self,
+        policy: EffectiveAnalysisPolicy,
+        *,
+        asset_id: UUID | None = None,
+        as_of: datetime | None = None,
+    ) -> list[ThesisEvolutionOpinionView]:
+        statement = (
+            select(
+                Opinion,
+                RawEvent.published_time,
+                EventAnalysis.id,
+                EventAnalysis.analysis_version,
+            )
+            .join(RawEvent, Opinion.event_id == RawEvent.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .where(*self._effective_analysis_predicates(policy))
+        )
+        if asset_id is not None:
+            statement = statement.where(Opinion.asset_id == asset_id)
+        if as_of is not None:
+            statement = statement.where(RawEvent.published_time <= self._as_utc(as_of))
+        statement = statement.order_by(
+            Opinion.investor_id,
+            Opinion.asset_id,
+            RawEvent.published_time,
+            RawEvent.id,
+            Opinion.id,
+        )
+        return [
+            self._evolution_view(row[0], row[1], row[2], row[3])
+            for row in self._session.execute(statement)
+        ]
+
     @staticmethod
     def _effective_analysis_predicates(policy: EffectiveAnalysisPolicy) -> tuple[object, ...]:
         return (
@@ -338,6 +394,31 @@ class OpinionRepository:
             confidence=opinion.confidence,
             published_time=cls._as_utc(published_time),
             generated_time=cls._as_utc(opinion.generated_time),
+        )
+
+    @classmethod
+    def _evolution_view(
+        cls,
+        opinion: Opinion,
+        published_time: datetime,
+        event_analysis_id: UUID,
+        analysis_version: str,
+    ) -> ThesisEvolutionOpinionView:
+        return ThesisEvolutionOpinionView(
+            opinion_id=opinion.id,
+            raw_event_id=opinion.event_id,
+            event_analysis_id=event_analysis_id,
+            investor_id=opinion.investor_id,
+            asset_id=opinion.asset_id,
+            analysis_version=analysis_version,
+            published_time=cls._as_utc(published_time),
+            direction=opinion.direction,
+            strength=opinion.strength,
+            confidence=opinion.confidence,
+            thesis=tuple(opinion.thesis),
+            catalysts=tuple(opinion.catalysts),
+            risks=tuple(opinion.risks),
+            time_horizon=opinion.time_horizon,
         )
 
     @classmethod

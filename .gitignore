@@ -1,5 +1,8 @@
 .env
 .venv/
+frontend/screenshots/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
 __pycache__/
 *.py[cod]
 *.sqlite3

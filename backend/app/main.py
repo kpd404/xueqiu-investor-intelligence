@@ -9,6 +9,10 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
+        description=(
+            "Thin read-only Intelligence API over observed effective evidence. "
+            "Historical completeness is UNKNOWN; the API makes no causality or absence inference."
+        ),
     )
     application.include_router(api_router)
     return application
