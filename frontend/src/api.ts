@@ -1,6 +1,8 @@
 import type {
   AssetListResponse,
   CombinedAssetView,
+  InvestorIntelligenceView,
+  InvestorListResponse,
   TimelineResponse
 } from "./types";
 
@@ -44,5 +46,15 @@ export function getAsset(assetId: string): Promise<CombinedAssetView> {
 export function getAssetTimeline(assetId: string): Promise<TimelineResponse> {
   return request<TimelineResponse>(
     API_BASE + "/assets/" + encodeURIComponent(assetId) + "/timeline"
+  );
+}
+
+export function getInvestorList(): Promise<InvestorListResponse> {
+  return request<InvestorListResponse>(API_BASE + "/investors");
+}
+
+export function getInvestor(investorId: string): Promise<InvestorIntelligenceView> {
+  return request<InvestorIntelligenceView>(
+    API_BASE + "/investors/" + encodeURIComponent(investorId)
   );
 }

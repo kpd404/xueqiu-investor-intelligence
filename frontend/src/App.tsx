@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { ApiError, getAsset, getAssetList, getAssetTimeline } from "./api";
+import {
+  ApiError,
+  getAsset,
+  getAssetList,
+  getAssetTimeline,
+  getInvestor,
+  getInvestorList
+} from "./api";
 import { DiscoveryPage } from "./DiscoveryPage";
+import { InvestorDetailPage, InvestorDiscoveryPage } from "./InvestorPage";
 import { OverviewPage } from "./OverviewPage";
 import type {
   AssetListItem,
   AttentionObservation,
   CombinedAssetView,
   Direction,
+  InvestorIntelligenceView,
+  InvestorListItem,
   InvestorView,
   TimelineEvent,
   TimelineResponse
@@ -27,18 +37,23 @@ import {
 
 interface RouteState {
   assetId: string | null;
+  investorId: string | null;
   overview: boolean;
   discovery: boolean;
+  investors: boolean;
   queryString: string;
 }
 
 function readRouteState(): RouteState {
   const path = window.location.pathname;
-  const match = path.match(/^\/assets\/([^/]+)$/);
+  const assetMatch = path.match(/^\/assets\/([^/]+)$/);
+  const investorMatch = path.match(/^\/investors\/([^/]+)$/);
   return {
-    assetId: match?.[1] ?? null,
+    assetId: assetMatch?.[1] ?? null,
+    investorId: investorMatch?.[1] ?? null,
     overview: path === "/",
     discovery: path === "/assets",
+    investors: path === "/investors" || investorMatch !== null,
     queryString: window.location.search
   };
 }
@@ -58,8 +73,28 @@ function navigateToOverview(): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function navigateToInvestors(queryString = ""): void {
+  window.history.pushState({}, "", "/investors" + (queryString ? "?" + queryString : ""));
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function navigateToInvestor(investorId: string): void {
+  window.history.pushState({}, "", "/investors/" + investorId);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function navigateToInvestorQuery(investorId: string, queryString: string): void {
+  window.history.pushState(
+    {},
+    "",
+    "/investors/" + investorId + (queryString ? "?" + queryString : "")
+  );
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 export default function App() {
   const [assets, setAssets] = useState<AssetListItem[]>([]);
+  const [investors, setInvestors] = useState<InvestorListItem[]>([]);
   const [assetQuery, setAssetQuery] = useState("");
   const [route, setRoute] = useState<RouteState>(readRouteState);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -68,12 +103,42 @@ export default function App() {
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewError, setViewError] = useState<Error | null>(null);
+  const [investorCatalogLoading, setInvestorCatalogLoading] = useState(true);
+  const [investorCatalogError, setInvestorCatalogError] = useState<Error | null>(null);
+  const [investorView, setInvestorView] = useState<InvestorIntelligenceView | null>(null);
+  const [investorViewLoading, setInvestorViewLoading] = useState(false);
+  const [investorViewError, setInvestorViewError] = useState<Error | null>(null);
   const assetId = route.assetId;
+  const investorId = route.investorId;
 
   useEffect(() => {
     const handlePopState = () => setRoute(readRouteState());
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setInvestorCatalogLoading(true);
+    getInvestorList()
+      .then((payload) => {
+        if (!active) return;
+        setInvestors(payload.items);
+        setInvestorCatalogError(null);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setInvestorCatalogError(
+            error instanceof Error ? error : new Error("API unavailable")
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setInvestorCatalogLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -124,6 +189,32 @@ export default function App() {
       active = false;
     };
   }, [assetId]);
+
+  useEffect(() => {
+    if (!investorId) {
+      setInvestorView(null);
+      setInvestorViewError(null);
+      return;
+    }
+    let active = true;
+    setInvestorViewLoading(true);
+    setInvestorViewError(null);
+    getInvestor(investorId)
+      .then((value) => {
+        if (active) setInvestorView(value);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setInvestorView(null);
+        setInvestorViewError(error instanceof Error ? error : new Error("API unavailable"));
+      })
+      .finally(() => {
+        if (active) setInvestorViewLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [investorId]);
 
   const selectedAsset = useMemo(
     () => assets.find((item) => item.asset_id === assetId) ?? null,
@@ -179,6 +270,14 @@ export default function App() {
         >
           <span className="nav-dot" />
           Asset Intelligence
+        </button>
+        <button
+          type="button"
+          className={"sidebar-nav-item" + (route.investors ? " active" : "")}
+          onClick={() => navigateToInvestors()}
+        >
+          <span className="nav-dot" />
+          Investor Intelligence
         </button>
 
         <div className="asset-selector">
@@ -246,7 +345,13 @@ export default function App() {
             <span>INTELLIGENCE</span>
             <b>/</b>
             <span className="muted">
-              {route.overview ? "OVERVIEW" : route.discovery ? "ASSET DISCOVERY" : "ASSET VIEW"}
+              {route.overview
+                ? "OVERVIEW"
+                : route.discovery
+                  ? "ASSET DISCOVERY"
+                  : route.investors
+                    ? "INVESTOR INTELLIGENCE"
+                    : "ASSET VIEW"}
             </span>
           </div>
           <div className="topbar-status">
@@ -274,6 +379,53 @@ export default function App() {
             onOpenAsset={handleSelect}
             onQueryChange={navigateToDiscovery}
           />
+        ) : route.investors && !investorId ? (
+          <InvestorDiscoveryPage
+            investors={investors}
+            loading={investorCatalogLoading}
+            error={investorCatalogError}
+            queryString={route.queryString}
+            onOpenInvestor={navigateToInvestor}
+            onQueryChange={navigateToInvestors}
+          />
+        ) : route.investors ? (
+          investorViewLoading ? (
+            <LoadingState />
+          ) : investorViewError ? (
+            <PageState
+              kind={
+                investorViewError instanceof ApiError && investorViewError.status === 404
+                  ? "empty"
+                  : "error"
+              }
+              title={
+                investorViewError instanceof ApiError && investorViewError.status === 404
+                  ? "No observed Investor evidence"
+                  : "API unavailable"
+              }
+              description={
+                investorViewError instanceof ApiError && investorViewError.status === 404
+                  ? "This page only presents effective observed Attention or Opinion evidence."
+                  : "The read-only Investor API returned an unexpected response. No conclusion was inferred."
+              }
+            />
+          ) : investorView ? (
+            <InvestorDetailPage
+              view={investorView}
+              queryString={route.queryString}
+              onOpenAsset={handleSelect}
+              onOpenInvestor={navigateToInvestor}
+              onQueryChange={(queryString) =>
+                navigateToInvestorQuery(investorId ?? "", queryString)
+              }
+            />
+          ) : (
+            <PageState
+              kind="empty"
+              title="No observed Investor evidence"
+              description="There is no effective observed evidence for this Investor in the current window."
+            />
+          )
         ) : catalogError && !assetId ? (
           <PageState
             kind="error"

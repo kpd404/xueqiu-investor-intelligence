@@ -6,16 +6,24 @@ import type {
   TimelineEvent
 } from "./types";
 
-const timeFormatter = new Intl.DateTimeFormat("zh-HK", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  hour12: false
+const timeFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Hong_Kong",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23"
 });
 
 export function formatTime(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : timeFormatter.format(date);
+  if (Number.isNaN(date.getTime())) return "—";
+  const parts = Object.fromEntries(
+    timeFormatter.formatToParts(date).map((part) => [part.type, part.value])
+  );
+  return String(parts.year) + "-" + String(parts.month) + "-" + String(parts.day) + " " + String(parts.hour) + ":" + String(parts.minute);
 }
 
 export function formatLag(days: number | null): string {

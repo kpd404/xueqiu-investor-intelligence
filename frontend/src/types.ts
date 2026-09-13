@@ -46,6 +46,85 @@ export interface AssetListResponse {
   has_more: boolean;
 }
 
+export interface InvestorListItem {
+  investor_id: string;
+  investor_name: string;
+  attention_asset_count: number;
+  opinion_asset_count: number;
+  repeated_opinion_asset_count: number;
+  latest_observed_evidence_time: string | null;
+  completeness: "UNKNOWN";
+}
+
+export interface InvestorListResponse {
+  items: InvestorListItem[];
+  total: number;
+}
+
+export interface InvestorAssetIntelligenceSummary {
+  asset_id: string;
+  asset_name: string;
+  market: string;
+  symbol: string;
+  attention_occurrence_count: number;
+  first_attention_time: string | null;
+  latest_attention_time: string | null;
+  attention_evidence_types: EvidenceType[];
+  opinion_count: number;
+  first_opinion_time: string | null;
+  latest_opinion_time: string | null;
+  latest_observed_direction: Direction | null;
+  thesis_change_count: number;
+  changed_count: number;
+  extended_count: number;
+  reversal_count: number;
+  missing_thesis_comparison_count: number;
+  attention_investor_count: number;
+  opinion_investor_count: number;
+  shared_attention_investor_count: number;
+  shared_opinion_investor_count: number;
+  latest_evidence_time: string | null;
+  alignment: string | null;
+  consensus: string | null;
+}
+
+export interface InvestorOverlapSummary {
+  other_investor_id: string;
+  other_investor_name: string;
+  shared_attention_asset_count: number;
+  shared_opinion_asset_count: number;
+}
+
+export interface InvestorIntelligenceDataQuality {
+  completeness: "UNKNOWN";
+  absence_inference_supported: false;
+  collection_provenance_available: false;
+  opinion_coverage: "NONE" | "PARTIAL" | "COMPLETE";
+  missing_thesis_comparison_count: number;
+  cross_investor_lineage_available: boolean;
+  limitations: string[];
+}
+
+export interface InvestorIntelligenceView {
+  investor_id: string;
+  investor_name: string;
+  window_start: string;
+  window_end: string;
+  completeness: "UNKNOWN";
+  first_observed_evidence_time: string | null;
+  latest_observed_evidence_time: string | null;
+  attention_asset_count: number;
+  opinion_asset_count: number;
+  repeated_opinion_asset_count: number;
+  thesis_changed_asset_count: number;
+  direction_reversal_asset_count: number;
+  shared_attention_asset_count: number;
+  shared_opinion_asset_count: number;
+  asset_views: InvestorAssetIntelligenceSummary[];
+  overlap_summaries: InvestorOverlapSummary[];
+  data_quality: InvestorIntelligenceDataQuality;
+}
+
 export interface AttentionObservation {
   investor_id: string;
   investor_name: string;

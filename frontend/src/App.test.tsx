@@ -2,7 +2,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import type { AssetListResponse, CombinedAssetView, TimelineResponse } from "./types";
+import type {
+  AssetListResponse,
+  CombinedAssetView,
+  InvestorIntelligenceView,
+  InvestorListResponse,
+  TimelineResponse
+} from "./types";
 
 const assetId = "asset-sh-601872";
 
@@ -283,6 +289,105 @@ describe("Asset Intelligence Page V0", () => {
     expect(window.location.pathname).toBe("/");
     expect(screen.getByRole("button", { name: "Overview" })).toHaveClass("active");
     expect(screen.getByRole("button", { name: "Asset Discovery" })).toBeInTheDocument();
+  });
+
+  it("loads Investor API list and detail routes through the application shell", async () => {
+    window.history.replaceState({}, "", "/investors");
+    const investorList: InvestorListResponse = {
+      items: [
+        {
+          investor_id: "investor-life",
+          investor_name: "人生是历练",
+          attention_asset_count: 12,
+          opinion_asset_count: 11,
+          repeated_opinion_asset_count: 5,
+          latest_observed_evidence_time: "2026-09-11T13:09:00Z",
+          completeness: "UNKNOWN"
+        }
+      ],
+      total: 1
+    };
+    const investorDetail = {
+      investor_id: "investor-life",
+      investor_name: "人生是历练",
+      window_start: "2026-08-27T10:16:06Z",
+      window_end: "2026-09-11T13:09:00Z",
+      completeness: "UNKNOWN",
+      first_observed_evidence_time: "2026-08-27T10:16:06Z",
+      latest_observed_evidence_time: "2026-09-11T13:09:00Z",
+      attention_asset_count: 0,
+      opinion_asset_count: 0,
+      repeated_opinion_asset_count: 0,
+      thesis_changed_asset_count: 0,
+      direction_reversal_asset_count: 0,
+      shared_attention_asset_count: 0,
+      shared_opinion_asset_count: 0,
+      asset_views: [],
+      overlap_summaries: [],
+      data_quality: {
+        completeness: "UNKNOWN",
+        absence_inference_supported: false,
+        collection_provenance_available: false,
+        opinion_coverage: "NONE",
+        missing_thesis_comparison_count: 0,
+        cross_investor_lineage_available: false,
+        limitations: [
+          "HISTORICAL_COMPLETENESS_UNKNOWN",
+          "ABSENCE_INFERENCE_UNSUPPORTED",
+          "COLLECTION_PROVENANCE_UNAVAILABLE",
+          "LATEST_DIRECTION_IS_LATEST_OBSERVED_ONLY",
+          "CROSS_INVESTOR_LINEAGE_UNAVAILABLE"
+        ]
+      }
+    } as unknown as InvestorIntelligenceView;
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/intelligence/investors") {
+        return Promise.resolve({ ok: true, status: 200, json: async () => investorList });
+      }
+      if (url.endsWith("/investors/investor-life")) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => investorDetail });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => listPayload });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Investor Intelligence" });
+    fireEvent.click(screen.getByRole("button", { name: "Open Investor 人生是历练" }));
+    expect(window.location.pathname).toBe("/investors/investor-life");
+    expect(await screen.findByRole("heading", { name: "人生是历练" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/intelligence/investors/investor-life",
+      expect.any(Object)
+    );
+  });
+
+  it("renders a calm 404 state for an unknown Investor", async () => {
+    window.history.replaceState({}, "", "/investors/unknown-investor");
+    const investorList: InvestorListResponse = {
+      items: [],
+      total: 0
+    };
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/intelligence/investors") {
+        return Promise.resolve({ ok: true, status: 200, json: async () => investorList });
+      }
+      if (url.endsWith("/investors/unknown-investor")) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({ detail: "investor not found" })
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => listPayload });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    expect(await screen.findByText("No observed Investor evidence")).toBeInTheDocument();
+    expect(screen.queryByText("No interest")).not.toBeInTheDocument();
   });
 
   it("shows loading and a calm API error state", async () => {
