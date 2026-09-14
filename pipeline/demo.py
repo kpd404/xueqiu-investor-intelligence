@@ -8,12 +8,19 @@ from ai import MockOpinionExtractor, OpinionProcessingService
 from collectors import ManualImportAdapter
 from contracts import (
     AnalysisSpec,
+    CollectionCoverageStatus,
     CollectionRequest,
+    CollectionRunCreate,
     EffectiveAnalysisPolicy,
     ProcessRawEventCommand,
 )
+from contracts.collection_provenance import utc_now
 from database.models import Asset, Investor, Opinion
-from database.repositories import RawEventRepository
+from database.repositories import (
+    CollectionObservationRepository,
+    CollectionRunRepository,
+    RawEventRepository,
+)
 from database.session import SessionFactory
 from database.unit_of_work import (
     SqlAlchemyIntelligenceUnitOfWork,
@@ -75,7 +82,49 @@ async def run_demo() -> None:
             platform_user_id=investor.platform_user_id,
             limit=1,
         )
-        raw_result = await DataPipeline(RawEventRepository(session), session).run(adapter, request)
+        run = CollectionRunRepository(session).create_run(
+            CollectionRunCreate(
+                source=adapter.source,
+                adapter_name=adapter.adapter_name,
+                collection_mode=adapter.collection_mode,
+                transport=adapter.transport,
+                started_at=now,
+                coverage_status=CollectionCoverageStatus.UNKNOWN,
+                requested_window_start=adapter.published_time,
+                requested_window_end=adapter.published_time,
+                scope_type="MANUAL_IMPORT",
+                scope_key=investor.platform_user_id,
+                parameters_json={"entrypoint": "pipeline.demo"},
+            )
+        )
+        session.commit()
+        try:
+            raw_result = await DataPipeline(
+                RawEventRepository(session),
+                session,
+                collection_observation_repository=CollectionObservationRepository(session),
+                collection_run_id=run.id,
+                source_page=adapter.url,
+            ).run(adapter, request)
+            CollectionRunRepository(session).finish_run(
+                run.id,
+                ended_at=utc_now(),
+                stop_reason="REQUEST_COMPLETED",
+                summary_json={
+                    "inserted_raw_events": raw_result.inserted,
+                    "reused_raw_events": raw_result.duplicates,
+                },
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            CollectionRunRepository(session).fail_run(
+                run.id,
+                ended_at=utc_now(),
+                stop_reason="FAILED",
+            )
+            session.commit()
+            raise
         event_id = raw_result.events[0].event_id
 
     result = await build_intelligence_pipeline().process(

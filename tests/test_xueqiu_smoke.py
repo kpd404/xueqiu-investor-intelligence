@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -88,14 +89,17 @@ def test_normal_feed_mode_calls_ingestion(
         return (batch,), batch.items, browser
 
     class FakeSessionScope:
-        def __enter__(self) -> object:
-            return object()
+        def __enter__(self) -> "FakeSessionScope":
+            return self
+
+        def commit(self) -> None:
+            return None
 
         def __exit__(self, *args: object) -> None:
             return None
 
     class FakeIngestionService:
-        def __init__(self, session: object) -> None:
+        def __init__(self, session: object, **_: object) -> None:
             calls.append((session,))
 
         async def ingest(self, items: tuple[FeedPostItem, ...]) -> object:
@@ -108,9 +112,25 @@ def test_normal_feed_mode_calls_ingestion(
                 event_ids=(),
             )
 
+    class FakeRunRepository:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def finish_run(self, *_: object, **__: object) -> None:
+            return None
+
+        def abort_run(self, *_: object, **__: object) -> None:
+            return None
+
+        def fail_run(self, *_: object, **__: object) -> None:
+            return None
+
     monkeypatch.setattr(smoke, "_capture_feed", fake_capture_feed)
+    monkeypatch.setattr(smoke, "_create_feed_run", lambda request, **_: uuid4())
     monkeypatch.setattr(smoke, "session_scope", lambda: FakeSessionScope())
     monkeypatch.setattr(smoke, "FeedIngestionService", FakeIngestionService)
+    monkeypatch.setattr(smoke, "CollectionRunRepository", FakeRunRepository)
+    monkeypatch.setattr(smoke, "CollectionObservationRepository", lambda _session: object())
     monkeypatch.setattr(
         smoke,
         "_print_ingestion_summary",

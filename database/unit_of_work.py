@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from database.repositories import (
     AssetRepository,
     AttentionOccurrenceRepository,
+    CollectionObservationRepository,
+    CollectionRunRepository,
     CrossInvestorAssetAlignmentRepository,
     CrossInvestorAssetSnapshotRepository,
     CrossInvestorConsensusEvidenceRepository,
@@ -473,6 +475,33 @@ class SqlAlchemyObservedAttentionUnitOfWork:
         self.cross_investor_consensus_evidences = CrossInvestorConsensusEvidenceRepository(
             self._session
         )
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        self._session.rollback()
+        self._session.close()
+        self._session = None
+
+
+class SqlAlchemyCollectionProvenanceUnitOfWork:
+    """Rollback-only repository scope for collection provenance reads."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+
+    def __enter__(self) -> "SqlAlchemyCollectionProvenanceUnitOfWork":
+        self._session = self._session_factory()
+        self.raw_events = RawEventRepository(self._session)
+        self.collection_runs = CollectionRunRepository(self._session)
+        self.collection_observations = CollectionObservationRepository(self._session)
         return self
 
     def __exit__(

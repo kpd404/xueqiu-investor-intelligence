@@ -1,6 +1,11 @@
 from database.models.asset import Asset
 from database.models.asset_alias import AssetAlias
 from database.models.attention_occurrence import AttentionOccurrence
+from database.models.collection_observation import (
+    CollectionObservation,
+    CollectionObservationImmutableError,
+)
+from database.models.collection_run import CollectionRun
 from database.models.cross_investor_asset_alignment import CrossInvestorAssetAlignment
 from database.models.cross_investor_asset_snapshot import CrossInvestorAssetSnapshot
 from database.models.cross_investor_consensus_evidence import CrossInvestorConsensusEvidence
@@ -24,6 +29,9 @@ __all__ = [
     "Asset",
     "AssetAlias",
     "AttentionOccurrence",
+    "CollectionObservation",
+    "CollectionObservationImmutableError",
+    "CollectionRun",
     "CrossInvestorAssetAlignment",
     "CrossInvestorConsensusEvidence",
     "CrossInvestorAssetSnapshot",

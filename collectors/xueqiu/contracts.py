@@ -59,6 +59,7 @@ class XueqiuBrowserConfig(BaseModel):
     persistent_profile_path: str = ".local/xueqiu/profile"
     browser_channel: str = Field(default="msedge", min_length=1)
     browser_executable_path: str | None = None
+    cdp_endpoint: str | None = Field(default=None, min_length=1)
     headless: bool = False
     navigation_timeout_ms: int = Field(default=30_000, ge=1_000)
     response_wait_ms: int = Field(default=5_000, ge=0)

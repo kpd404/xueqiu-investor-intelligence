@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import json
 import os
+import sys
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -43,7 +44,15 @@ from collectors.xueqiu.errors import (
     XueqiuCollectorError,
 )
 from collectors.xueqiu.parser import XueqiuFollowingFeedParser, parse_xueqiu_time
-from contracts import CollectionRequest, FeedPostItem, RawEventDTO
+from contracts import (
+    CollectionCoverageStatus,
+    CollectionMode,
+    CollectionRequest,
+    CollectionRunCreate,
+    CollectionTransport,
+    FeedPostItem,
+    RawEventDTO,
+)
 
 HISTORY_SOURCE = "xueqiu"
 HISTORY_PROFILE_URL_TEMPLATE = "https://xueqiu.com/u/{platform_user_id}"
@@ -1700,6 +1709,9 @@ class XueqiuInvestorHistoryAdapter:
     """SourceAdapter that converts one bounded history capture to RawEventDTOs."""
 
     source = HISTORY_SOURCE
+    adapter_name = "xueqiu_profile_history_cdp"
+    collection_mode = CollectionMode.ENTITY_HISTORY
+    transport = CollectionTransport.BROWSER_CDP
 
     def __init__(self, browser: XueqiuInvestorHistoryBrowser) -> None:
         self._browser = browser
@@ -1760,14 +1772,49 @@ async def run_history_probe(
     """Run one bounded capture and optionally persist through DataPipeline."""
 
     adapter = XueqiuInvestorHistoryAdapter(XueqiuInvestorHistoryBrowser(config))
+    run_id: UUID | None = None
+    inserted = 0
+    duplicates = 0
+    if not dry_run:
+        from database.repositories import CollectionRunRepository
+        from database.session import SessionFactory
+
+        with SessionFactory() as session:
+            run = CollectionRunRepository(session).create_run(
+                CollectionRunCreate(
+                    source=adapter.source,
+                    adapter_name=adapter.adapter_name,
+                    collection_mode=adapter.collection_mode,
+                    transport=adapter.transport,
+                    started_at=utc_now(),
+                    coverage_status=CollectionCoverageStatus.UNKNOWN,
+                    requested_window_start=request.since,
+                    requested_window_end=request.until,
+                    scope_type="INVESTOR_PROFILE",
+                    scope_key=f"{request.investor_id}:{request.platform_user_id}",
+                    parameters_json={
+                        "lookback_days": request.lookback_days,
+                        "max_pages": request.max_pages,
+                        "max_idle_cycles": request.max_idle_cycles,
+                        "max_duration_seconds": request.max_duration_seconds,
+                        "human_assisted": request.human_assisted,
+                        "cdp_attached": request.attach_cdp_endpoint is not None,
+                    },
+                )
+            )
+            session.commit()
+            run_id = run.id
+
     try:
-        inserted = 0
-        duplicates = 0
         if dry_run:
             async for _dto in adapter.collect(request):
                 pass
         else:
-            from database.repositories import RawEventRepository
+            from database.repositories import (
+                CollectionObservationRepository,
+                CollectionRunRepository,
+                RawEventRepository,
+            )
             from database.session import SessionFactory
             from pipeline import DataPipeline
 
@@ -1775,12 +1822,37 @@ async def run_history_probe(
                 pipeline_result = await DataPipeline(
                     RawEventRepository(session),
                     session,
+                    collection_observation_repository=CollectionObservationRepository(session),
+                    collection_run_id=run_id,
+                    source_page=request.homepage_url,
+                    source_context_json={
+                        "platform_user_id": request.platform_user_id,
+                        "cdp_attached": request.attach_cdp_endpoint is not None,
+                    },
                 ).run(adapter, request)
                 inserted = pipeline_result.inserted
                 duplicates = pipeline_result.duplicates
         capture = adapter.last_capture
         if capture is None:
             raise RuntimeError("history adapter completed without a capture result")
+        if run_id is not None:
+            from database.repositories import CollectionRunRepository
+            from database.session import SessionFactory
+
+            with SessionFactory() as session:
+                CollectionRunRepository(session).finish_run(
+                    run_id,
+                    ended_at=utc_now(),
+                    stop_reason=capture.stop_reason.value,
+                    summary_json={
+                        "pages": capture.pages,
+                        "valid_posts": len(capture.posts),
+                        "inserted_raw_events": inserted,
+                        "reused_raw_events": duplicates,
+                        "parse_failures": capture.parse_failures,
+                    },
+                )
+                session.commit()
         return InvestorHistoryProbeResult(
             status=(
                 InvestorHistoryProbeStatus.COMPLETED
@@ -1824,6 +1896,24 @@ async def run_history_probe(
             observed_endpoint_paths=capture.observed_endpoint_paths,
         )
     except XueqiuCollectorError as exc:
+        if run_id is not None:
+            from database.repositories import CollectionRunRepository
+            from database.session import SessionFactory
+
+            with SessionFactory() as session:
+                repository = CollectionRunRepository(session)
+                close = (
+                    repository.abort_run
+                    if isinstance(exc, (ManualVerificationRequired, RateLimitedOrBlocked))
+                    else repository.fail_run
+                )
+                close(
+                    run_id,
+                    ended_at=utc_now(),
+                    stop_reason=_failure_reason(exc).value,
+                    summary_json={"error": str(exc)[:1000]},
+                )
+                session.commit()
         return InvestorHistoryProbeResult(
             status=InvestorHistoryProbeStatus.STOPPED,
             investor_id=request.investor_id,
@@ -1847,6 +1937,20 @@ async def run_history_probe(
             stop_reason=_failure_reason(exc),
             error=str(exc),
         )
+    except Exception:
+        if run_id is not None:
+            from database.repositories import CollectionRunRepository
+            from database.session import SessionFactory
+
+            with SessionFactory() as session:
+                CollectionRunRepository(session).fail_run(
+                    run_id,
+                    ended_at=utc_now(),
+                    stop_reason="FAILED",
+                    summary_json={"error": "unexpected collection or persistence failure"},
+                )
+                session.commit()
+        raise
 
 
 def positive_int(value: str) -> int:
@@ -1926,6 +2030,7 @@ async def _run_cli(args: argparse.Namespace) -> int:
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     try:
         raise SystemExit(asyncio.run(_run_cli(build_parser().parse_args())))
     except (ValueError, XueqiuCollectorError) as exc:

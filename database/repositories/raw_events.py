@@ -50,6 +50,11 @@ class RawEventRepository:
             self._as_utc(latest) if latest is not None else None,
         )
 
+    def count(self) -> int:
+        """Return the immutable RawEvent row count without loading event bodies."""
+
+        return int(self._session.scalar(select(func.count()).select_from(RawEvent)) or 0)
+
     def add_if_absent(self, dto: RawEventDTO) -> RawEventWriteResult:
         existing = self.get_by_hash(dto.hash)
         if existing is not None:

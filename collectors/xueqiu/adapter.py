@@ -5,13 +5,23 @@ from collectors.xueqiu.browser import XueqiuFollowingFeedDataSource, XueqiuPageD
 from collectors.xueqiu.contracts import FollowingFeedBatch
 from collectors.xueqiu.errors import NoContent
 from collectors.xueqiu.parser import XueqiuPostParser
-from contracts import CollectionRequest, FeedCollectionRequest, FeedPostItem, RawEventDTO
+from contracts import (
+    CollectionMode,
+    CollectionRequest,
+    CollectionTransport,
+    FeedCollectionRequest,
+    FeedPostItem,
+    RawEventDTO,
+)
 
 
 class XueqiuFeedAdapter:
     """Expose Following Feed items without persistence or business processing."""
 
     source = "xueqiu"
+    adapter_name = "xueqiu_following_feed"
+    collection_mode = CollectionMode.FEED
+    transport = CollectionTransport.BROWSER_SESSION
 
     def __init__(self, browser: XueqiuFollowingFeedDataSource) -> None:
         self._browser = browser
@@ -50,6 +60,9 @@ class XueqiuFeedAdapter:
 
 class XueqiuAdapter:
     source = "xueqiu"
+    adapter_name = "xueqiu_profile_history"
+    collection_mode = CollectionMode.ENTITY_HISTORY
+    transport = CollectionTransport.BROWSER_SESSION
 
     def __init__(
         self,

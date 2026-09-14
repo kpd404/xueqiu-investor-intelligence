@@ -51,6 +51,8 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
         "raw_events",
         "signals",
         "thesis_changes",
+        "collection_runs",
+        "collection_observations",
     }
 
 

@@ -11,6 +11,7 @@ from collectors.xueqiu.contracts import FollowingFeedBatch, XueqiuBrowserConfig
 from collectors.xueqiu.errors import (
     AuthenticationRequired,
     BrowserDependencyMissing,
+    CdpNotAvailable,
     NavigationFailed,
     NoContent,
     ParseFailed,
@@ -294,7 +295,7 @@ class PlaywrightXueqiuBrowser:
 
         self._last_following_stop_reason = None
         storage_state_path = Path(self._config.storage_state_path)
-        if not storage_state_path.is_file():
+        if self._config.cdp_endpoint is None and not storage_state_path.is_file():
             raise AuthenticationRequired(
                 "Xueqiu authentication state is missing; run the manual authentication command"
             )
@@ -321,6 +322,8 @@ class PlaywrightXueqiuBrowser:
         last_response_next_max_id: str | None = None
         browser = None
         context = None
+        owns_browser = False
+        owns_context = False
 
         async def settle_response_tasks() -> None:
             if response_tasks:
@@ -375,9 +378,34 @@ class PlaywrightXueqiuBrowser:
 
         async with async_playwright() as playwright:
             try:
-                browser = await playwright.chromium.launch(**chromium_launch_options(self._config))
-                context = await browser.new_context(storage_state=str(storage_state_path))
-                page = await context.new_page()
+                if self._config.cdp_endpoint is not None:
+                    browser = await playwright.chromium.connect_over_cdp(self._config.cdp_endpoint)
+                    contexts = list(browser.contexts)
+                    pages = [
+                        page for existing_context in contexts for page in existing_context.pages
+                    ]
+                    if not pages:
+                        raise CdpNotAvailable(
+                            "connected browser has no existing page for Following Feed observation"
+                        )
+                    page = next(
+                        (
+                            existing_page
+                            for existing_page in pages
+                            if urlparse(str(existing_page.url)).hostname
+                            in {"xueqiu.com", "www.xueqiu.com"}
+                        ),
+                        pages[0],
+                    )
+                    context = page.context
+                else:
+                    browser = await playwright.chromium.launch(
+                        **chromium_launch_options(self._config)
+                    )
+                    context = await browser.new_context(storage_state=str(storage_state_path))
+                    page = await context.new_page()
+                    owns_browser = True
+                    owns_context = True
 
                 def record_request(request_object: object) -> None:
                     parsed_request_url = urlparse(str(request_object.url))
@@ -544,10 +572,10 @@ class PlaywrightXueqiuBrowser:
                 finally:
                     capture_context.end_following_capture()
                     await settle_response_tasks()
-                    if context is not None:
+                    if context is not None and owns_context:
                         await context.close()
-                    if browser is not None:
-                        await browser.close()
+                if browser is not None and owns_browser:
+                    await browser.close()
             except (
                 AuthenticationRequired,
                 BrowserDependencyMissing,

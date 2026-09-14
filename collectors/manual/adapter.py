@@ -5,7 +5,13 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from contracts import CollectionRequest, EventType, RawEventDTO
+from contracts import (
+    CollectionMode,
+    CollectionRequest,
+    CollectionTransport,
+    EventType,
+    RawEventDTO,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +25,9 @@ class ManualImportAdapter:
     raw_data: Mapping[str, JsonValue] = field(default_factory=dict)
 
     source: ClassVar[str] = "manual"
+    adapter_name: ClassVar[str] = "manual_import"
+    collection_mode: ClassVar[CollectionMode] = CollectionMode.MANUAL_IMPORT
+    transport: ClassVar[CollectionTransport] = CollectionTransport.FILE
 
     async def collect(self, request: CollectionRequest) -> AsyncIterator[RawEventDTO]:
         raw_data = dict(self.raw_data)

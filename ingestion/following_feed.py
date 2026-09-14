@@ -1,12 +1,22 @@
-from collections.abc import AsyncIterable, Iterable, Mapping
+from collections.abc import AsyncIterable, Callable, Iterable, Mapping
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from contracts import FeedCollectionRequest, FeedPostItem, RawEventDTO, RawEventWriteResult
+from contracts import (
+    CollectionIngestDisposition,
+    CollectionObservationCreate,
+    FeedCollectionRequest,
+    FeedPostItem,
+    RawEventDTO,
+    RawEventWriteResult,
+)
+from contracts.collection_provenance import utc_now
 from database.repositories import InvestorRepository, RawEventRepository
+from pipeline.data_pipeline import CollectionObservationWriter, begin_transaction_if_needed
 
 
 class FeedItemSource(Protocol):
@@ -55,10 +65,24 @@ class FeedIngestionService:
         *,
         investor_repository: InvestorRepository | None = None,
         raw_event_repository: RawEventRepository | None = None,
+        collection_observation_repository: CollectionObservationWriter | None = None,
+        collection_run_id: UUID | None = None,
+        observed_at_factory: Callable[[], datetime] = utc_now,
+        source_page: str | None = None,
+        source_context_json: dict[str, object] | None = None,
     ) -> None:
+        if (collection_observation_repository is None) != (collection_run_id is None):
+            raise ValueError(
+                "collection_observation_repository and collection_run_id must be provided together"
+            )
         self._session = session
         self._investors = investor_repository or InvestorRepository(session)
         self._raw_events = raw_event_repository or RawEventRepository(session)
+        self._collection_observations = collection_observation_repository
+        self._collection_run_id = collection_run_id
+        self._observed_at_factory = observed_at_factory
+        self._source_page = source_page
+        self._source_context_json = source_context_json
 
     async def ingest(
         self,
@@ -76,12 +100,13 @@ class FeedIngestionService:
         async def persist(item: FeedPostItem) -> None:
             if allowlist and item.author_id not in allowlist:
                 return
+            begin_transaction_if_needed(self._session)
             investor, created = self._investors.get_or_create(
                 platform=self.source,
                 platform_user_id=item.author_id,
                 name=self._author_name(item),
             )
-            result = self._persist_item(item, investor.id)
+            result = self._persist_item(item, investor.id, len(event_results))
             event_results.append(result)
             if investor.id in seen_investors:
                 return
@@ -108,7 +133,9 @@ class FeedIngestionService:
     ) -> FeedIngestionResult:
         return await self.ingest(adapter.collect(request), only_author_ids=request.only_author_ids)
 
-    def _persist_item(self, item: FeedPostItem, investor_id: UUID) -> RawEventWriteResult:
+    def _persist_item(
+        self, item: FeedPostItem, investor_id: UUID, observation_sequence: int
+    ) -> RawEventWriteResult:
         dto = RawEventDTO.build(
             investor_id=investor_id,
             event_type=item.event_type,
@@ -120,6 +147,22 @@ class FeedIngestionService:
         )
         try:
             result = self._raw_events.add_if_absent(dto)
+            if self._collection_observations is not None and self._collection_run_id is not None:
+                self._collection_observations.record_observation(
+                    CollectionObservationCreate(
+                        collection_run_id=self._collection_run_id,
+                        raw_event_id=result.event_id,
+                        observed_at=self._observed_at_factory(),
+                        ingest_disposition=(
+                            CollectionIngestDisposition.INSERTED
+                            if result.created
+                            else CollectionIngestDisposition.REUSED_EXISTING
+                        ),
+                        observation_sequence=observation_sequence,
+                        source_page=self._source_page,
+                        source_context_json=self._source_context_json,
+                    )
+                )
             self._session.commit()
         except Exception:
             self._session.rollback()
