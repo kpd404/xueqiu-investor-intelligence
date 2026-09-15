@@ -5,6 +5,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from contracts.analysis import EventAnalysisStatus
 from contracts.opinion import UnresolvedAsset
+from contracts.resolution_materialization import CurrentAnalysisResolution
 
 ASSET_RECOVERY_POLICY_VERSION = "asset-resolution-recovery-v1"
 
@@ -18,7 +19,12 @@ class AssetRecoveryStatus(StrEnum):
 
 
 class AssetRecoveryResult(BaseModel):
-    """Result of deterministic re-resolution for one persisted EventAnalysis."""
+    """Compatibility result for immutable resolution projection and Opinion materialization.
+
+    The result reports the persisted Analysis status before and after the operation;
+    both values are intentionally identical because Asset recovery never rewrites
+    EventAnalysis. The query-time ``projection`` carries current resolution state.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -33,3 +39,5 @@ class AssetRecoveryResult(BaseModel):
     calculated_at: AwareDatetime
     analysis_status_before: EventAnalysisStatus
     analysis_status_after: EventAnalysisStatus
+    projection: CurrentAnalysisResolution
+    dry_run: bool = False

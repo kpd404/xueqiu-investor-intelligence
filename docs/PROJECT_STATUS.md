@@ -66,7 +66,9 @@ not a score or trading recommendation. Directional Alignment != Consensus.
 - `RESOLVED`, `UNRESOLVED`, `AMBIGUOUS`, and `INVALID` semantics.
 - Cross-listing safety and canonical-name scope closure.
 - Unresolved asset recovery reuses saved extraction semantics and does not call
-  the LLM again.
+  the LLM again. Current resolution is projected from the immutable Analysis
+  payload; only extracted `structured_output.opinions` entries can materialize
+  Opinions, while direct unresolved hints remain non-materializable.
 - Evidence-backed minimal Asset Master seeding is idempotent.
 
 ### Sprint 2E: single-investor intelligence foundation
@@ -245,8 +247,10 @@ The current modules are responsible for the following:
 - `contracts/`: provider/source-neutral Pydantic contracts and policy identities.
 - `ai/`: extractor and comparator adapters. Provider SDK dependencies are kept
   here; the core pipeline does not know OpenAI wire formats or API keys.
-- `resolution/`: deterministic AssetResolver and Asset recovery service. It
-  never calls an LLM or creates Asset master data automatically.
+- `resolution/`: deterministic AssetResolver plus immutable resolution
+  projection/Opinion materialization services. It never calls an LLM or creates
+  Asset master data automatically, and Asset recovery cannot rewrite
+  `EventAnalysis`.
 - `pipeline/`: application orchestration, including core processing and recovery
   reconciliation. External waits are outside database transactions.
 - `intelligence/policies/`: pure deterministic reducers/matchers/aggregation
@@ -312,6 +316,12 @@ to an older version.
 11. **Directional Alignment is not Consensus.** 2F.2 emits a deterministic
     coverage/alignment view from one immutable snapshot; it does not select a
     consensus winner or calculate a score.
+
+12. **Analysis-time status is immutable during Asset recovery.**
+    `EventAnalysis.status`, `calculated_at`, `structured_output`, and Analysis
+    identity metadata remain the persisted Analysis-time record. Current Asset
+    resolution is a query-time projection, and missing Opinions may be
+    materialized idempotently without rewriting that record.
 
 ## Database, schema, and migrations
 

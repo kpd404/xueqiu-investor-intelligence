@@ -216,6 +216,12 @@ from contracts.recovery import (
     AssetRecoveryResult,
     AssetRecoveryStatus,
 )
+from contracts.resolution_materialization import (
+    CurrentAnalysisResolution,
+    CurrentAnalysisResolutionEntry,
+    OpinionMaterializationPlan,
+    ResolutionEntrySource,
+)
 from contracts.state import (
     STATE_POLICY_VERSION,
     InvestorAssetStateSnapshot,
@@ -277,6 +283,10 @@ __all__ = [
     "BehaviorReconciliationResult",
     "AssetRecoveryResult",
     "AssetRecoveryStatus",
+    "CurrentAnalysisResolution",
+    "CurrentAnalysisResolutionEntry",
+    "OpinionMaterializationPlan",
+    "ResolutionEntrySource",
     "AssetResolutionResult",
     "AssetResolutionStatus",
     "AssetOpinionExtraction",

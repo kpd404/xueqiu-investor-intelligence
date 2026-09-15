@@ -16,7 +16,11 @@ if TYPE_CHECKING:
 
 
 class EventAnalysis(Base):
-    """Recomputable interpretation lifecycle for one RawEvent and AnalysisSpec."""
+    """Immutable analysis-time interpretation for one RawEvent and AnalysisSpec.
+
+    Later Asset Master changes may alter current deterministic resolution and
+    materialize Opinions, but must not rewrite this row's analysis result.
+    """
 
     __tablename__ = "event_analyses"
     __table_args__ = (

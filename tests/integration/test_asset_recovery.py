@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from contracts import (
     AnalysisSpec,
+    AssetOpinionExtraction,
     AssetRecoveryStatus,
+    AssetResolutionStatus,
     EventAnalysisStatus,
     OpinionDirection,
     UnresolvedAsset,
@@ -48,12 +50,34 @@ def unresolved(
     )
 
 
+def extracted(
+    name: str,
+    *,
+    direction: OpinionDirection = OpinionDirection.BULLISH,
+    symbol: str | None = None,
+    market: str | None = None,
+) -> AssetOpinionExtraction:
+    return AssetOpinionExtraction(
+        asset_name=name,
+        symbol=symbol,
+        market=market,
+        direction=direction,
+        strength=72,
+        confidence=0.84,
+        thesis=("经营改善",),
+        catalysts=("需求回升",),
+        risks=("竞争压力",),
+        time_horizon="LONG_TERM",
+    )
+
+
 def seed_analysis(
     factory: sessionmaker[Session],
     assets: tuple[tuple[str, str, str], ...],
     unresolved_assets: tuple[UnresolvedAsset, ...],
     *,
     aliases: tuple[tuple[int, str], ...] = (),
+    opinion_entries: tuple[AssetOpinionExtraction, ...] = (),
 ) -> tuple[UUID, UUID, datetime, str]:
     generated_time = datetime(2026, 8, 31, 8, 0, tzinfo=UTC)
     content = f"recovery event {uuid4()}"
@@ -109,7 +133,7 @@ def seed_analysis(
             structured_output={
                 "analysis_spec": RECOVERY_SPEC.model_dump(mode="json"),
                 "investment_related": True,
-                "opinions": [],
+                "opinions": [item.model_dump(mode="json") for item in opinion_entries],
                 "unresolved_assets": [item.model_dump(mode="json") for item in unresolved_assets],
             },
             provider_metadata={"provider": "test-provider", "provider_response_id": "response-1"},
@@ -131,7 +155,14 @@ def test_recovery_resolves_opinion_without_extractor_and_preserves_provenance(
         (("Tencent Holdings", "00700", "HK"),),
         (unresolved("腾讯"),),
         aliases=((0, "腾讯"),),
+        opinion_entries=(extracted("腾讯"),),
     )
+
+    with db_session_factory() as session:
+        analysis_before = session.get(EventAnalysis, analysis_id)
+        assert analysis_before is not None
+        structured_before = analysis_before.structured_output
+        calculated_before = analysis_before.calculated_at
 
     result = service(db_session_factory).recover(analysis_id=analysis_id)
 
@@ -141,7 +172,12 @@ def test_recovery_resolves_opinion_without_extractor_and_preserves_provenance(
     assert len(result.opinion_ids) == 1
     assert result.unresolved_assets == ()
     assert result.analysis_status_before is EventAnalysisStatus.PARTIALLY_RESOLVED
-    assert result.analysis_status_after is EventAnalysisStatus.SUCCESS
+    assert result.analysis_status_after is EventAnalysisStatus.PARTIALLY_RESOLVED
+    assert result.projection.materializable_opinion_count == 1
+    assert result.projection.extracted_opinion_count == 1
+    assert result.projection.direct_unresolved_hint_count == 0
+    assert len(result.projection.entries) == 1
+    assert result.projection.entries[0].outcome is AssetResolutionStatus.RESOLVED
 
     with db_session_factory() as session:
         opinion = session.get(Opinion, result.opinion_ids[0])
@@ -158,16 +194,20 @@ def test_recovery_resolves_opinion_without_extractor_and_preserves_provenance(
         assert opinion.risks == ["竞争压力"]
         assert opinion.time_horizon == "LONG_TERM"
         assert analysis is not None
-        assert analysis.status is EventAnalysisStatus.SUCCESS
+        assert analysis.status is EventAnalysisStatus.PARTIALLY_RESOLVED
+        assert analysis.analysis_version == RECOVERY_SPEC.analysis_version
+        assert analysis.model_version == RECOVERY_SPEC.model_version
+        assert analysis.prompt_version == RECOVERY_SPEC.prompt_version
+        assert analysis.schema_version == RECOVERY_SPEC.schema_version
         assert analysis.generated_time.replace(tzinfo=UTC) == generated_time
+        assert analysis.calculated_at == calculated_before
+        assert analysis.structured_output == structured_before
         assert analysis.provider_metadata == {
             "provider": "test-provider",
             "provider_response_id": "response-1",
         }
         assert analysis.structured_output["analysis_spec"] == RECOVERY_SPEC.model_dump(mode="json")
-        recovery = analysis.structured_output["resolution_recovery"]
-        assert recovery["original_unresolved_assets"][0]["asset_name"] == "腾讯"
-        assert recovery["remaining_unresolved_assets"] == []
+        assert "resolution_recovery" not in analysis.structured_output
         assert raw_event is not None
         assert raw_event.content == content
         assert session.scalar(select(func.count()).select_from(InvestorAssetState)) == 0
@@ -181,6 +221,7 @@ def test_recovery_is_idempotent_and_reuses_existing_opinion(
         (("Tencent Holdings", "00700", "HK"),),
         (unresolved("腾讯"),),
         aliases=((0, "腾讯"),),
+        opinion_entries=(extracted("腾讯"),),
     )
     recovery = service(db_session_factory)
 
@@ -204,6 +245,7 @@ def test_recovery_can_select_analysis_by_event_and_version(
         (("Tencent Holdings", "00700", "HK"),),
         (unresolved("腾讯"),),
         aliases=((0, "腾讯"),),
+        opinion_entries=(extracted("腾讯"),),
     )
 
     result = service(db_session_factory).recover(
@@ -220,7 +262,8 @@ def test_unresolved_asset_remains_unresolved_without_creating_asset(
     analysis_id, _, _, _ = seed_analysis(
         db_session_factory,
         (),
-        (unresolved("不存在的资产"),),
+        (),
+        opinion_entries=(extracted("不存在的资产"),),
     )
 
     result = service(db_session_factory).recover(analysis_id=analysis_id)
@@ -232,6 +275,172 @@ def test_unresolved_asset_remains_unresolved_without_creating_asset(
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Asset)) == 0
         assert session.scalar(select(func.count()).select_from(Opinion)) == 0
+
+
+def test_dry_run_projects_without_materializing_or_mutating_analysis(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    analysis_id, _, generated_time, _ = seed_analysis(
+        db_session_factory,
+        (("Tencent Holdings", "00700", "HK"),),
+        (),
+        opinion_entries=(extracted("腾讯", symbol="00700", market="HK"),),
+    )
+    with db_session_factory() as session:
+        session.add(
+            AssetAlias(
+                asset_id=session.scalar(select(Asset.id)),
+                alias="腾讯",
+                normalized_alias="腾讯",
+                alias_type="NAME",
+                market="HK",
+            )
+        )
+        session.commit()
+
+    with db_session_factory() as session:
+        before = session.get(EventAnalysis, analysis_id)
+        assert before is not None
+        before_status = before.status
+        before_output = before.structured_output
+        before_calculated_at = before.calculated_at
+
+    result = service(db_session_factory).recover(analysis_id=analysis_id, dry_run=True)
+
+    assert result.dry_run
+    assert result.created_count == 0
+    assert result.projection.materializable_opinion_count == 1
+    assert result.calculated_at == generated_time
+    with db_session_factory() as session:
+        after = session.get(EventAnalysis, analysis_id)
+        assert after is not None
+        assert after.status is before_status
+        assert after.structured_output == before_output
+        assert after.calculated_at == before_calculated_at
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 0
+
+
+def test_allowlist_materializes_only_explicit_listing(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    analysis_id, _, _, _ = seed_analysis(
+        db_session_factory,
+        (("Tencent Holdings", "00700", "HK"), ("Other", "600000", "SH")),
+        (),
+        opinion_entries=(
+            extracted("腾讯", symbol="00700", market="HK"),
+            extracted("Other", symbol="600000", market="SH"),
+        ),
+    )
+    result = service(db_session_factory).recover(
+        analysis_id=analysis_id,
+        allowed_market_symbols={("HK", "00700")},
+    )
+
+    assert result.created_count == 1
+    assert result.projection.materializable_opinion_count == 1
+    assert result.projection.entries[0].materializable
+    assert result.projection.entries[1].outcome is AssetResolutionStatus.RESOLVED
+    assert result.projection.entries[1].materialization_blocked_reason == "NOT_ALLOWLISTED"
+    with db_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 1
+
+
+def test_delta_scope_plans_only_requested_events(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    _, event_id, _, _ = seed_analysis(
+        db_session_factory,
+        (("Tencent Holdings", "00700", "HK"),),
+        (),
+        opinion_entries=(extracted("腾讯", symbol="00700", market="HK"),),
+    )
+    plans = service(db_session_factory).plan_many(
+        event_ids=(event_id,),
+        analysis_version=RECOVERY_SPEC.analysis_version,
+    )
+
+    assert len(plans) == 1
+    assert plans[0].event_id == event_id
+    assert plans[0].projection.materializable_opinion_count == 1
+
+
+def test_cross_listing_name_only_resolution_stays_ambiguous(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    analysis_id, _, _, _ = seed_analysis(
+        db_session_factory,
+        (("CNOOC HK", "00883", "HK"), ("CNOOC SH", "600938", "SH")),
+        (),
+        aliases=((0, "中国海洋石油"), (1, "中国海洋石油")),
+        opinion_entries=(extracted("中国海洋石油"),),
+    )
+    result = service(db_session_factory).recover(analysis_id=analysis_id)
+
+    assert result.created_count == 0
+    assert result.projection.entries[0].outcome is AssetResolutionStatus.AMBIGUOUS
+    assert result.projection.materializable_opinion_count == 0
+    with db_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 0
+
+
+def test_synthetic_six_listing_projection_materializes_seven_delta_mentions(
+    db_session_factory: sessionmaker[Session],
+) -> None:
+    listings = (
+        ("焦作万方", "000612", "SZ"),
+        ("万国黄金集团", "03939", "HK"),
+        ("中国海洋石油", "00883", "HK"),
+        ("九毛九", "09922", "HK"),
+        ("会稽山", "601579", "SH"),
+        ("康方生物", "09926", "HK"),
+    )
+    targets = (
+        ("焦作万方", "SZ", "000612"),
+        ("焦作万方", "SZ", "000612"),
+        ("万国黄金集团", "HK", "03939"),
+        ("中国海洋石油", "HK", "00883"),
+        ("九毛九", "HK", "09922"),
+        ("会稽山", "SH", "601579"),
+        ("康方生物", "HK", "09926"),
+    )
+    event_ids: list[UUID] = []
+    analysis_ids: list[UUID] = []
+    for index, (name, market, symbol) in enumerate(targets):
+        analysis_id, event_id, _, _ = seed_analysis(
+            db_session_factory,
+            listings if index == 0 else (),
+            (),
+            opinion_entries=(extracted(name, market=market, symbol=symbol),),
+        )
+        analysis_ids.append(analysis_id)
+        event_ids.append(event_id)
+
+    materializer = service(db_session_factory)
+    allowlist = {(market, symbol) for _, market, symbol in targets}
+    first = materializer.materialize_many(
+        event_ids=tuple(event_ids),
+        analysis_version=RECOVERY_SPEC.analysis_version,
+        allowed_market_symbols=allowlist,
+    )
+    second = materializer.materialize_many(
+        analysis_ids=tuple(analysis_ids),
+        allowed_market_symbols=allowlist,
+    )
+
+    assert len(first) == 7
+    assert [item.created_count for item in first] == [1] * 7
+    assert [item.projection.currently_resolved_count for item in first] == [1] * 7
+    assert [item.created_count for item in second] == [0] * 7
+    assert [item.reused_count for item in second] == [1] * 7
+    with db_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Asset)) == 6
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 7
+        analyses = list(
+            session.scalars(select(EventAnalysis).where(EventAnalysis.id.in_(analysis_ids)))
+        )
+        assert len(analyses) == 7
+        assert all(item.status is EventAnalysisStatus.PARTIALLY_RESOLVED for item in analyses)
         analysis = session.get(EventAnalysis, analysis_id)
         assert analysis is not None
         assert analysis.status is EventAnalysisStatus.PARTIALLY_RESOLVED
@@ -243,8 +452,9 @@ def test_ambiguous_asset_remains_unresolved_with_candidates(
     analysis_id, _, _, _ = seed_analysis(
         db_session_factory,
         (("First", "F1", "HK"), ("Second", "F2", "HK")),
-        (unresolved("同名资产"),),
+        (),
         aliases=((0, "同名资产"), (1, "同名资产")),
+        opinion_entries=(extracted("同名资产"),),
     )
 
     result = service(db_session_factory).recover(analysis_id=analysis_id)
@@ -269,6 +479,14 @@ def test_resolved_identity_without_semantics_is_not_persisted(
 
     result = service(db_session_factory).recover(analysis_id=analysis_id)
 
-    assert result.status is AssetRecoveryStatus.UNRESOLVED
-    assert result.unresolved_assets[0].reason == "MISSING_OPINION_SEMANTICS"
+    assert result.status is AssetRecoveryStatus.NO_UNRESOLVED
+    assert result.projection.extracted_opinion_count == 0
+    assert result.projection.direct_unresolved_hint_count == 1
+    assert result.projection.entries[0].outcome is AssetResolutionStatus.RESOLVED
+    assert not result.projection.entries[0].materializable
     assert result.opinion_ids == ()
+    with db_session_factory() as session:
+        analysis = session.get(EventAnalysis, analysis_id)
+        assert analysis is not None
+        assert analysis.status is EventAnalysisStatus.PARTIALLY_RESOLVED
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 0

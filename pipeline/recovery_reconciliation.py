@@ -29,7 +29,7 @@ class AttentionRebuildPort(Protocol):
 
 
 class RecoveryReconciliationService:
-    """Coordinate deterministic recovery, state replay, and attention refresh."""
+    """Coordinate immutable resolution materialization, state replay, and attention refresh."""
 
     def __init__(
         self,

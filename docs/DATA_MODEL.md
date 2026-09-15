@@ -847,11 +847,29 @@ EventAnalysis
 0..N Opinion
 ```
 
-`EventAnalysis` is a recomputable derived result. Its identity is `event_id + analysis_version`, where `AnalysisSpec` centrally carries `analysis_version`, `model_version`, `prompt_version`, and `schema_version`.
+`EventAnalysis` is the immutable analysis-time artifact for `event_id + analysis_version`, where `AnalysisSpec` centrally carries `analysis_version`, `model_version`, `prompt_version`, and `schema_version`.
 
 `EventAnalysis.status` is one of `SUCCESS`, `NO_OPINION`, `PARTIALLY_RESOLVED`, or `FAILED`. `NO_OPINION`, unresolved assets, and failures are persisted. Failed results are retryable and may be updated by a later attempt; this Sprint intentionally does not create an attempt-history table.
 
-`PARTIALLY_RESOLVED` and `SUCCESS` describe the current resolution completeness of that analysis. Deterministic recovery may update the resolution status and `calculated_at`, but never changes the original LLM `generated_time` or extraction provenance.
+`PARTIALLY_RESOLVED` and `SUCCESS` record the outcome at Analysis persistence time. Asset recovery must not rewrite `status`, `calculated_at`, `structured_output`, `analysis_version`, or provider/model/prompt/schema metadata. A failed analysis may still be retried through the existing Analysis-ingestion retry path; that is separate from post-analysis Asset resolution.
+
+### Immutable Asset resolution materialization (Sprint 2I.8a)
+
+Later Asset Master expansion uses the immutable `structured_output` together
+with the current deterministic `AssetResolver` to build a query-time
+`CurrentAnalysisResolution` / `OpinionMaterializationPlan`. Only an extracted
+entry from `structured_output.opinions` may materialize an Opinion. Entries in
+`structured_output.unresolved_assets` that have no matching extracted Opinion
+are direct unresolved hints and never create an Opinion.
+
+Materialization is idempotent on the existing
+`event_id + asset_id + analysis_id` Opinion identity. It may create missing
+Opinions without changing the persisted Analysis status; for example, a
+historical `PARTIALLY_RESOLVED` row remains `PARTIALLY_RESOLVED` even when its
+current resolution projection has no unresolved extracted Opinions. No
+resolution snapshot table is introduced in this V0; current resolution is
+derived at query time and materialization can be constrained by an explicit
+Asset/listing allowlist and RawEvent/Analysis delta scope.
 
 New Opinions reference `EventAnalysis.id` through nullable `analysis_id`. The column remains nullable for legacy Opinions created before Sprint 1F; no synthetic historical EventAnalysis rows are created. All new Opinions written by `OpinionProcessingService` have a non-null `analysis_id`.
 

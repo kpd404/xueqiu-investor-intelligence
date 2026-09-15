@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from contracts import (
     AnalysisSpec,
+    AssetOpinionExtraction,
     EffectiveAnalysisPolicy,
     EventAnalysisStatus,
     OpinionDirection,
@@ -82,13 +83,14 @@ def test_recovery_reconciliation_uses_original_fact_time_and_is_idempotent(
         )
         session.add(event)
         session.flush()
-        unresolved = UnresolvedAsset(
+        extraction = AssetOpinionExtraction(
             asset_name="腾讯",
             direction=OpinionDirection.BULLISH,
             strength=75,
             confidence=0.8,
             thesis=("长期增长",),
         )
+        unresolved = UnresolvedAsset.from_extraction(extraction)
         analysis = EventAnalysis(
             event_id=event.id,
             analysis_version=ACTIVE_SPEC.analysis_version,
@@ -102,6 +104,7 @@ def test_recovery_reconciliation_uses_original_fact_time_and_is_idempotent(
             confidence=0.8,
             structured_output={
                 "analysis_spec": ACTIVE_SPEC.model_dump(mode="json"),
+                "opinions": [extraction.model_dump(mode="json")],
                 "unresolved_assets": [unresolved.model_dump(mode="json")],
             },
             provider_metadata={},

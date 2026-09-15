@@ -820,7 +820,22 @@ Dashboard display
 
 The Investment Understanding layer persists one `EventAnalysis` per `RawEvent + AnalysisSpec.analysis_version` before writing zero or more `Opinion` rows. `AnalysisSpec` is a neutral immutable contract; it carries model, prompt, schema, and logical analysis versions without introducing a live Prompt Registry.
 
-`NO_OPINION`, partial resolution, and failed extraction are valid lifecycle outcomes. A completed analysis is reused on the same identity. A failed analysis may be retried and updated; no Scheduler, Job, PipelineRun, Lease, or attempt-history infrastructure is introduced here.
+`NO_OPINION`, partial resolution, and failed extraction are valid lifecycle outcomes. A completed analysis is reused on the same identity. A failed analysis may be retried through the Analysis-ingestion path; post-analysis Asset recovery is not allowed to update an existing `EventAnalysis` row.
+
+### Immutable Analysis resolution materialization
+
+`EventAnalysis` is an analysis-time immutable artifact after persistence. Asset
+Master expansion is a separate deterministic boundary: the current Asset
+catalog is applied to the immutable `structured_output` to produce a
+query-time resolution projection, and only extracted entries from
+`structured_output.opinions` can be materialized as missing Opinions. Direct
+unresolved hints remain non-materializable. This path preserves the persisted
+Analysis status (including `PARTIALLY_RESOLVED`) and all Analysis metadata.
+
+The materialization service supports dry-run planning, explicit listing/Asset
+allowlists, and RawEvent/Analysis delta scopes. Opinion writes retain the
+existing `event_id + asset_id + analysis_id` idempotency boundary. There is no
+resolution persistence table or new migration in this V0.
 
 ### State boundary
 

@@ -2,7 +2,12 @@ import asyncio
 from uuid import uuid4
 
 from contracts import AnalysisProcessingError, EventAnalysisStatus
+from database.repositories import EventAnalysisRepository
 from pipeline import AnalysisBackfillRunner, AnalysisRecoveryCandidate, AnalysisRecoveryRunner
+
+
+def test_event_analysis_repository_has_no_post_analysis_recovery_mutation_api() -> None:
+    assert not hasattr(EventAnalysisRepository, "update_recovery")
 
 
 def test_analysis_recovery_runner_only_attempts_active_failed_candidates() -> None:

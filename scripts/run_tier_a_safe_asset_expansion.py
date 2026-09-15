@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -104,11 +103,6 @@ def _load_current_analyses(session: Any, analysis_version: str) -> list[Any]:
 def _original_unresolved(analysis: EventAnalysis) -> tuple[UnresolvedAsset, ...]:
     output = analysis.structured_output if isinstance(analysis.structured_output, dict) else {}
     values: object = output.get("unresolved_assets", [])
-    recovery = output.get("resolution_recovery")
-    if isinstance(recovery, Mapping) and isinstance(
-        recovery.get("original_unresolved_assets"), list
-    ):
-        values = recovery["original_unresolved_assets"]
     if not isinstance(values, list):
         return ()
     return tuple(UnresolvedAsset.model_validate(value) for value in values)

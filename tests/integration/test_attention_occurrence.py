@@ -143,7 +143,7 @@ def test_one_event_with_three_evidence_types_is_one_occurrence(
 
     assert first.created_count == 1
     assert second.created_count == 0
-    assert second.updated_count == 1
+    assert second.updated_count == 0
     assert first.occurrence_ids == second.occurrence_ids
     with db_session_factory() as session:
         rows = AttentionOccurrenceRepository(session).list_by_event(

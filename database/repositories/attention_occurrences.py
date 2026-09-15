@@ -82,10 +82,23 @@ class AttentionOccurrenceRepository:
                 self._session.add(entity)
                 created_count += 1
             else:
+                command_evidence_types = [value.value for value in command.evidence_types]
+                command_evidence = [value.model_dump(mode="json") for value in command.evidence]
+                unchanged = (
+                    entity.investor_id == command.investor_id
+                    and self._as_utc(entity.published_time) == self._as_utc(command.published_time)
+                    and entity.evidence_types == command_evidence_types
+                    and entity.evidence == command_evidence
+                    and entity.analysis_id == command.analysis_id
+                    and entity.opinion_id == command.opinion_id
+                )
+                if unchanged:
+                    occurrence_ids.append(entity.id)
+                    continue
                 entity.investor_id = command.investor_id
                 entity.published_time = command.published_time
-                entity.evidence_types = [value.value for value in command.evidence_types]
-                entity.evidence = [value.model_dump(mode="json") for value in command.evidence]
+                entity.evidence_types = command_evidence_types
+                entity.evidence = command_evidence
                 entity.analysis_id = command.analysis_id
                 entity.opinion_id = command.opinion_id
                 entity.calculated_at = command.calculated_at

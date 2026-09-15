@@ -9,6 +9,7 @@ from ai import MockOpinionExtractor, OpinionProcessingService
 from collectors import ManualImportAdapter
 from contracts import (
     AnalysisSpec,
+    AssetOpinionExtraction,
     CollectionRequest,
     EventAnalysisStatus,
     OpinionDirection,
@@ -159,6 +160,14 @@ def test_recovered_analysis_result_excludes_other_analysis_opinion(
         session.add(raw_event)
         session.flush()
         spec_recovery = analysis_spec("recovery-provider")
+        extraction = AssetOpinionExtraction(
+            asset_name="腾讯",
+            direction=OpinionDirection.BULLISH,
+            strength=70,
+            confidence=0.8,
+            thesis=("商业化",),
+        )
+        unresolved = UnresolvedAsset.from_extraction(extraction)
         analysis = EventAnalysis(
             event_id=raw_event.id,
             analysis_version=spec_recovery.analysis_version,
@@ -173,16 +182,8 @@ def test_recovered_analysis_result_excludes_other_analysis_opinion(
             structured_output={
                 "analysis_spec": spec_recovery.model_dump(mode="json"),
                 "investment_related": True,
-                "opinions": [],
-                "unresolved_assets": [
-                    UnresolvedAsset(
-                        asset_name="腾讯",
-                        direction=OpinionDirection.BULLISH,
-                        strength=70,
-                        confidence=0.8,
-                        thesis=("商业化",),
-                    ).model_dump(mode="json")
-                ],
+                "opinions": [extraction.model_dump(mode="json")],
+                "unresolved_assets": [unresolved.model_dump(mode="json")],
             },
             provider_metadata={"provider": "recovery-provider"},
         )
@@ -240,5 +241,5 @@ def test_recovered_analysis_result_excludes_other_analysis_opinion(
     reread = reread_with_never_called(db_session_factory, event_id, spec_recovery)
 
     assert recovered.opinion_ids
-    assert reread.status is OpinionProcessingStatus.ALREADY_PROCESSED
+    assert reread.status is OpinionProcessingStatus.PARTIALLY_RESOLVED
     assert reread.opinion_ids == recovered.opinion_ids

@@ -1,7 +1,11 @@
 """Source-neutral deterministic identity resolution services."""
 
 from resolution.asset_resolver import AssetLookup, AssetResolver
-from resolution.recovery import AssetRecoveryNotFoundError, AssetRecoveryService
+from resolution.recovery import (
+    AssetRecoveryNotFoundError,
+    AssetRecoveryService,
+    OpinionMaterializationService,
+)
 from resolution.unresolved_audit import (
     AssetCatalogIdentity,
     UnresolvedReference,
@@ -17,6 +21,7 @@ __all__ = [
     "AssetResolver",
     "AssetRecoveryNotFoundError",
     "AssetRecoveryService",
+    "OpinionMaterializationService",
     "AssetCatalogIdentity",
     "UnresolvedReference",
     "UnresolvedReferenceAggregate",
