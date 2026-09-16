@@ -167,6 +167,18 @@ class InvestorIntelligenceService:
             for value in (investor_view.latest_attention_time, investor_view.latest_opinion_time)
             if value is not None
         ]
+        latest_thesis_entry = (
+            next(
+                (
+                    entry
+                    for entry in reversed(investor_view.thesis_timeline.entries)
+                    if entry.thesis_change_type is not None
+                ),
+                None,
+            )
+            if investor_view.thesis_timeline is not None
+            else None
+        )
         return InvestorAssetIntelligenceSummary(
             asset_id=asset_view.asset_id,
             asset_name=asset_view.asset_name,
@@ -197,6 +209,25 @@ class InvestorIntelligenceService:
                 opinion_investor_count - (1 if investor_view.opinion_count > 0 else 0),
             ),
             latest_evidence_time=max(evidence_times) if evidence_times else None,
+            latest_thesis=(
+                investor_view.thesis_timeline.entries[-1].thesis
+                if investor_view.thesis_timeline is not None
+                else ()
+            ),
+            latest_opinion_id=(
+                investor_view.thesis_timeline.entries[-1].opinion_id
+                if investor_view.thesis_timeline is not None
+                else None
+            ),
+            latest_thesis_change_id=(
+                latest_thesis_entry.thesis_change_id if latest_thesis_entry is not None else None
+            ),
+            latest_thesis_change_type=(
+                latest_thesis_entry.thesis_change_type if latest_thesis_entry is not None else None
+            ),
+            latest_thesis_change_time=(
+                latest_thesis_entry.thesis_change_time if latest_thesis_entry is not None else None
+            ),
             alignment=(
                 asset_view.alignment.directional_alignment_state if asset_view.alignment else None
             ),

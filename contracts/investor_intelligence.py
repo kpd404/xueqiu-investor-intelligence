@@ -54,6 +54,11 @@ class InvestorAssetIntelligenceSummary(BaseModel):
     shared_attention_investor_count: int = Field(ge=0)
     shared_opinion_investor_count: int = Field(ge=0)
     latest_evidence_time: AwareDatetime | None = None
+    latest_thesis: tuple[str, ...] = ()
+    latest_opinion_id: UUID | None = None
+    latest_thesis_change_id: UUID | None = None
+    latest_thesis_change_type: str | None = None
+    latest_thesis_change_time: AwareDatetime | None = None
     alignment: DirectionalAlignmentState | None = None
     consensus: ConsensusEvidenceState | None = None
 

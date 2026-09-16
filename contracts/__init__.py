@@ -132,6 +132,28 @@ from contracts.intelligence import (
     InvestorStateAggregationInput,
     InvestorStateContribution,
 )
+from contracts.intelligence_event import (
+    IntelligenceEventCreate,
+    IntelligenceEventEvidenceCreate,
+    IntelligenceEventEvidenceView,
+    IntelligenceEventGenerationResult,
+    IntelligenceEventState,
+    IntelligenceEventType,
+    IntelligenceEventView,
+)
+from contracts.intelligence_feed import (
+    FeedItem,
+    FeedItemCreate,
+    FeedState,
+    IntelligenceFeedGenerationResult,
+)
+from contracts.intelligence_priority import (
+    IntelligenceEventPriorityCreate,
+    IntelligenceEventPriorityView,
+    IntelligencePriorityGenerationResult,
+    IntelligencePriorityLevel,
+    IntelligencePriorityReason,
+)
 from contracts.investor_intelligence import (
     INVESTOR_INTELLIGENCE_LIMITATION_ABSENCE_INFERENCE,
     INVESTOR_INTELLIGENCE_LIMITATION_COLLECTION_PROVENANCE,
@@ -221,6 +243,14 @@ from contracts.resolution_materialization import (
     CurrentAnalysisResolutionEntry,
     OpinionMaterializationPlan,
     ResolutionEntrySource,
+)
+from contracts.signal import (
+    SignalCreate,
+    SignalGenerationResult,
+    SignalSeverity,
+    SignalState,
+    SignalType,
+    SignalView,
 )
 from contracts.state import (
     STATE_POLICY_VERSION,
@@ -443,6 +473,28 @@ __all__ = [
     "ThesisEvolutionEntry",
     "ThesisEvolutionOpinionView",
     "ThesisEvolutionTimeline",
+    "SignalCreate",
+    "SignalGenerationResult",
+    "SignalSeverity",
+    "SignalState",
+    "SignalType",
+    "SignalView",
+    "IntelligenceEventCreate",
+    "IntelligenceEventEvidenceCreate",
+    "IntelligenceEventEvidenceView",
+    "IntelligenceEventGenerationResult",
+    "IntelligenceEventState",
+    "IntelligenceEventType",
+    "IntelligenceEventView",
+    "IntelligenceEventPriorityCreate",
+    "IntelligenceEventPriorityView",
+    "IntelligencePriorityGenerationResult",
+    "IntelligencePriorityLevel",
+    "IntelligencePriorityReason",
+    "FeedItem",
+    "FeedItemCreate",
+    "FeedState",
+    "IntelligenceFeedGenerationResult",
     "InvestorAssetStateSnapshot",
     "LEGACY_PROVIDER_ID",
     "UnresolvedAsset",

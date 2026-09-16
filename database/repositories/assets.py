@@ -13,6 +13,10 @@ class AssetRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def list(self) -> tuple[Asset, ...]:
+        statement = select(Asset).order_by(Asset.name, Asset.market, Asset.symbol, Asset.id)
+        return tuple(self._session.scalars(statement))
+
     def get(self, asset_id: UUID) -> Asset | None:
         return self._session.get(Asset, asset_id)
 

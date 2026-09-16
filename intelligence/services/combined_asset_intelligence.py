@@ -369,6 +369,8 @@ class CombinedAssetIntelligenceService:
         ],
     ) -> CombinedAssetIntelligenceView:
         snapshot, alignment, consensus = cross_context
+        if not isinstance(snapshot, CrossInvestorAssetSnapshotView):
+            snapshot = None
         attention = sorted(
             attention,
             key=lambda value: (self._utc(value.published_time), value.id.int),
@@ -414,6 +416,7 @@ class CombinedAssetIntelligenceService:
             attention_summary=summary,
             observed_attention_sequence=sequence,
             investor_views=investor_views,
+            snapshot=snapshot,
             alignment=alignment,
             consensus=consensus,
             data_quality=data_quality,

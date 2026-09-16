@@ -12,6 +12,18 @@ from database.repositories.cross_investor_consensus_evidences import (
     CrossInvestorConsensusEvidenceRepository,
 )
 from database.repositories.event_analyses import EventAnalysisRepository
+from database.repositories.intelligence_event_evidence import (
+    IntelligenceEventEvidenceRepository,
+)
+from database.repositories.intelligence_event_priorities import (
+    IntelligenceEventPriorityRepository,
+)
+from database.repositories.intelligence_events import (
+    IntelligenceEventRepository,
+)
+from database.repositories.intelligence_feed_items import (
+    IntelligenceFeedItemRepository,
+)
 from database.repositories.investor_action_claims import InvestorActionClaimRepository
 from database.repositories.investor_action_consistency import InvestorActionConsistencyRepository
 from database.repositories.investor_asset_states import InvestorAssetStateRepository
@@ -35,6 +47,10 @@ __all__ = [
     "CrossInvestorAssetSnapshotRepository",
     "CrossInvestorConsensusEvidenceRepository",
     "EventAnalysisRepository",
+    "IntelligenceEventEvidenceRepository",
+    "IntelligenceEventRepository",
+    "IntelligenceEventPriorityRepository",
+    "IntelligenceFeedItemRepository",
     "InvestorAssetStateChangeRepository",
     "InvestorAssetStateRepository",
     "InvestorActionClaimRepository",

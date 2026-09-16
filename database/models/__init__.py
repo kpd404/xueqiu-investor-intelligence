@@ -10,6 +10,10 @@ from database.models.cross_investor_asset_alignment import CrossInvestorAssetAli
 from database.models.cross_investor_asset_snapshot import CrossInvestorAssetSnapshot
 from database.models.cross_investor_consensus_evidence import CrossInvestorConsensusEvidence
 from database.models.event_analysis import EventAnalysis
+from database.models.intelligence_event import IntelligenceEvent
+from database.models.intelligence_event_evidence import IntelligenceEventEvidence
+from database.models.intelligence_event_priority import IntelligenceEventPriority
+from database.models.intelligence_feed_item import IntelligenceFeedItem
 from database.models.investor import Investor
 from database.models.investor_action_claim import InvestorActionClaim
 from database.models.investor_action_consistency import InvestorActionConsistency
@@ -36,6 +40,10 @@ __all__ = [
     "CrossInvestorConsensusEvidence",
     "CrossInvestorAssetSnapshot",
     "EventAnalysis",
+    "IntelligenceEvent",
+    "IntelligenceEventEvidence",
+    "IntelligenceEventPriority",
+    "IntelligenceFeedItem",
     "Investor",
     "InvestorActionClaim",
     "InvestorActionConsistency",

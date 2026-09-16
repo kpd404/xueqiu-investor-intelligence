@@ -26,6 +26,9 @@ from intelligence.services.cross_investor_consensus_evidence import (
     CrossInvestorConsensusEvidenceService,
     CrossInvestorConsensusSnapshotNotFoundError,
 )
+from intelligence.services.intelligence_service import (
+    IntelligenceQueryService,
+)
 from intelligence.services.investor_intelligence import (
     InvestorIntelligenceInvestorNotFoundError,
     InvestorIntelligenceService,
@@ -70,6 +73,7 @@ __all__ = [
     "ObservedAttentionPropagationService",
     "InvestorIntelligenceInvestorNotFoundError",
     "InvestorIntelligenceService",
+    "IntelligenceQueryService",
     "StateUpdateService",
     "ThesisChangeService",
     "ThesisEventNotFoundError",

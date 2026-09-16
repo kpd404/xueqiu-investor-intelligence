@@ -12,6 +12,10 @@ from database.repositories import (
     CrossInvestorAssetSnapshotRepository,
     CrossInvestorConsensusEvidenceRepository,
     EventAnalysisRepository,
+    IntelligenceEventEvidenceRepository,
+    IntelligenceEventPriorityRepository,
+    IntelligenceEventRepository,
+    IntelligenceFeedItemRepository,
     InvestorActionClaimRepository,
     InvestorActionConsistencyRepository,
     InvestorAssetStateChangeRepository,
@@ -27,6 +31,7 @@ from database.repositories import (
     ThesisChangeRepository,
 )
 from resolution import AssetResolver
+from signal_engine.repository import SignalRepository
 
 
 class SqlAlchemyOpinionUnitOfWork:
@@ -488,6 +493,118 @@ class SqlAlchemyObservedAttentionUnitOfWork:
         self._session.rollback()
         self._session.close()
         self._session = None
+
+
+class SqlAlchemyIntelligenceEventUnitOfWork:
+    """Transactional scope for Signal-to-IntelligenceEvent aggregation."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+        self._committed = False
+
+    def __enter__(self) -> "SqlAlchemyIntelligenceEventUnitOfWork":
+        self._session = self._session_factory()
+        self._committed = False
+        self.signals = SignalRepository(self._session)
+        self.intelligence_events = IntelligenceEventRepository(self._session)
+        self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        if exc_type is not None or not self._committed:
+            self._session.rollback()
+        self._session.close()
+        self._session = None
+
+    def commit(self) -> None:
+        if self._session is None:
+            raise RuntimeError("unit of work is not active")
+        self._session.commit()
+        self._committed = True
+
+
+class SqlAlchemyIntelligencePriorityUnitOfWork:
+    """Transactional scope for IntelligenceEvent priority materialization."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+        self._committed = False
+
+    def __enter__(self) -> "SqlAlchemyIntelligencePriorityUnitOfWork":
+        self._session = self._session_factory()
+        self._committed = False
+        self.intelligence_events = IntelligenceEventRepository(self._session)
+        self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
+        self.intelligence_event_priorities = IntelligenceEventPriorityRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        if exc_type is not None or not self._committed:
+            self._session.rollback()
+        self._session.close()
+        self._session = None
+
+    def commit(self) -> None:
+        if self._session is None:
+            raise RuntimeError("unit of work is not active")
+        self._session.commit()
+        self._committed = True
+
+
+class SqlAlchemyIntelligenceFeedUnitOfWork:
+    """Transactional scope for Intelligence Feed projection materialization."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+        self._committed = False
+
+    def __enter__(self) -> "SqlAlchemyIntelligenceFeedUnitOfWork":
+        self._session = self._session_factory()
+        self._committed = False
+        self.intelligence_event_priorities = IntelligenceEventPriorityRepository(self._session)
+        self.intelligence_events = IntelligenceEventRepository(self._session)
+        self.assets = AssetRepository(self._session)
+        self.investors = InvestorRepository(self._session)
+        self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
+        self.signals = SignalRepository(self._session)
+        self.intelligence_feed_items = IntelligenceFeedItemRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        if exc_type is not None or not self._committed:
+            self._session.rollback()
+        self._session.close()
+        self._session = None
+
+    def commit(self) -> None:
+        if self._session is None:
+            raise RuntimeError("unit of work is not active")
+        self._session.commit()
+        self._committed = True
 
 
 class SqlAlchemyCollectionProvenanceUnitOfWork:

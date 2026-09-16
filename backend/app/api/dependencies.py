@@ -5,9 +5,12 @@ from sqlalchemy.orm import Session
 
 from database.session import SessionFactory
 from database.unit_of_work import SqlAlchemyObservedAttentionUnitOfWork
+from intelligence.discovery.service import IntelligenceDiscoveryService
+from intelligence.feed.query import IntelligenceFeedQueryService
 from intelligence.services.combined_asset_intelligence import (
     CombinedAssetIntelligenceService,
 )
+from intelligence.services.intelligence_service import IntelligenceQueryService
 from intelligence.services.investor_intelligence import InvestorIntelligenceService
 
 
@@ -42,3 +45,37 @@ def get_investor_intelligence_service() -> InvestorIntelligenceService:
         return SqlAlchemyObservedAttentionUnitOfWork(_read_only_session)
 
     return InvestorIntelligenceService.from_production(unit_of_work_factory)
+
+
+def get_intelligence_query_service() -> IntelligenceQueryService:
+    # Compose the Query Layer with rollback-only read scopes.
+
+    def unit_of_work_factory() -> SqlAlchemyObservedAttentionUnitOfWork:
+        return SqlAlchemyObservedAttentionUnitOfWork(_read_only_session)
+
+    return IntelligenceQueryService.from_production(
+        unit_of_work_factory,
+        _read_only_session,
+    )
+
+
+def get_intelligence_feed_query_service() -> IntelligenceFeedQueryService:
+    """Compose the Feed Query Layer with a rollback-only read scope."""
+
+    from database.unit_of_work import SqlAlchemyIntelligenceFeedUnitOfWork
+
+    def unit_of_work_factory() -> SqlAlchemyIntelligenceFeedUnitOfWork:
+        return SqlAlchemyIntelligenceFeedUnitOfWork(_read_only_session)
+
+    return IntelligenceFeedQueryService(unit_of_work_factory)
+
+
+def get_intelligence_discovery_service() -> IntelligenceDiscoveryService:
+    """Compose Discovery from the same rollback-only production read scope."""
+
+    from database.unit_of_work import SqlAlchemyIntelligenceFeedUnitOfWork
+
+    def unit_of_work_factory() -> SqlAlchemyIntelligenceFeedUnitOfWork:
+        return SqlAlchemyIntelligenceFeedUnitOfWork(_read_only_session)
+
+    return IntelligenceDiscoveryService(unit_of_work_factory)

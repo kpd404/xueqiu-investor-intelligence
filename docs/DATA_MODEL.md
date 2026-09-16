@@ -677,33 +677,29 @@ EXITED
 
 ### Purpose
 
-最终研究信号。
+由已有 immutable evidence 生成的 observable-intelligence event，不是事实层，也不是买卖推荐或排序结果。
 
 ### Table
 
-`signals`
+signals
 
 ### Fields
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `id` | UUID | Primary Key |
-| `asset_id` | UUID | 投资标的 |
-| `signal_score` | float | 信号分数 |
-| `signal_level` | string | 信号等级 |
-| `tags` | JSON | 信号标签 |
-| `reasons` | JSON | 信号依据 |
-| `risks` | JSON | 风险因素 |
-| `created_at` | timestamp | 创建时间 |
+| id | UUID | Primary Key |
+| asset_id | UUID | 关联 Asset |
+| investor_id | UUID nullable | 可选的关联 Investor |
+| signal_type | string | NEW_ATTENTION / THESIS_CHANGE / CROSS_INVESTOR_ALIGNMENT / CONSENSUS_CHANGE |
+| state | string | ACTIVE / RESOLVED / SUPERSEDED |
+| severity | string | LOW / MEDIUM / HIGH；V0 仅保留字段，不计算 score |
+| source_type | string | 来源 artifact 类型 |
+| source_id | UUID | 来源 artifact ID |
+| created_at | timestamp | Signal 创建时间 |
+| observed_at | timestamp | 来源 evidence 观察时间 |
+| metadata | JSON | 可解释的来源上下文 |
 
-### Signal Level
-
-```text
-STRONG_SIGNAL
-HIGH_PRIORITY_RESEARCH
-WATCH
-LOW_PRIORITY
-```
+Signal 的唯一身份是 (signal_type, source_id)。Signal 不包含 signal_score、ranking 或 recommendation 语义。
 
 ---
 
@@ -1000,3 +996,23 @@ identity, source Alignment input identity, and Consensus policy version.
 Identical inputs reuse one row; new source or policy inputs append a new row.
 No score, weighting, ranking, Momentum, Warming, Signal, or LLM logic belongs
 to this artifact.
+
+## IntelligenceEvent and IntelligenceEventEvidence
+
+IntelligenceEvent is a derived aggregate over atomic Signals.
+
+The identity is (event_type, asset_id). Supported event types are ASSET_ACTIVITY_SPIKE, INVESTOR_VIEW_CHANGE, CROSS_INVESTOR_DISCOVERY, and CONSENSUS_STATE_CHANGE. State is ACTIVE or RESOLVED. The event stores first/last observed times and deterministic metadata.
+
+IntelligenceEventEvidence links each aggregate to its contributing Signal by (event_id, signal_id). This preserves the chain from an aggregate event to the Signal source and then to the original AttentionOccurrence, ThesisChange, CrossInvestorAssetAlignment, or CrossInvestorConsensusEvidence artifact. Neither table adds score, ranking, recommendation, or LLM semantics.
+
+## IntelligenceEventPriority
+
+IntelligenceEventPriority is a derived, deterministic observation-priority row for one IntelligenceEvent.
+
+The table stores event_id, priority_level (LOW/MEDIUM/HIGH), reason, evidence_count, and created_at. event_id is unique. Priority is not a score, ranking, recommendation, prediction, or trading instruction; it is a compact explanation of which existing IntelligenceEvent may deserve closer observation.
+
+## IntelligenceFeedItem
+
+IntelligenceFeedItem is a user-facing projection of one IntelligenceEventPriority. Its unique identity is priority_id. It stores asset_id, event_type, deterministic title, compact context JSON, reason, FeedState, observed_at, and created_at.
+
+It is presentation data only. It does not add ranking, score, recommendation, prediction, or new intelligence semantics.

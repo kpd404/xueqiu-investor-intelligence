@@ -978,3 +978,53 @@ equivalent to Consensus `DIVERGENT`.
 
 This layer does not calculate a score, weight Investors, rank Assets, calculate
 Momentum/Warming, call an LLM, or produce a Signal or Research Candidate.
+
+## Intelligence Query Layer V0
+
+The Intelligence Query Layer is a read-only adapter over the existing effective RawEvent, EventAnalysis, Opinion, AttentionOccurrence, ThesisChange, and Cross-Investor artifacts. It exposes Investor and Asset projections without creating a second semantic pipeline or persistence model.
+
+The Asset projection reads persisted Snapshot, Alignment, and Consensus state; it does not recompute Consensus from Opinion counts. Thesis entries are ordered by fact-time published/effective time and retain their existing change type. Historical completeness remains UNKNOWN and absence inference remains unsupported.
+
+The Query Layer exposes /api/intelligence/investors/{investor_id}, /api/intelligence/assets/{asset_id}, and /api/intelligence/search. Search uses bounded batch identity queries and preserves market+symbol listing identity.
+
+SignalCandidateView is a non-persisted, deterministic projection of existing Attention, ThesisChange, Cross-Investor, and Consensus evidence. No Signal table, score, ranking, recommendation, or LLM call is part of this layer.
+
+## Signal Engine V0
+
+The Signal Layer sits after the immutable fact and Query layers:
+
+    RawEvent / EventAnalysis / Opinion / Attention / Thesis / Cross-Investor
+                                      ↓
+                              Intelligence Query Layer
+                                      ↓
+                              Signal Engine V0
+
+Signal is derived observable intelligence, not a source fact and not a recommendation. V0 generates only deterministic evidence-backed types: NEW_ATTENTION from the first effective Investor × Asset AttentionOccurrence, THESIS_CHANGE from effective ThesisChange artifacts, CROSS_INVESTOR_ALIGNMENT from non-insufficient persisted Alignment artifacts, and CONSENSUS_CHANGE from persisted Consensus states that are DIVERGENT or a Consensus state.
+
+Each Signal stores its Asset, optional Investor, source artifact type and ID, observed time, lifecycle state, severity field, and metadata. The unique identity is (signal_type, source_id), so repeated generation reuses the same Signal. The source artifacts are never rewritten.
+
+The legacy score-oriented signals table was empty and is replaced by the Signal evidence schema through migration 20260916_0020 with a non-empty safety guard. No signal_score, ranking, recommendation, or LLM logic is part of Signal Engine V0. Signal lifecycle state is persisted, while future resolution/supersession policy remains a separate explicit step.
+
+## Intelligence Event Aggregation V0
+
+IntelligenceEvent is an aggregate derived from existing atomic Signal rows. The aggregation layer reads active Signals and creates only four deterministic event types: ASSET_ACTIVITY_SPIKE, INVESTOR_VIEW_CHANGE, CROSS_INVESTOR_DISCOVERY, and CONSENSUS_STATE_CHANGE.
+
+Each aggregate is scoped by event type and Asset and is linked to every contributing Signal through IntelligenceEventEvidence. The complete audit chain is IntelligenceEvent → Signal → source artifact. Signal, Opinion, Attention, Thesis, and Cross-Investor artifacts are never rewritten.
+
+The aggregation layer has no LLM, recommendation, ranking, score, or trading semantics. Event state is ACTIVE or RESOLVED; V0 materializes ACTIVE events and leaves later lifecycle transitions to an explicit policy.
+
+## Intelligence Priority Layer V0
+
+Intelligence Priority is a derived observation-priority classification over IntelligenceEvent. It does not alter Signal or any upstream fact/interpretation artifact.
+
+V0 assigns a fixed PriorityLevel and PriorityReason from deterministic event facts: an ASSET_ACTIVITY_SPIKE with at least three observed Investors is MULTI_INVESTOR_ATTENTION/HIGH; an INVESTOR_VIEW_CHANGE with multiple ThesisChange evidence is THESIS_ACCELERATION/MEDIUM; CROSS_INVESTOR_DISCOVERY is LOW; and CONSENSUS_STATE_CHANGE is HIGH. These levels are explainable observation classes, not scores, rankings, recommendations, or trading advice.
+
+Each IntelligenceEvent has at most one priority row and the row stores the linked event and its evidence count. The persistence identity is event_id; repeated materialization reuses the existing row.
+
+## Intelligence Feed Projection V0
+
+The Intelligence Feed is a presentation projection over IntelligenceEvent and IntelligenceEventPriority. Each FeedItem is keyed by one Priority and retains its Asset, event type, reason, observed time, deterministic title, and compact context counts.
+
+Context is derived from the linked IntelligenceEventEvidence and Signal rows: investor_count is the distinct Investors represented by the Signals, signal_count is the linked Signal count, and source_count is the distinct source artifact identity count. The full chain remains FeedItem → Priority → IntelligenceEvent → Evidence → Signal → source artifact.
+
+Feed state is NEW, ACTIVE, STALE, or RESOLVED. V0 creates NEW items and does not rank, score, recommend, predict, call an LLM, or mutate any upstream artifact.

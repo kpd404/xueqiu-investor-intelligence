@@ -8,6 +8,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 from contracts.attention import AttentionEvidenceType
 from contracts.cross_investor import (
     CrossInvestorAssetAlignmentView,
+    CrossInvestorAssetSnapshotView,
     CrossInvestorConsensusEvidenceView,
     OpinionCoverageState,
 )
@@ -155,6 +156,7 @@ class CombinedAssetIntelligenceView(BaseModel):
     attention_summary: CombinedAssetAttentionSummary
     observed_attention_sequence: ObservedAttentionSequence | None = None
     investor_views: tuple[CombinedAssetInvestorView, ...] = ()
+    snapshot: CrossInvestorAssetSnapshotView | None = None
     alignment: CrossInvestorAssetAlignmentView | None = None
     consensus: CrossInvestorConsensusEvidenceView | None = None
     data_quality: CombinedAssetDataQuality
@@ -175,6 +177,8 @@ class CombinedAssetIntelligenceView(BaseModel):
         if self.observed_attention_sequence is not None:
             if self.observed_attention_sequence.asset_id != self.asset_id:
                 raise ValueError("Attention sequence must belong to the view Asset")
+        if self.snapshot is not None and self.snapshot.asset_id != self.asset_id:
+            raise ValueError("Snapshot must belong to the view Asset")
         if self.alignment is not None and self.alignment.asset_id != self.asset_id:
             raise ValueError("Alignment must belong to the view Asset")
         if self.consensus is not None and self.consensus.asset_id != self.asset_id:

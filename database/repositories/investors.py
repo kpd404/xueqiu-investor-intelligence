@@ -11,6 +11,10 @@ class InvestorRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def list(self) -> tuple[Investor, ...]:
+        statement = select(Investor).order_by(Investor.name, Investor.id)
+        return tuple(self._session.scalars(statement))
+
     def get(self, investor_id: UUID) -> Investor | None:
         return self._session.get(Investor, investor_id)
 
