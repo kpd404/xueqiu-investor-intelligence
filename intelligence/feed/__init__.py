@@ -1,5 +1,12 @@
 """Deterministic, read-side Intelligence Feed projection."""
 
+from intelligence.feed.lifecycle import (
+    FeedLifecyclePlan,
+    FeedLifecyclePolicy,
+    FeedLifecycleResult,
+    FeedLifecycleService,
+    FeedLifecycleTransition,
+)
 from intelligence.feed.query import (
     FeedAssetNotFoundError,
     FeedInvestorNotFoundError,
@@ -11,5 +18,10 @@ __all__ = [
     "FeedAssetNotFoundError",
     "FeedInvestorNotFoundError",
     "IntelligenceFeedQueryService",
+    "FeedLifecyclePlan",
+    "FeedLifecyclePolicy",
+    "FeedLifecycleResult",
+    "FeedLifecycleService",
+    "FeedLifecycleTransition",
     "IntelligenceFeedService",
 ]

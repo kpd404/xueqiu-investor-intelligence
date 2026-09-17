@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import FeedItem, FeedItemCreate
+from contracts import FeedItem, FeedItemCreate, FeedState
 from database.models.intelligence_feed_item import IntelligenceFeedItem
 
 
@@ -60,6 +60,16 @@ class IntelligenceFeedItemRepository:
             IntelligenceFeedItem.id,
         )
         return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
+
+    def update_state(self, feed_item_id: UUID, state: FeedState) -> FeedItem:
+        """Update only lifecycle state; identity and evidence stay fixed."""
+
+        entity = self._session.get(IntelligenceFeedItem, feed_item_id)
+        if entity is None:
+            raise LookupError(f"FeedItem not found: {feed_item_id}")
+        entity.state = state.value
+        self._session.flush()
+        return self._to_view(entity)
 
     @classmethod
     def _to_view(cls, entity: IntelligenceFeedItem | None) -> FeedItem | None:

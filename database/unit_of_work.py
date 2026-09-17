@@ -585,6 +585,12 @@ class SqlAlchemyIntelligenceFeedUnitOfWork:
         self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
         self.signals = SignalRepository(self._session)
         self.intelligence_feed_items = IntelligenceFeedItemRepository(self._session)
+        self.thesis_changes = ThesisChangeRepository(self._session)
+        self.cross_investor_asset_snapshots = CrossInvestorAssetSnapshotRepository(self._session)
+        self.cross_investor_asset_alignments = CrossInvestorAssetAlignmentRepository(self._session)
+        self.cross_investor_consensus_evidences = CrossInvestorConsensusEvidenceRepository(
+            self._session
+        )
         return self
 
     def __exit__(

@@ -1028,3 +1028,65 @@ The Intelligence Feed is a presentation projection over IntelligenceEvent and In
 Context is derived from the linked IntelligenceEventEvidence and Signal rows: investor_count is the distinct Investors represented by the Signals, signal_count is the linked Signal count, and source_count is the distinct source artifact identity count. The full chain remains FeedItem → Priority → IntelligenceEvent → Evidence → Signal → source artifact.
 
 Feed state is NEW, ACTIVE, STALE, or RESOLVED. V0 creates NEW items and does not rank, score, recommend, predict, call an LLM, or mutate any upstream artifact.
+
+
+## Intelligence Discovery Candidate V1
+
+The Intelligence Discovery layer is a read-only, deterministic projection over
+ACTIVE IntelligenceFeedItem rows and their Priority -> IntelligenceEvent ->
+IntelligenceEventEvidence -> Signal chain. It emits one non-persisted candidate
+per Asset with listing identity, distinct investor/signal/event/feed counts,
+event and priority summaries, fact-time bounds, and explicit discovery reasons.
+
+Discovery ordering is latest_observed_at descending for temporal browsing only.
+It has no score, rank, weight, recommendation, investment-advice, or LLM
+semantics, and it never mutates FeedItem or any upstream artifact.
+
+
+## Intelligence Narrative Layer V0
+
+The Narrative layer is a query-time, read-only template projection over an
+existing DiscoveryCandidate. It describes observed Asset activity using the
+existing FeedItem -> Priority -> IntelligenceEvent -> Evidence -> Signal chain.
+It does not recompute Consensus, Alignment, ThesisChange, or Signal semantics.
+
+Narratives contain listing identity, factual activity summaries, event/thesis/
+cross-investor/consensus observations, evidence counts, observed time bounds,
+and explicit data limitations. The layer has no persistence table, migration,
+LLM rewrite, score, rank, weight, recommendation, prediction, or advice
+semantics.
+
+## Intelligence Context & Comparison Layer V0
+
+The Context layer is a query-time comparison over existing Discovery, Feed,
+Signal, ThesisChange, and Cross-Investor artifacts. It uses explicit current
+and previous fact-time windows and reports only counts, participant identity
+sets, persisted ThesisChange types, and persisted Cross-Investor states.
+
+Context never recalculates Consensus, Alignment, Thesis classification, or
+Signal generation. It has no persistence table, score, ranking, hotness,
+importance, recommendation, prediction, advice, or LLM semantics.
+
+## Intelligence Pattern Detection Layer V0
+
+The Pattern layer is a query-time, deterministic classification over the
+existing Context projection and persisted Intelligence artifacts. It emits
+fact-based labels such as multi-investor expansion, thesis transition,
+consensus formation/fragmentation, and insufficient history.
+
+Pattern detection does not create persistence, recalculate Signal/Consensus/
+Alignment/Thesis semantics, rank Assets, calculate a score, recommend, predict,
+or call an LLM. The multi-investor threshold is configurable and the
+comparison window reuses the Context window configuration.
+
+## Intelligence Evolution Timeline Layer V0
+
+Evolution is a query-time, read-only, fact-time ordered view over persisted
+Signals, IntelligenceEvents, ThesisChanges, Attention evidence, and
+Cross-Investor artifacts. It emits canonical EvolutionSteps with source
+references and deterministic tie-breaks; it does not create phases or stories.
+
+Pattern activity labels and historical data-quality limitations remain
+separate: INSUFFICIENT_HISTORY is not an activity Pattern. Historical
+completeness remains UNKNOWN, so Evolution never infers absence, cooling, or
+dormancy.

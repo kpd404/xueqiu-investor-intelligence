@@ -14,7 +14,7 @@ from intelligence.discovery.service import (
     DiscoveryAssetNotFoundError,
     IntelligenceDiscoveryService,
 )
-from intelligence.schemas.discovery import IntelligenceDiscoveryListResponse
+from intelligence.schemas.discovery import IntelligenceDiscoveryCandidateList
 
 logger = getLogger(__name__)
 router = APIRouter(prefix="/api/intelligence", tags=["intelligence-discovery"])
@@ -53,7 +53,7 @@ def _read[T](operation: Callable[[], T]) -> T:
 
 @router.get(
     "/discovery",
-    response_model=IntelligenceDiscoveryListResponse,
+    response_model=IntelligenceDiscoveryCandidateList,
     summary="Read Asset-grouped Intelligence Discovery candidates",
     description=(
         "Read-only deterministic aggregation of ACTIVE FeedItems. "
@@ -66,7 +66,7 @@ def get_intelligence_discovery(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     asset_id: Annotated[UUID | None, Query()] = None,
     event_type: Annotated[IntelligenceEventType | None, Query()] = None,
-) -> IntelligenceDiscoveryListResponse:
+) -> IntelligenceDiscoveryCandidateList:
     return _read(
         lambda: service.get_candidates(
             limit=limit,

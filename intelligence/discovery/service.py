@@ -21,9 +21,10 @@ from contracts import (
 from intelligence.schemas.discovery import (
     DiscoveryActivitySummary,
     DiscoveryAssetIdentity,
-    DiscoveryEvidenceSummary,
+    DiscoveryEventSummary,
+    DiscoveryTimeline,
     IntelligenceDiscoveryCandidate,
-    IntelligenceDiscoveryListResponse,
+    IntelligenceDiscoveryCandidateList,
 )
 
 
@@ -85,6 +86,13 @@ _DISCOVERY_REASONS: dict[IntelligenceEventType, str] = {
     IntelligenceEventType.CONSENSUS_STATE_CHANGE: "CONSENSUS_ACTIVITY",
 }
 
+_DISCOVERY_REASON_ORDER = (
+    "MULTI_INVESTOR_ACTIVITY",
+    "THESIS_ACTIVITY",
+    "CROSS_INVESTOR_ACTIVITY",
+    "CONSENSUS_ACTIVITY",
+)
+
 
 class _AssetAccumulator:
     def __init__(self, asset_id: UUID) -> None:
@@ -96,6 +104,7 @@ class _AssetAccumulator:
         self.event_types: set[IntelligenceEventType] = set()
         self.priority_reasons: set[IntelligencePriorityReason] = set()
         self.discovery_reasons: set[str] = set()
+        self.first_observed_at = None
         self.latest_observed_at = None
 
 
@@ -125,7 +134,7 @@ class IntelligenceDiscoveryService:
         limit: int = 50,
         asset_id: UUID | None = None,
         event_type: IntelligenceEventType | None = None,
-    ) -> IntelligenceDiscoveryListResponse:
+    ) -> IntelligenceDiscoveryCandidateList:
         if limit < 1 or limit > 100:
             raise ValueError("limit must be between 1 and 100")
 
@@ -182,6 +191,11 @@ class IntelligenceDiscoveryService:
                 accumulator.priority_reasons.add(priority.reason)
                 accumulator.discovery_reasons.add(_DISCOVERY_REASONS[event.event_type])
                 if (
+                    accumulator.first_observed_at is None
+                    or feed_item.observed_at < accumulator.first_observed_at
+                ):
+                    accumulator.first_observed_at = feed_item.observed_at
+                if (
                     accumulator.latest_observed_at is None
                     or feed_item.observed_at > accumulator.latest_observed_at
                 ):
@@ -206,28 +220,42 @@ class IntelligenceDiscoveryService:
             sorted(
                 candidates,
                 key=lambda candidate: (
-                    -candidate.evidence_summary.latest_observed_at.timestamp(),
-                    candidate.asset_identity.name,
-                    candidate.asset_identity.market,
-                    candidate.asset_identity.symbol,
-                    candidate.asset_id.int,
+                    -candidate.timeline.latest_observed_at.timestamp(),
+                    candidate.asset.name,
+                    candidate.asset.market,
+                    candidate.asset.symbol,
+                    candidate.asset.asset_id.int,
                 ),
             )
         )
         if asset_id is not None:
             projected = tuple(
-                candidate for candidate in projected if candidate.asset_id == asset_id
+                candidate for candidate in projected if candidate.asset.asset_id == asset_id
             )
         total = len(projected)
         items = projected[:limit]
-        return IntelligenceDiscoveryListResponse(
+        return IntelligenceDiscoveryCandidateList(
             items=items,
             total=total,
             limit=limit,
             has_more=total > len(items),
         )
 
-    def get_asset_candidate(
+    def get_asset_identity(self, asset_id: UUID) -> DiscoveryAssetIdentity:
+        """Return one Asset identity for an empty-narrative projection."""
+
+        with self._unit_of_work_factory() as unit_of_work:
+            for asset in unit_of_work.assets.list():
+                if asset.id == asset_id:
+                    return DiscoveryAssetIdentity(
+                        asset_id=asset.id,
+                        name=asset.name,
+                        market=asset.market,
+                        symbol=asset.symbol,
+                    )
+        raise DiscoveryAssetNotFoundError(f"asset not found: {asset_id}")
+
+    def get_candidate_by_asset(
         self,
         asset_id: UUID,
         *,
@@ -236,18 +264,28 @@ class IntelligenceDiscoveryService:
         response = self.get_candidates(limit=1, asset_id=asset_id, event_type=event_type)
         return response.items[0] if response.items else None
 
+    def get_asset_candidate(
+        self,
+        asset_id: UUID,
+        *,
+        event_type: IntelligenceEventType | None = None,
+    ) -> IntelligenceDiscoveryCandidate | None:
+        """Compatibility alias for the V0 method name."""
+
+        return self.get_candidate_by_asset(asset_id, event_type=event_type)
+
     @staticmethod
     def _to_candidate(
         accumulator: _AssetAccumulator,
         asset: object,
     ) -> IntelligenceDiscoveryCandidate:
+        first_observed_at = accumulator.first_observed_at
         latest_observed_at = accumulator.latest_observed_at
-        if latest_observed_at is None:
+        if first_observed_at is None or latest_observed_at is None:
             raise ValueError(f"Discovery accumulator has no observed time: {accumulator.asset_id}")
         return IntelligenceDiscoveryCandidate(
             candidate_id=accumulator.asset_id,
-            asset_id=accumulator.asset_id,
-            asset_identity=DiscoveryAssetIdentity(
+            asset=DiscoveryAssetIdentity(
                 asset_id=asset.id,
                 name=asset.name,
                 market=asset.market,
@@ -259,14 +297,20 @@ class IntelligenceDiscoveryService:
                 event_count=len(accumulator.event_ids),
                 feed_count=len(accumulator.feed_ids),
             ),
-            evidence_summary=DiscoveryEvidenceSummary(
+            event_summary=DiscoveryEventSummary(
                 event_types=tuple(sorted(accumulator.event_types, key=lambda value: value.value)),
                 priority_reasons=tuple(
                     sorted(accumulator.priority_reasons, key=lambda value: value.value)
                 ),
+            ),
+            timeline=DiscoveryTimeline(
+                first_observed_at=first_observed_at,
                 latest_observed_at=latest_observed_at,
             ),
-            discovery_reasons=tuple(sorted(accumulator.discovery_reasons)),
+            discovery_reasons=sorted(
+                accumulator.discovery_reasons,
+                key=_DISCOVERY_REASON_ORDER.index,
+            ),
         )
 
 

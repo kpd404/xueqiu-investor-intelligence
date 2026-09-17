@@ -216,14 +216,14 @@ def test_discovery_contract_has_activity_and_evidence_without_ranking_fields() -
 
     assert result.total == 2
     candidate = result.items[0]
-    assert candidate.candidate_id == candidate.asset_id
+    assert candidate.candidate_id == candidate.asset.asset_id
     assert candidate.activity_summary.model_dump() == {
         "investor_count": 2,
         "signal_count": 4,
         "event_count": 4,
         "feed_count": 4,
     }
-    assert candidate.evidence_summary.event_types == tuple(
+    assert candidate.event_summary.event_types == tuple(
         sorted(
             (
                 IntelligenceEventType.ASSET_ACTIVITY_SPIKE,
@@ -240,7 +240,11 @@ def test_discovery_contract_has_activity_and_evidence_without_ranking_fields() -
         "CROSS_INVESTOR_ACTIVITY",
         "CONSENSUS_ACTIVITY",
     }
-    assert not {"score", "rank", "weight"}.intersection(candidate.model_dump())
+    assert candidate.timeline.first_observed_at == NOW
+    assert candidate.timeline.latest_observed_at == NOW + timedelta(minutes=3)
+    assert not {"score", "rank", "weight", "ranking", "recommendation"}.intersection(
+        candidate.model_dump()
+    )
 
 
 def test_discovery_filters_by_asset_and_event_type() -> None:
@@ -255,10 +259,10 @@ def test_discovery_filters_by_asset_and_event_type() -> None:
     )
 
     assert asset_result.total == 1
-    assert asset_result.items[0].asset_id == values["asset_two"]
+    assert asset_result.items[0].asset.asset_id == values["asset_two"]
     assert event_result.total == 1
     assert event_result.items[0].activity_summary.event_count == 1
-    assert event_result.items[0].discovery_reasons == ("CONSENSUS_ACTIVITY",)
+    assert event_result.items[0].discovery_reasons == ["CONSENSUS_ACTIVITY"]
 
 
 def test_new_feed_items_are_not_implicitly_active() -> None:
@@ -287,7 +291,7 @@ def test_discovery_is_read_only_and_asset_not_found_is_explicit() -> None:
     service = IntelligenceDiscoveryService(lambda: uow)
 
     with pytest.raises(LookupError):
-        service.get_asset_candidate(uuid4())
+        service.get_candidate_by_asset(uuid4())
     assert uow.commit_called is False
 
 
@@ -312,7 +316,7 @@ def test_discovery_api_exposes_filterable_read_only_projection() -> None:
         assert response.status_code == 200
         payload = response.json()
         assert payload["total"] == 1
-        assert payload["items"][0]["asset_identity"]["symbol"] == "00001"
+        assert payload["items"][0]["asset"]["symbol"] == "00001"
         assert "score" not in payload["items"][0]
     finally:
         app.dependency_overrides.pop(get_intelligence_discovery_service, None)

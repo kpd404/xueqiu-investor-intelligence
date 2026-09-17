@@ -31,32 +31,39 @@ class DiscoveryActivitySummary(BaseModel):
     feed_count: int = Field(ge=0)
 
 
-class DiscoveryEvidenceSummary(BaseModel):
-    """Observable event and priority context, without score or rank semantics."""
+class DiscoveryEventSummary(BaseModel):
+    """Observable event and priority context, without ranking semantics."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     event_types: tuple[IntelligenceEventType, ...] = ()
     priority_reasons: tuple[IntelligencePriorityReason, ...] = ()
+
+
+class DiscoveryTimeline(BaseModel):
+    """Fact-time bounds of the ACTIVE FeedItems behind a candidate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    first_observed_at: AwareDatetime
     latest_observed_at: AwareDatetime
 
 
 class IntelligenceDiscoveryCandidate(BaseModel):
-    """One deterministic, Asset-grouped Discovery projection."""
+    """One deterministic, Asset-grouped Discovery V1 projection."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    # The V0 projection has one candidate per Asset, so the stable candidate
-    # identity is the Asset identity itself. There is no persisted candidate.
+    # One candidate exists per Asset in this non-persisted projection.
     candidate_id: UUID
-    asset_id: UUID
-    asset_identity: DiscoveryAssetIdentity
+    asset: DiscoveryAssetIdentity
     activity_summary: DiscoveryActivitySummary
-    evidence_summary: DiscoveryEvidenceSummary
-    discovery_reasons: tuple[str, ...] = ()
+    event_summary: DiscoveryEventSummary
+    timeline: DiscoveryTimeline
+    discovery_reasons: list[str] = Field(default_factory=list)
 
 
-class IntelligenceDiscoveryListResponse(BaseModel):
+class IntelligenceDiscoveryCandidateList(BaseModel):
     """Paginated read response for the Discovery API."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -67,10 +74,18 @@ class IntelligenceDiscoveryListResponse(BaseModel):
     has_more: bool
 
 
+# Compatibility names retained for existing V0 callers.
+DiscoveryEvidenceSummary = DiscoveryEventSummary
+IntelligenceDiscoveryListResponse = IntelligenceDiscoveryCandidateList
+
+
 __all__ = [
     "DiscoveryActivitySummary",
     "DiscoveryAssetIdentity",
+    "DiscoveryEventSummary",
     "DiscoveryEvidenceSummary",
+    "DiscoveryTimeline",
     "IntelligenceDiscoveryCandidate",
+    "IntelligenceDiscoveryCandidateList",
     "IntelligenceDiscoveryListResponse",
 ]

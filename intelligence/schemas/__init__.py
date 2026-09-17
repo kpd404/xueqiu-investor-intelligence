@@ -3,8 +3,11 @@
 from intelligence.schemas.discovery import (
     DiscoveryActivitySummary,
     DiscoveryAssetIdentity,
+    DiscoveryEventSummary,
     DiscoveryEvidenceSummary,
+    DiscoveryTimeline,
     IntelligenceDiscoveryCandidate,
+    IntelligenceDiscoveryCandidateList,
     IntelligenceDiscoveryListResponse,
 )
 from intelligence.schemas.feed import (
@@ -37,11 +40,14 @@ __all__ = [
     "AssetAttentionInvestorView",
     "DiscoveryActivitySummary",
     "DiscoveryAssetIdentity",
+    "DiscoveryEventSummary",
     "DiscoveryEvidenceSummary",
+    "DiscoveryTimeline",
     "FeedAssetIdentity",
     "IntelligenceFeedListResponse",
     "IntelligenceFeedResponse",
     "IntelligenceDiscoveryCandidate",
+    "IntelligenceDiscoveryCandidateList",
     "IntelligenceDiscoveryListResponse",
     "AssetCrossInvestorView",
     "AssetIntelligenceView",

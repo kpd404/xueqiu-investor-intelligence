@@ -5,8 +5,12 @@ from sqlalchemy.orm import Session
 
 from database.session import SessionFactory
 from database.unit_of_work import SqlAlchemyObservedAttentionUnitOfWork
+from intelligence.context.service import IntelligenceContextService
 from intelligence.discovery.service import IntelligenceDiscoveryService
+from intelligence.evolution.service import IntelligenceEvolutionService
 from intelligence.feed.query import IntelligenceFeedQueryService
+from intelligence.narrative.service import IntelligenceNarrativeService
+from intelligence.patterns.service import IntelligencePatternService
 from intelligence.services.combined_asset_intelligence import (
     CombinedAssetIntelligenceService,
 )
@@ -79,3 +83,29 @@ def get_intelligence_discovery_service() -> IntelligenceDiscoveryService:
         return SqlAlchemyIntelligenceFeedUnitOfWork(_read_only_session)
 
     return IntelligenceDiscoveryService(unit_of_work_factory)
+
+
+def get_intelligence_narrative_service() -> IntelligenceNarrativeService:
+    """Compose Narratives over the existing read-only Discovery service."""
+
+    return IntelligenceNarrativeService(get_intelligence_discovery_service())
+
+
+def get_intelligence_context_service() -> IntelligenceContextService:
+    """Compose Context over the existing read-only Discovery service."""
+
+    return IntelligenceContextService.from_production(
+        SessionFactory,
+    )
+
+
+def get_intelligence_pattern_service() -> IntelligencePatternService:
+    """Compose Patterns over the existing read-only Context service."""
+
+    return IntelligencePatternService.from_production(SessionFactory)
+
+
+def get_intelligence_evolution_service() -> IntelligenceEvolutionService:
+    """Compose Evolution over the existing read-only Intelligence layers."""
+
+    return IntelligenceEvolutionService.from_production(SessionFactory)

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     llm_retry_invalid_structured_output: bool = True
     production_opinion_analysis_version: str = PRODUCTION_OPINION_ANALYSIS_VERSION
     production_thesis_comparison_version: str = PRODUCTION_THESIS_COMPARISON_VERSION
+    feed_activation_window_days: int = Field(default=30, ge=0)
+    feed_stale_window_days: int = Field(default=30, gt=0)
+    context_window_days: int = Field(default=30, gt=0)
+    pattern_multi_investor_threshold: int = Field(default=3, ge=2)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
