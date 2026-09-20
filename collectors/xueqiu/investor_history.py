@@ -130,6 +130,7 @@ class InvestorHistoryCollectionRequest(CollectionRequest):
     max_duration_seconds: int = Field(default=180, ge=1, le=3600)
     human_assisted: bool = False
     attach_cdp_endpoint: str | None = Field(default=None, min_length=1)
+    reuse_existing_cdp_page: bool = False
 
     @model_validator(mode="after")
     def validate_history_window(self) -> InvestorHistoryCollectionRequest:
@@ -138,7 +139,12 @@ class InvestorHistoryCollectionRequest(CollectionRequest):
         if self.since > self.until:
             raise ValueError("history since must be earlier than or equal to until")
         if self.attach_cdp_endpoint and not self.human_assisted:
-            raise ValueError("attach_cdp_endpoint requires human_assisted=True")
+            # CDP attachment is already an operator-owned authenticated browser
+            # flow. The bounded automation mode never creates a new context/tab.
+            if not self.reuse_existing_cdp_page:
+                raise ValueError("attach_cdp_endpoint requires human_assisted=True")
+        if self.reuse_existing_cdp_page and self.attach_cdp_endpoint is None:
+            raise ValueError("reuse_existing_cdp_page requires attach_cdp_endpoint")
         return self
 
     @classmethod
@@ -153,6 +159,7 @@ class InvestorHistoryCollectionRequest(CollectionRequest):
         max_duration_seconds: int = 180,
         human_assisted: bool = False,
         attach_cdp_endpoint: str | None = None,
+        reuse_existing_cdp_page: bool = False,
         until: datetime | None = None,
     ) -> InvestorHistoryCollectionRequest:
         end = until or utc_now()
@@ -174,6 +181,7 @@ class InvestorHistoryCollectionRequest(CollectionRequest):
             max_duration_seconds=max_duration_seconds,
             human_assisted=human_assisted,
             attach_cdp_endpoint=attach_cdp_endpoint,
+            reuse_existing_cdp_page=reuse_existing_cdp_page,
         )
 
 
@@ -968,10 +976,15 @@ async def _safe_page_descriptor(page: object) -> tuple[str, str]:
     return title[:255], url
 
 
+def _safe_console_text(value: object) -> str:
+    return str(value).encode("ascii", "backslashreplace").decode("ascii")
+
+
 async def _select_existing_cdp_page(
     browser: object,
     *,
     expected_user_id: str,
+    allow_any_xueqiu_page: bool = False,
 ) -> tuple[object, int, int, str, str]:
     contexts = list(getattr(browser, "contexts", ()))
     pages = [page for context in contexts for page in list(getattr(context, "pages", ()))]
@@ -991,7 +1004,16 @@ async def _select_existing_cdp_page(
             if "xueqiu.com" in str(getattr(page, "url", ""))
         ]
         if visible_pages:
-            print(f"safe_xueqiu_pages={visible_pages}")
+            safe_visible_pages = [(_safe_console_text(title), url) for title, url in visible_pages]
+            print(f"safe_xueqiu_pages={safe_visible_pages}")
+        if allow_any_xueqiu_page and visible_pages:
+            candidates = [page for page in pages if "xueqiu.com" in str(getattr(page, "url", ""))]
+            selected = candidates[0]
+            title, safe_url = await _safe_page_descriptor(selected)
+            print("profile_page_selection=fallback_existing_xueqiu_page")
+            print(f"selected_page_url={safe_url}")
+            print(f"selected_page_title={_safe_console_text(title)}")
+            return selected, len(contexts), len(pages), safe_url, title
         raise NetworkUnavailable(
             "no existing Xueqiu Investor page matches the requested platform user id"
         )
@@ -1000,7 +1022,7 @@ async def _select_existing_cdp_page(
     if len(candidates) > 1:
         print("Multiple matching Xueqiu Investor pages:")
         for index, (title, url) in enumerate(descriptors, start=1):
-            print(f"page={index} title={title!r} url={url}")
+            print(f"page={index} title={_safe_console_text(title)!r} url={url}")
         selection = await asyncio.to_thread(
             input,
             "请选择要接管的 page 编号并按 Enter：",
@@ -1018,7 +1040,7 @@ async def _select_existing_cdp_page(
         title, safe_url = descriptors[0]
 
     print(f"selected_page_url={safe_url}")
-    print(f"selected_page_title={title}")
+    print(f"selected_page_title={_safe_console_text(title)}")
     return selected, len(contexts), len(pages), safe_url, title
 
 
@@ -1187,6 +1209,7 @@ class XueqiuInvestorHistoryBrowser:
                     ) = await _select_existing_cdp_page(
                         browser,
                         expected_user_id=request.platform_user_id,
+                        allow_any_xueqiu_page=request.reuse_existing_cdp_page,
                     )
                 else:
                     browser = await playwright.chromium.launch(
@@ -1541,17 +1564,43 @@ class XueqiuInvestorHistoryBrowser:
                         bootstrap_before = await _read_scroll_state(page)
                         bootstrap_trace_start = len(pagination_traces)
                         await settle_response_tasks()
-                        body_text, title = await ensure_cdp_bootstrap_safety(page)
-                        if not pages:
+                        page_matches_requested_investor = _is_matching_investor_page(
+                            str(getattr(page, "url", "")),
+                            request.platform_user_id,
+                        )
+                        if request.reuse_existing_cdp_page and not page_matches_requested_investor:
                             first_page_bootstrap_attempted = True
-                            await page.reload(  # type: ignore[attr-defined]
+                            navigation_response = await page.goto(  # type: ignore[attr-defined]
+                                homepage_url,
                                 wait_until="domcontentloaded",
                                 timeout=self._config.navigation_timeout_ms,
                             )
-                            await wait_bounded(self._config.response_wait_ms)
-                            await settle_response_tasks()
+                            navigation_status = getattr(navigation_response, "status", None)
+                            if isinstance(navigation_status, int) and navigation_status >= 400:
+                                self._last_stop_reason = InvestorHistoryStopReason.NAVIGATION_FAILED
+                                raise NavigationFailed(
+                                    "Xueqiu Investor profile returned "
+                                    f"HTTP {navigation_status}; history probe stopped"
+                                )
+                            body_text, title = await read_page_state(page)
+                            body_text, title = await ensure_page_state(page, body_text, title)
+                            validate_current_investor_url(
+                                str(getattr(page, "url", "")),
+                                request.platform_user_id,
+                            )
+                            first_page_bootstrap_succeeded = True
+                        else:
                             body_text, title = await ensure_cdp_bootstrap_safety(page)
-                            first_page_bootstrap_succeeded = bool(pages)
+                            if not pages:
+                                first_page_bootstrap_attempted = True
+                                await page.reload(  # type: ignore[attr-defined]
+                                    wait_until="domcontentloaded",
+                                    timeout=self._config.navigation_timeout_ms,
+                                )
+                                await wait_bounded(self._config.response_wait_ms)
+                                await settle_response_tasks()
+                                body_text, title = await ensure_cdp_bootstrap_safety(page)
+                                first_page_bootstrap_succeeded = bool(pages)
                         await record_scroll_trace(
                             mode=(
                                 "AUTO_RELOAD_BOOTSTRAP"
@@ -1826,6 +1875,7 @@ async def run_history_probe(
                     collection_run_id=run_id,
                     source_page=request.homepage_url,
                     source_context_json={
+                        "collection_strategy": "investor_profile",
                         "platform_user_id": request.platform_user_id,
                         "cdp_attached": request.attach_cdp_endpoint is not None,
                     },

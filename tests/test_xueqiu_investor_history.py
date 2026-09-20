@@ -86,6 +86,32 @@ def test_human_assisted_request_has_bounded_duration():
     assert request.max_duration_seconds == 12
 
 
+def test_cdp_automation_request_reuses_existing_page_without_manual_mode():
+    request = InvestorHistoryCollectionRequest.for_lookback(
+        investor_id=INVESTOR_ID,
+        platform_user_id=PLATFORM_USER_ID,
+        lookback_days=2,
+        max_pages=2,
+        attach_cdp_endpoint="http://127.0.0.1:9222",
+        reuse_existing_cdp_page=True,
+        until=END,
+    )
+
+    assert request.reuse_existing_cdp_page is True
+    assert request.human_assisted is False
+
+
+def test_cdp_attachment_without_reuse_mode_remains_manual_only():
+    with pytest.raises(ValueError, match="human_assisted"):
+        InvestorHistoryCollectionRequest.for_lookback(
+            investor_id=INVESTOR_ID,
+            platform_user_id=PLATFORM_USER_ID,
+            lookback_days=2,
+            attach_cdp_endpoint="http://127.0.0.1:9222",
+            until=END,
+        )
+
+
 @pytest.mark.parametrize(
     "url",
     [

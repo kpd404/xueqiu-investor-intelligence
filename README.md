@@ -554,3 +554,29 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 本项目不是 Xueqiu crawler product、stock recommendation system、auto trading system 或 price prediction system；
 它是 Investor Behavior Intelligence System，关注谁在关注什么、为什么关注、观点如何变化、是否发生行为，以及多位投资者是否形成共识或分歧。
 产品核心原则是：**Change matters more than popularity.**
+
+## Phase 4 — Intelligence Yield Recovery / IYR-1
+
+IYR-1 adds bounded Monitored Investor Direct Recent Collection to the existing
+authenticated Xueqiu runtime. The canonical command remains:
+
+    python -m operations.refresh --cdp-endpoint http://127.0.0.1:9222
+
+The refresh now combines Following Feed collection with a dynamically selected
+cohort of up to eight registered Xueqiu Investors. The cohort uses existing
+Investor identities and recent/effective evidence; it is not a Watchlist or
+user preference product. Direct profile collection uses a 48-hour overlap,
+at most two pages and 30 seconds per Investor, reuses the authenticated CDP
+context/page, and preserves historical_completeness=UNKNOWN.
+
+Following Feed and Investor Profile observations use the existing
+CollectionRun / CollectionObservation model and the same RawEvent hash
+deduplication boundary. No new Intelligence semantic, Asset Resolution policy,
+migration, scheduler pipeline, or persistence model was added.
+
+The real IYR-1 validation increased RawEvents from 1,615 to 1,707. The
+successful bounded direct-profile run attempted eight Investors, succeeded for
+all eight, found 52 Profile-only new RawEvents, and produced 36 ORIGINAL,
+68 REPOST, and 3 other profile items. Existing Production Analysis and
+downstream Product verification completed successfully. IYR-2 Asset
+Resolution Yield Recovery is not started.

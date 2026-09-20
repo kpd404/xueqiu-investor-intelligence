@@ -1566,3 +1566,37 @@ comparison remains unsupported, and absence inference remains unsupported.
 Sprint 2J.2 changes only Product navigation and presentation. It adds no
 backend endpoint, Intelligence semantic, persistence, migration, collection
 scope, ranking, score, recommendation, or prediction.
+
+## 1.6 Phase 4 Collection Coverage Extension
+
+IYR-1 extends only the Data Source / Collection boundary:
+
+    Authenticated Xueqiu CDP
+            ├── Following Feed
+            └── Monitored Investor Recent Profile History
+                        ↓
+              Existing RawEvent hash boundary
+                        ↓
+              Existing Analysis / Intelligence / Product pipeline
+
+The profile branch reuses collectors.xueqiu.investor_history. It does not
+create a second RawEvent pipeline, a Watchlist, or a new persistence model.
+The cohort is selected from existing registered Xueqiu Investor identities and
+bounded to eight Investors per refresh. The profile window is 48 hours with
+two pages and a 30-second per-Investor duration bound.
+
+CDP mode connects to the existing authenticated browser, reuses an existing
+Xueqiu page, and navigates that page to each selected profile. It never creates
+a fresh browser context, copies cookies, or launches a second browser. A
+profile probe failure is reported per Investor; authentication, risk-control,
+and CDP failures remain runtime-level collection failures.
+
+Following Feed and profile runs use existing CollectionRun modes and
+CollectionObservation edges. Their observations carry strategy provenance,
+while RawEvent identity remains the canonical source-event hash. Both paths
+therefore converge before Analysis and share all existing semantic stages.
+
+IYR-1 does not modify Analysis, Opinion, Attention, Thesis, Cross-Investor,
+Signal, Event, Priority, Feed, Product View, Asset Resolution, or historical
+completeness semantics. IYR-2 Asset Resolution Yield Recovery remains
+deferred.

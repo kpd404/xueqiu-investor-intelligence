@@ -34,9 +34,16 @@ class IntelligenceEventPriorityRepository:
         self,
         command: IntelligenceEventPriorityCreate,
     ) -> tuple[IntelligenceEventPriorityView, bool]:
-        existing = self.get_by_event(command.event_id)
-        if existing is not None:
-            return existing, False
+        entity = self._session.scalar(
+            select(IntelligenceEventPriority).where(
+                IntelligenceEventPriority.event_id == command.event_id
+            )
+        )
+        if entity is not None:
+            if entity.evidence_count != command.evidence_count:
+                entity.evidence_count = command.evidence_count
+                self._session.flush()
+            return self._to_view(entity), False
         entity = IntelligenceEventPriority(
             event_id=command.event_id,
             priority_level=command.priority_level.value,
@@ -49,10 +56,17 @@ class IntelligenceEventPriorityRepository:
                 self._session.add(entity)
                 self._session.flush()
         except IntegrityError:
-            existing = self.get_by_event(command.event_id)
+            existing = self._session.scalar(
+                select(IntelligenceEventPriority).where(
+                    IntelligenceEventPriority.event_id == command.event_id
+                )
+            )
             if existing is None:
                 raise
-            return existing, False
+            if existing.evidence_count != command.evidence_count:
+                existing.evidence_count = command.evidence_count
+                self._session.flush()
+            return self._to_view(existing), False
         return self._to_view(entity), True
 
     def list(self) -> tuple[IntelligenceEventPriorityView, ...]:

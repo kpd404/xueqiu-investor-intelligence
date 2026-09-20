@@ -16,7 +16,7 @@ import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -41,6 +41,11 @@ from collectors.xueqiu import (
     RateLimitedOrBlocked,
     XueqiuCollectorError,
     XueqiuFeedAdapter,
+)
+from collectors.xueqiu.investor_history import (
+    InvestorHistoryCollectionRequest,
+    InvestorHistoryStopReason,
+    run_history_probe,
 )
 from collectors.xueqiu.smoke import browser_config
 from config import (
@@ -148,6 +153,9 @@ class CollectionStageResult:
     existing_events: int = 0
     received_items: int = 0
     stop_reason: str | None = None
+    run_ids: tuple[UUID, ...] = ()
+    following_feed: dict[str, object] = field(default_factory=dict)
+    direct_profiles: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -211,6 +219,12 @@ _HARD_ANALYSIS_CODES = {
     "CONFIGURATION_ERROR",
     "UNSUPPORTED_CAPABILITY",
 }
+
+_DIRECT_PROFILE_COHORT_SIZE = 8
+_DIRECT_PROFILE_LOOKBACK_HOURS = 48
+_DIRECT_PROFILE_MAX_PAGES = 2
+_DIRECT_PROFILE_MAX_DURATION_SECONDS = 30
+_DIRECT_PROFILE_MAX_IDLE_CYCLES = 2
 
 
 def _utc(value: datetime) -> datetime:
@@ -594,7 +608,302 @@ class OperationalRefreshService:
             "observed_event_ids": [str(value) for value in result.observed_event_ids],
             "new_event_ids": [str(value) for value in result.new_event_ids],
             "stop_reason": result.stop_reason,
+            "run_ids": [str(value) for value in result.run_ids],
+            "following_feed": result.following_feed,
+            "direct_profiles": result.direct_profiles,
+            "unique_new_raw_events": len(result.new_event_ids),
         }
+
+    def _select_monitored_profile_cohort(
+        self,
+        *,
+        cutoff: datetime,
+        only_platform_ids: tuple[str, ...],
+    ) -> tuple[Investor, ...]:
+        allowed_platform_ids = {value.strip() for value in only_platform_ids if value.strip()}
+        with self._session_factory() as session:
+            statement = select(Investor).where(
+                Investor.platform == "xueqiu",
+                Investor.platform_user_id.is_not(None),
+            )
+            investors = [
+                investor
+                for investor in session.scalars(statement)
+                if investor.platform_user_id.strip()
+                and (
+                    not allowed_platform_ids
+                    or investor.platform_user_id.strip() in allowed_platform_ids
+                )
+            ]
+            if not investors:
+                return ()
+
+            investor_ids = tuple(investor.id for investor in investors)
+            recent_raw = dict(
+                session.execute(
+                    select(RawEvent.investor_id, func.count())
+                    .where(
+                        RawEvent.investor_id.in_(investor_ids),
+                        RawEvent.published_time >= cutoff,
+                    )
+                    .group_by(RawEvent.investor_id)
+                ).all()
+            )
+            latest_raw = dict(
+                session.execute(
+                    select(RawEvent.investor_id, func.max(RawEvent.published_time))
+                    .where(RawEvent.investor_id.in_(investor_ids))
+                    .group_by(RawEvent.investor_id)
+                ).all()
+            )
+            effective_analysis_version = get_production_analysis_policy().active_analysis_version
+            effective_opinions = dict(
+                session.execute(
+                    select(Opinion.investor_id, func.count())
+                    .join(EventAnalysis, EventAnalysis.id == Opinion.analysis_id)
+                    .where(
+                        Opinion.investor_id.in_(investor_ids),
+                        EventAnalysis.analysis_version == effective_analysis_version,
+                        EventAnalysis.status.in_(
+                            [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                        ),
+                    )
+                    .group_by(Opinion.investor_id)
+                ).all()
+            )
+            attention_counts = dict(
+                session.execute(
+                    select(AttentionOccurrence.investor_id, func.count())
+                    .where(AttentionOccurrence.investor_id.in_(investor_ids))
+                    .group_by(AttentionOccurrence.investor_id)
+                ).all()
+            )
+
+        recent_investors = [
+            investor for investor in investors if recent_raw.get(investor.id, 0) > 0
+        ]
+
+        def sort_key(investor: Investor) -> tuple[object, ...]:
+            latest = latest_raw.get(investor.id)
+            return (
+                -recent_raw.get(investor.id, 0),
+                -effective_opinions.get(investor.id, 0),
+                -attention_counts.get(investor.id, 0),
+                -(latest.timestamp() if latest is not None else 0),
+                investor.name,
+                investor.id.int,
+            )
+
+        selected: list[Investor] = []
+        strong_recent = sorted(
+            [
+                investor
+                for investor in recent_investors
+                if effective_opinions.get(investor.id, 0) > 0
+            ],
+            key=sort_key,
+        )
+        selected.extend(strong_recent[: min(4, _DIRECT_PROFILE_COHORT_SIZE)])
+        for investor in sorted(recent_investors, key=sort_key):
+            if investor not in selected and len(selected) < _DIRECT_PROFILE_COHORT_SIZE:
+                selected.append(investor)
+        fallback = sorted(investors, key=sort_key)
+        for investor in fallback:
+            if investor not in selected and len(selected) < _DIRECT_PROFILE_COHORT_SIZE:
+                selected.append(investor)
+        return tuple(selected)
+
+    def _profile_run_id(
+        self,
+        *,
+        investor: Investor,
+        started_at: datetime,
+    ) -> UUID | None:
+        scope_key = f"{investor.id}:{investor.platform_user_id}"
+        with self._session_factory() as session:
+            return session.scalar(
+                select(CollectionRun.id)
+                .where(
+                    CollectionRun.scope_key == scope_key,
+                    CollectionRun.started_at >= started_at,
+                )
+                .order_by(CollectionRun.started_at.desc(), CollectionRun.id.desc())
+                .limit(1)
+            )
+
+    def _profile_run_events(
+        self,
+        run_id: UUID,
+    ) -> tuple[tuple[UUID, ...], tuple[UUID, ...], dict[str, int]]:
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    CollectionObservation.raw_event_id,
+                    CollectionObservation.ingest_disposition,
+                )
+                .where(CollectionObservation.collection_run_id == run_id)
+                .order_by(CollectionObservation.observation_sequence, CollectionObservation.id)
+            ).all()
+            observed_ids = tuple(dict.fromkeys(row[0] for row in rows))
+            new_ids = tuple(dict.fromkeys(row[0] for row in rows if str(row[1]) == "INSERTED"))
+            raw_events = (
+                list(session.scalars(select(RawEvent).where(RawEvent.id.in_(observed_ids))))
+                if observed_ids
+                else []
+            )
+        post_kind_counts = Counter(
+            str((event.raw_data or {}).get("post_kind", "UNKNOWN")) for event in raw_events
+        )
+        return observed_ids, new_ids, dict(post_kind_counts)
+
+    async def _collect_direct_profiles(
+        self,
+        *,
+        cdp_endpoint: str | None,
+        until: datetime | None,
+        only_platform_ids: tuple[str, ...],
+    ) -> tuple[dict[str, object], tuple[UUID, ...], tuple[UUID, ...], tuple[UUID, ...]]:
+        if not cdp_endpoint:
+            return (
+                {
+                    "enabled": False,
+                    "skip_reason": "CDP_REQUIRED",
+                    "historical_completeness": "UNKNOWN",
+                    "absence_inference_supported": False,
+                },
+                (),
+                (),
+                (),
+            )
+
+        profile_until = _utc(until or utc_now())
+        cutoff = profile_until - timedelta(hours=_DIRECT_PROFILE_LOOKBACK_HOURS)
+        cohort = self._select_monitored_profile_cohort(
+            cutoff=cutoff,
+            only_platform_ids=only_platform_ids,
+        )
+        summary: dict[str, object] = {
+            "enabled": True,
+            "lookback_hours": _DIRECT_PROFILE_LOOKBACK_HOURS,
+            "max_pages": _DIRECT_PROFILE_MAX_PAGES,
+            "max_duration_seconds": _DIRECT_PROFILE_MAX_DURATION_SECONDS,
+            "investors_attempted": 0,
+            "investors_succeeded": 0,
+            "investors_failed": 0,
+            "items_seen": 0,
+            "original_count": 0,
+            "repost_count": 0,
+            "other_post_kind_count": 0,
+            "new_raw_events": 0,
+            "existing_raw_events": 0,
+            "failures": [],
+            "cohort": [
+                {
+                    "investor_id": str(investor.id),
+                    "name": investor.name,
+                    "platform_user_id": investor.platform_user_id,
+                }
+                for investor in cohort
+            ],
+            "historical_completeness": "UNKNOWN",
+            "absence_inference_supported": False,
+        }
+        if not cohort:
+            summary["skip_reason"] = "NO_XUEQIU_INVESTOR_COHORT"
+            return summary, (), (), ()
+
+        config = browser_config(headless=False, cdp_endpoint=cdp_endpoint).model_copy(
+            update={
+                "response_wait_ms": 1200,
+                "max_idle_cycles_without_progress": _DIRECT_PROFILE_MAX_IDLE_CYCLES,
+            }
+        )
+        all_observed: list[UUID] = []
+        all_new: list[UUID] = []
+        run_ids: list[UUID] = []
+        hard_failure_codes = {
+            InvestorHistoryStopReason.AUTH_REQUIRED: "COLLECTION_AUTH_REQUIRED",
+            InvestorHistoryStopReason.MANUAL_VERIFICATION_REQUIRED: "COLLECTION_RISK_CONTROLLED",
+            InvestorHistoryStopReason.BLOCKED: "COLLECTION_RISK_CONTROLLED",
+            InvestorHistoryStopReason.CDP_NOT_AVAILABLE: "CDP_UNAVAILABLE",
+        }
+        failures = summary["failures"]
+        assert isinstance(failures, list)
+
+        for investor in cohort:
+            summary["investors_attempted"] = int(summary["investors_attempted"]) + 1
+            probe_started_at = utc_now()
+            request = InvestorHistoryCollectionRequest.for_lookback(
+                investor_id=investor.id,
+                platform_user_id=investor.platform_user_id,
+                lookback_days=2,
+                max_pages=_DIRECT_PROFILE_MAX_PAGES,
+                max_idle_cycles=_DIRECT_PROFILE_MAX_IDLE_CYCLES,
+                max_duration_seconds=_DIRECT_PROFILE_MAX_DURATION_SECONDS,
+                attach_cdp_endpoint=cdp_endpoint,
+                reuse_existing_cdp_page=True,
+                until=profile_until,
+            )
+            try:
+                result = await run_history_probe(request, config)
+            except Exception as exc:
+                summary["investors_failed"] = int(summary["investors_failed"]) + 1
+                failures.append(
+                    {
+                        "investor_id": str(investor.id),
+                        "name": investor.name,
+                        "stop_reason": "UNEXPECTED_FAILURE",
+                        "error": _safe_message(exc),
+                    }
+                )
+                continue
+
+            if result.stop_reason in hard_failure_codes:
+                raise RefreshStageError(
+                    RefreshStage.COLLECTION,
+                    hard_failure_codes[result.stop_reason],
+                    result.error or result.stop_reason.value,
+                )
+
+            run_id = self._profile_run_id(investor=investor, started_at=probe_started_at)
+            observed_ids, new_ids, post_kind_counts = (
+                self._profile_run_events(run_id) if run_id is not None else ((), (), {})
+            )
+            if run_id is not None:
+                run_ids.append(run_id)
+            all_observed.extend(observed_ids)
+            all_new.extend(new_ids)
+            summary["items_seen"] = int(summary["items_seen"]) + result.valid_posts
+            summary["original_count"] = int(summary["original_count"]) + post_kind_counts.get(
+                "ORIGINAL", 0
+            )
+            summary["repost_count"] = int(summary["repost_count"]) + post_kind_counts.get(
+                "REPOST", 0
+            )
+            summary["other_post_kind_count"] = int(summary["other_post_kind_count"]) + sum(
+                count
+                for kind, count in post_kind_counts.items()
+                if kind not in {"ORIGINAL", "REPOST"}
+            )
+            if result.error:
+                summary["investors_failed"] = int(summary["investors_failed"]) + 1
+                failures.append(
+                    {
+                        "investor_id": str(investor.id),
+                        "name": investor.name,
+                        "stop_reason": result.stop_reason.value,
+                        "error": result.error[:255],
+                    }
+                )
+            else:
+                summary["investors_succeeded"] = int(summary["investors_succeeded"]) + 1
+
+        unique_new = tuple(dict.fromkeys(all_new))
+        unique_observed = tuple(dict.fromkeys(all_observed))
+        summary["new_raw_events"] = len(unique_new)
+        summary["existing_raw_events"] = max(0, len(unique_observed) - len(unique_new))
+        summary["run_ids"] = [str(value) for value in run_ids]
+        return summary, unique_observed, unique_new, tuple(run_ids)
 
     @staticmethod
     def _skip_collection(raw_event_ids: Iterable[UUID]) -> CollectionStageResult:
@@ -655,6 +964,9 @@ class OperationalRefreshService:
         browser = PlaywrightXueqiuBrowser(
             browser_config(headless=headless, cdp_endpoint=cdp_endpoint)
         )
+        batches = ()
+        items = []
+        stop_reason: str | None = None
         try:
             batches = await browser.fetch_following_feed_batches(request)
             items = [
@@ -669,36 +981,36 @@ class OperationalRefreshService:
                     stop_reason=code,
                     summary_json={"received_items": 0, "new_events": 0, "existing_events": 0},
                 )
-                return CollectionStageResult(
-                    run_id=run_id,
+                stop_reason = code
+            else:
+                self._close_collection_run(
+                    run_id,
+                    status=(
+                        CollectionRunStatus.ABORTED
+                        if code in {"COLLECTION_AUTH_REQUIRED", "COLLECTION_RISK_CONTROLLED"}
+                        else CollectionRunStatus.FAILED
+                    ),
                     stop_reason=code,
                 )
-            self._close_collection_run(
-                run_id,
-                status=(
-                    CollectionRunStatus.ABORTED
-                    if code in {"COLLECTION_AUTH_REQUIRED", "COLLECTION_RISK_CONTROLLED"}
-                    else CollectionRunStatus.FAILED
-                ),
-                stop_reason=code,
-            )
-            if hard_failure:
-                raise RefreshStageError(
-                    RefreshStage.COLLECTION,
-                    code,
-                    _safe_message(exc),
-                ) from exc
-            raise
+                if hard_failure:
+                    raise RefreshStageError(
+                        RefreshStage.COLLECTION,
+                        code,
+                        _safe_message(exc),
+                    ) from exc
+                raise
 
-        stop_reason = browser.last_following_stop_reason or (
-            "MAX_BATCHES" if len(batches) >= max_batches else "NO_PROGRESS"
-        )
+        if stop_reason is None:
+            stop_reason = browser.last_following_stop_reason or (
+                "MAX_BATCHES" if len(batches) >= max_batches else "NO_PROGRESS"
+            )
         try:
             with self._session_factory() as session:
                 ingestion = await FeedIngestionService(
                     session,
                     collection_observation_repository=CollectionObservationRepository(session),
                     collection_run_id=run_id,
+                    source_context_json={"collection_strategy": "following_feed"},
                 ).ingest(items)
                 self._close_collection_run(
                     run_id,
@@ -730,14 +1042,50 @@ class OperationalRefreshService:
 
         observed_ids = tuple(dict.fromkeys(ingestion.event_ids))
         new_ids = tuple(result.event_id for result in ingestion.event_results if result.created)
+        (
+            direct_summary,
+            direct_observed_ids,
+            direct_new_ids,
+            direct_run_ids,
+        ) = await self._collect_direct_profiles(
+            cdp_endpoint=cdp_endpoint,
+            until=until,
+            only_platform_ids=only_author_ids,
+        )
+        combined_observed_ids = tuple(dict.fromkeys((*observed_ids, *direct_observed_ids)))
+        combined_new_ids = tuple(dict.fromkeys((*new_ids, *direct_new_ids)))
+        direct_observed_set = set(direct_observed_ids)
+        following_observed_set = set(observed_ids)
+        direct_summary["overlap_raw_events"] = len(direct_observed_set & following_observed_set)
+        direct_summary["profile_only_raw_events"] = len(
+            direct_observed_set - following_observed_set
+        )
+        direct_summary["profile_only_new_raw_events"] = len(set(direct_new_ids) - set(new_ids))
+        following_post_kind_counts = Counter(item.post_kind.value for item in items)
+        following_summary = {
+            "items_seen": len(items),
+            "original_count": following_post_kind_counts.get("ORIGINAL", 0),
+            "repost_count": following_post_kind_counts.get("REPOST", 0),
+            "other_post_kind_count": sum(
+                count
+                for kind, count in following_post_kind_counts.items()
+                if kind not in {"ORIGINAL", "REPOST"}
+            ),
+            "new_raw_events": ingestion.inserted_event_count,
+            "existing_raw_events": ingestion.duplicate_event_count,
+            "run_id": str(run_id),
+        }
         return CollectionStageResult(
             run_id=run_id,
-            observed_event_ids=observed_ids,
-            new_event_ids=tuple(dict.fromkeys(new_ids)),
-            new_events=ingestion.inserted_event_count,
-            existing_events=ingestion.duplicate_event_count,
-            received_items=len(items),
+            run_ids=(run_id, *direct_run_ids),
+            observed_event_ids=combined_observed_ids,
+            new_event_ids=combined_new_ids,
+            new_events=len(combined_new_ids),
+            existing_events=max(0, len(combined_observed_ids) - len(combined_new_ids)),
+            received_items=len(items) + int(direct_summary["items_seen"]),
             stop_reason=stop_reason,
+            following_feed=following_summary,
+            direct_profiles=direct_summary,
         )
 
     def _close_collection_run(

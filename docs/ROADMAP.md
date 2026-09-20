@@ -348,3 +348,43 @@ This project is an Investor Behavior Intelligence System, not a Xueqiu crawler p
 system, auto-trading system, or price prediction system. The roadmap prioritizes discovering who is watching what,
 why they are watching it, when their views change, whether they act, and whether multiple investors form consensus
 or divergence.
+
+## Phase 4 — Intelligence Yield Recovery
+
+Phase 4 improves intelligence yield by increasing coverage of the already
+monitored Xueqiu Investor cohort. It does not add a second source or change
+the Intelligence semantic layer.
+
+### IYR-1 — Monitored Investor Direct Collection ✅
+
+The canonical Operational Refresh collection stage now runs:
+
+    Following Feed
+          +
+    Monitored Investor Direct Recent Profiles
+          ↓
+    Existing FeedIngestion / Profile DataPipeline
+          ↓
+    One RawEvent hash boundary
+          ↓
+    Existing Analysis → Intelligence → Product path
+
+The cohort is bounded at up to eight database-registered Xueqiu Investors,
+selected from recent activity and existing effective evidence. The direct
+profile path uses a 48-hour overlap, at most two pages, and a 30-second
+per-Investor duration bound. It reuses the operator-authenticated CDP
+context/page and records existing CollectionRun / CollectionObservation
+provenance. Profile failure is isolated per Investor; authentication,
+risk-control, and CDP failures stop the direct collection safely.
+
+Real validation produced 52 Profile-only new RawEvents, with ORIGINAL and
+REPOST observability, complete downstream processing, and successful Product
+verification. No Asset Resolution semantic was changed.
+
+### IYR-2 — Asset Resolution Yield Recovery
+
+Deferred. No IYR-2 implementation is part of IYR-1.
+
+### IYR-3 — Yield Re-validation
+
+Deferred until IYR-2 decisions and additional direct-collection evidence exist.

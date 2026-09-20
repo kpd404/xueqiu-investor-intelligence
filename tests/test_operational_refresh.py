@@ -94,6 +94,27 @@ def test_empty_incremental_refresh_is_a_successful_no_op() -> None:
     assert summary.errors == []
 
 
+def test_collection_summary_exposes_combined_feed_profile_metrics() -> None:
+    run_id = uuid4()
+    profile_run_id = uuid4()
+    result = CollectionStageResult(
+        run_id=run_id,
+        run_ids=(run_id, profile_run_id),
+        observed_event_ids=(uuid4(),),
+        new_event_ids=(uuid4(),),
+        received_items=3,
+        following_feed={"original_count": 1, "repost_count": 1},
+        direct_profiles={"investors_attempted": 8, "profile_only_new_raw_events": 1},
+    )
+
+    summary = OperationalRefreshService._collection_dict(result)
+
+    assert summary["run_ids"] == [str(run_id), str(profile_run_id)]
+    assert summary["following_feed"]["original_count"] == 1
+    assert summary["direct_profiles"]["investors_attempted"] == 8
+    assert summary["unique_new_raw_events"] == 1
+
+
 def test_collection_investors_are_available_for_product_verification() -> None:
     investor_id = uuid4()
 

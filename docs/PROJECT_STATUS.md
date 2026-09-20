@@ -572,3 +572,41 @@ post-MVP hosting/restart reliability versus deeper data readiness; do not
 start either in this task. Do not add new Intelligence semantics, ranking,
 scoring, recommendations, or portfolio analytics without real Portfolio
 facts.
+
+## Phase 4 — Intelligence Yield Recovery
+
+### IYR-1 — Monitored Investor Direct Collection
+
+Status: **COMPLETE**.
+
+The existing bounded Xueqiu Investor profile-history collector is now included
+inside the canonical OperationalRefreshService collection stage. It reuses
+the authenticated Edge CDP browser context/page, selects a bounded cohort of
+registered Xueqiu Investors from current database evidence, and checks a
+48-hour recent window with a two-page / 30-second per-Investor bound.
+
+Following Feed and profile collection continue to use the same RawEvent hash
+deduplication and existing CollectionObservation provenance. Profile-only
+observations are distinguished through the existing ENTITY_HISTORY /
+xueqiu_profile_history_cdp CollectionRun identity and collection strategy
+metadata. No Watchlist UI, new collection table, migration, Asset Resolution
+change, or Intelligence semantic was added.
+
+Real validation on the authenticated CDP runtime:
+
+- bounded cohort: 8 Investors;
+- successful probes: 8/8;
+- Profile items: 108;
+- Profile mix: 37 ORIGINAL, 68 REPOST, 3 other;
+- Profile-only new RawEvents: 52;
+- current database RawEvents: 1,707;
+- Opinion rows: 245; - effective production Opinions: 213;
+- AttentionOccurrences: 313;
+- ThesisChanges: 233;
+- Signals: 366;
+- FeedItems: 68;
+- Product verification: successful.
+
+The Feed remained a valid historical projection; IYR-1 does not promise that
+every source improvement creates a new FeedItem. Historical completeness
+remains UNKNOWN, and IYR-2 Asset Resolution Yield Recovery is deferred.

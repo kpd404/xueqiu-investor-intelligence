@@ -208,4 +208,12 @@ def test_priority_repository_has_one_row_per_event(db_session) -> None:
     assert created is True
     assert reused is False
     assert first.id == second.id
+    refreshed, refreshed_reused = repository.add_if_absent(
+        command.model_copy(update={"evidence_count": 3})
+    )
+    db_session.commit()
+
+    assert refreshed_reused is False
+    assert refreshed.id == first.id
+    assert refreshed.evidence_count == 3
     assert len(repository.list()) == 1
