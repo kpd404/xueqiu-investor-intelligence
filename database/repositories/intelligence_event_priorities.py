@@ -64,6 +64,24 @@ class IntelligenceEventPriorityRepository:
         )
         return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
 
+    def list_by_event_ids(
+        self,
+        event_ids: tuple[UUID, ...],
+    ) -> tuple[IntelligenceEventPriorityView, ...]:
+        if not event_ids:
+            return ()
+        statement = (
+            select(IntelligenceEventPriority)
+            .where(IntelligenceEventPriority.event_id.in_(event_ids))
+            .order_by(
+                IntelligenceEventPriority.priority_level,
+                IntelligenceEventPriority.reason,
+                IntelligenceEventPriority.event_id,
+                IntelligenceEventPriority.id,
+            )
+        )
+        return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
+
     @classmethod
     def _to_view(
         cls,

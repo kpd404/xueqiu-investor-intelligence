@@ -14,6 +14,7 @@ from intelligence.narrative.schemas import (
     IntelligenceNarrativeView,
     NarrativeAssetIdentity,
 )
+from intelligence.read_scope import AssetIntelligenceReadScope
 from intelligence.schemas.discovery import IntelligenceDiscoveryCandidate
 
 
@@ -111,6 +112,22 @@ class IntelligenceNarrativeService:
             limitations=limitations,
         )
 
+    def get_scope_narrative(
+        self,
+        scope: AssetIntelligenceReadScope,
+        candidate: IntelligenceDiscoveryCandidate | None,
+    ) -> IntelligenceNarrativeView:
+        if candidate is not None:
+            return self.get_candidate_narrative(candidate)
+        return self._empty_narrative(
+            NarrativeAssetIdentity(
+                asset_id=scope.asset.asset_id,
+                name=scope.asset.name,
+                market=scope.asset.market,
+                symbol=scope.asset.symbol,
+            )
+        )
+
     def batch_generate(
         self,
         candidates: Iterable[IntelligenceDiscoveryCandidate] | None = None,
@@ -147,7 +164,7 @@ class IntelligenceNarrativeService:
             limitations=[
                 "No ACTIVE FeedItem source is available.",
                 "Observed evidence only; no absence inference is made.",
-                "Historical completeness and collection provenance remain UNKNOWN/unavailable.",
+                "Available collection provenance does not establish historical completeness.",
                 "This view does not describe holdings, conviction, influence, or advice.",
             ],
         )
@@ -157,7 +174,7 @@ class IntelligenceNarrativeService:
         return [
             "Observed evidence only.",
             "Historical completeness is UNKNOWN.",
-            "Collection provenance is unavailable for the historical sample.",
+            "Available collection provenance does not establish historical completeness.",
             "Absence inference is unsupported.",
             "This view does not describe holdings, conviction, influence, or advice.",
         ]

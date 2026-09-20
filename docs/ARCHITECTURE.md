@@ -1090,3 +1090,340 @@ Pattern activity labels and historical data-quality limitations remain
 separate: INSUFFICIENT_HISTORY is not an activity Pattern. Historical
 completeness remains UNKNOWN, so Evolution never infers absence, cooling, or
 dormancy.
+
+## Intelligence Attention Classification V0 (Sprint 2I.26)
+
+Attention Classification is a query-time presentation/review projection over
+the existing effective IntelligenceEvent, Priority, ACTIVE FeedItem,
+DiscoveryCandidate, Pattern, and Evolution views. It is a deterministic
+answer to:
+
+> What review priority should a human reader use for this observed
+> Intelligence?
+
+It is not Investment ranking, expected return, investment attractiveness,
+recommendation, prediction, or trading advice. It creates no table, migration,
+or persisted row and never modifies FeedItem, Priority, Pattern, Evolution, or
+any upstream fact/artifact.
+
+The contract is IntelligenceAttentionClassificationView:
+
+- asset preserves canonical market + symbol listing identity.
+- attention_class is one of IMMEDIATE_REVIEW, ACTIVE_REVIEW,
+  BACKGROUND_MONITORING, or LIMITED_CONTEXT.
+- reasons is a fixed ordered set of deterministic rule explanations.
+- evidence_summary, evidence_refs, current Pattern/Alignment/Consensus
+  state, latest observed time, and limitations preserve explainability.
+
+The projection does not contain a score, rank, weight, hotness,
+recommendation, prediction, buy/sell, target-price, or LLM field.
+
+### Classification rule precedence
+
+Rules are centralized in
+intelligence/attention_classification/rules.py:
+
+1. Explicit change evidence produces IMMEDIATE_REVIEW: a
+   CONSENSUS_STATE_CHANGE, explicit CONSENSUS_FRAGMENTATION
+   (MIXED_DIRECTION or DIVERGENT evidence), multi-investor expansion,
+   thesis transition, or an existing HIGH Priority evidence.
+2. Otherwise, any effective ACTIVE IntelligenceEvent, Priority, ACTIVE Feed,
+   or DiscoveryCandidate produces ACTIVE_REVIEW.
+3. Otherwise, a positive historical Signal/Attention/Thesis/Cross-Investor
+   artifact produces BACKGROUND_MONITORING.
+4. Otherwise the Asset returns LIMITED_CONTEXT.
+
+LIMITED_CONTEXT is a data-quality/boundary expression, not a severity
+override. Limitations remain attached when explicit evidence supports a higher
+review class. INSUFFICIENT_EVIDENCE is preserved as insufficient coverage;
+it is never converted into disagreement or evidence absence.
+
+Historical completeness is still UNKNOWN. Classification never uses a zero
+previous-window count to infer no previous Attention, dormancy, cooling,
+reactivation, or historical newness. The existing Pattern producer was
+hardened accordingly: absence-sensitive NEW_DISCOVERY and zero-baseline
+acceleration are not emitted without positive prior-window evidence.
+
+### Read API
+
+GET /api/intelligence/assets/{asset_id}/attention-classification is a
+read-only projection. Unknown Assets return 404. An Asset with insufficient
+coverage returns LIMITED_CONTEXT or a higher evidence-backed class with an
+explicit limitation; it is never synthesized or filled by inference.
+
+## Derived Layer Architecture Audit (Sprint 2I.26)
+
+| Layer | Independent responsibility | Storage |
+| --- | --- | --- |
+| Priority | Classify one persisted IntelligenceEvent into an explainable observation-priority class | persisted |
+| Feed | Preserve one user-facing item and lifecycle state for one Priority | persisted |
+| Discovery | Group only ACTIVE FeedItems by Asset for temporal browsing | query-time |
+| Narrative | Render a deterministic fact-only textual projection of Discovery | query-time |
+| Context | Compare explicit current/previous observed-time windows | query-time |
+| Pattern | Label reusable fact patterns over Context and persisted states | query-time |
+| Evolution | Order canonical fact/artifact references on a fact-time timeline | query-time |
+| Attention Classification | Compose explicit change/active/history/data-boundary facts into human review semantics | query-time |
+
+The boundaries are currently defensible: Priority and Feed are persisted
+because they provide stable downstream identities and Feed lifecycle state;
+Discovery, Narrative, Context, Pattern, Evolution, and Attention Classification
+are projections and should remain non-persisted.
+
+The audit found limited semantic overlap, not a correctness-breaking
+dependency inversion:
+
+- Priority's multi-investor/HIGH rule and Pattern's
+  MULTI_INVESTOR_EXPANSION describe related evidence at different
+  aggregation stages; Classification consumes both as existing evidence and
+  does not recompute either.
+- Pattern current labels and Evolution current_state.patterns expose the
+  same current Pattern semantics, while Evolution additionally owns the
+  ordered timeline. This is a duplication risk for future read APIs.
+- Narrative is mostly deterministic field reformatting over Discovery and has
+  limited independent semantic value. It can later be folded into a product
+  presentation adapter.
+- Evolution currently composes Context/Pattern/Discovery through multiple
+  read scopes. A shared read snapshot can reduce repeated queries later, but
+  that is a performance/consistency convergence task, not a reason for a
+  broad refactor in this Sprint.
+
+No existing persisted artifact should be merged or removed now. The next
+Sprint should prefer architecture convergence and product consumption:
+introduce a shared Asset Intelligence read scope, reduce repeated
+query-service composition, and decide whether Narrative remains a standalone
+consumer adapter. Do not add another backend semantic layer until these
+consumers establish a concrete need.
+
+## Asset Intelligence Product Read Model V0 (Sprint 2I.27)
+
+Sprint 2I.27 introduces Product composition, not a new Intelligence semantic
+layer. AssetIntelligenceView answers what the system currently knows about
+one canonical listing-level Asset by composing the existing Discovery,
+Narrative, Context, Pattern, Evolution, Feed/Event lifecycle, and Attention
+Classification projections.
+
+The Product View is query-time only and contains:
+
+- canonical Asset identity;
+- human review classification and reasons;
+- Discovery eligibility and existing activity summary;
+- persisted Alignment/Consensus plus current Pattern labels;
+- existing Context and deterministic Narrative projections;
+- bounded recent Evolution steps and the complete timeline range;
+- separate Feed and IntelligenceEvent lifecycle-state summaries;
+- explicit data-quality boundaries; and
+- complete evidence references for traceability.
+
+It does not calculate a score, ranking, weight, hotness, recommendation,
+prediction, expected return, buy/sell action, or target price. The endpoint is:
+
+    GET /api/intelligence/assets/{asset_id}/view
+
+An existing Asset returns a Product View even when it has no ACTIVE FeedItem
+or DiscoveryCandidate. Unknown Assets return 404.
+
+### Shared Asset Intelligence Read Scope
+
+AssetIntelligenceReadScope is an immutable, typed, read-only, Asset-scoped
+input snapshot. It loads only the requested listing's Asset, Signals,
+IntelligenceEvents, Event evidence, Priorities, FeedItems, effective
+ThesisChanges, effective AttentionOccurrences, Cross-Investor Snapshots,
+Alignments, and Consensus evidence.
+
+The scope owns reading and canonical grouping only. It does not classify,
+summarize, narrate, or create a new semantic. Discovery, Context, Evolution,
+Narrative, and Attention Classification expose scope-based composition paths;
+Pattern continues to consume the single Context result. Evolution receives
+that same Pattern result and does not calculate a second Pattern semantic.
+
+The real PostgreSQL query audit for one Asset changed from:
+
+- old six-endpoint composition: 107 SELECT statements and 21 transaction SET
+  statements (128 total);
+- unified Product View: 12 SELECT statements and 3 transaction SET statements
+  (15 total).
+
+Repository reads are bounded by source type, not by the number of Event or
+Signal rows, so the Product path has no per-artifact N+1 query.
+
+### ACTIVE state semantics
+
+The four related states are intentionally distinct:
+
+1. IntelligenceEvent.state = ACTIVE means the persisted aggregate has not
+   been explicitly RESOLVED. V0 creates Events as ACTIVE and currently has no
+   automatic resolution transition. It does not establish current-time
+   activity or freshness.
+2. FeedItem.state = ACTIVE is Feed presentation/lifecycle eligibility. It is
+   advanced from NEW and may become STALE or RESOLVED by the Feed lifecycle
+   policy. It is not a claim about current market or investor behavior.
+3. DiscoveryCandidate existence means the Asset is currently eligible for the
+   Product Discovery surface because at least one FeedItem is ACTIVE. It does
+   not mean the Asset has no historical Intelligence when absent.
+4. ACTIVE_REVIEW is a human review class. It can follow current Product
+   discovery/feed eligibility when no immediate trigger exists, but it is not
+   equivalent to Event ACTIVE or Feed ACTIVE.
+
+The previous rule treated Event ACTIVE alone as ACTIVE_REVIEW. This was a
+semantic correctness bug because Event ACTIVE is an unresolved/default
+lifecycle state. The rule now requires ACTIVE Feed/Discovery eligibility.
+China National Offshore Oil Corporation (HK:00883), which has one ACTIVE
+unresolved Event but no Priority, FeedItem, or DiscoveryCandidate, is therefore
+BACKGROUND_MONITORING while retaining its Attention, Thesis, Evolution, and
+Event-state evidence.
+
+### Classification discrimination audit
+
+Before semantic hardening, all 39 Discovery Assets were IMMEDIATE_REVIEW.
+Twenty-three Assets were immediate only because every current ThesisChange,
+including NEW_THESIS, THESIS_UNCHANGED, and INSUFFICIENT_EVIDENCE, was labeled
+THESIS_TRANSITION.
+
+THESIS_TRANSITION now consumes only the existing material ThesisChange
+semantics THESIS_REINFORCED, THESIS_EXTENDED, and THESIS_CHANGED. It does not
+reinterpret or rewrite ThesisChange artifacts. The resulting real-data
+distribution is:
+
+- Discovery: 39;
+- IMMEDIATE_REVIEW: 35;
+- ACTIVE_REVIEW: 4;
+- BACKGROUND_MONITORING: 14;
+- LIMITED_CONTEXT: 0;
+- Discovery intersection Immediate: 35;
+- Discovery minus Immediate: 4;
+- Immediate minus Discovery: 0.
+
+The change restores Product discrimination without targeting a desired class
+distribution.
+
+### Data-quality semantics
+
+The Product View always states:
+
+- historical_completeness = UNKNOWN;
+- historical_comparison_supported = false; and
+- absence_inference_supported = false.
+
+The canonical provenance wording is:
+
+> Available collection provenance does not establish historical completeness.
+
+This acknowledges CollectionRun, CollectionObservation, and RawEvent
+provenance without claiming that those partial records prove historical
+coverage.
+
+### Derived layer consolidation decisions
+
+| Layer | Decision | Independent responsibility | Persistence | Future consolidation |
+| --- | --- | --- | --- | --- |
+| Priority | KEEP | Persisted Event presentation classification | persisted | keep |
+| Feed | KEEP | Presentation lifecycle and stable Product eligibility | persisted | keep |
+| Discovery | COMPOSE | ACTIVE Feed grouping and Product discovery eligibility | query-time | compose from shared scope |
+| Narrative | COMPOSE | Deterministic Product copy/presentation | query-time | future merge into presentation adapter is allowed |
+| Context | KEEP | Explicit fact-time window comparison | query-time | compose from shared scope |
+| Pattern | KEEP | Reusable current semantic labels | query-time | keep one implementation |
+| Evolution | KEEP | Chronological evidence timeline | query-time | compose the existing Pattern result |
+| Attention Classification | KEEP | Human review semantics | query-time | compose from shared scope |
+| Product View | COMPOSE | Stable consumer contract over existing layers | query-time | not an Intelligence semantic layer |
+
+Backend Intelligence semantic-layer expansion should stop at this boundary.
+The next product step should consume this API from the existing Product V0 UI,
+while historical completeness remains the primary data-readiness limitation.
+
+## Product Intelligence UI Integration V0 (Sprint 2J.0)
+
+The existing React/TypeScript/Vite Product V0 now consumes the unified Product
+View on the existing Asset Detail route. Asset Detail calls exactly one
+Product View request:
+
+    GET /api/intelligence/assets/{asset_id}/view
+
+Asset Discovery continues to use its bounded collection endpoint and does not
+request one Product View per card. Discovery answers which observed Assets can
+be opened; Asset Detail explains the complete composed Intelligence.
+
+The UI presents Review Classification as human review priority, never as an
+Investment Rating. Alignment and Consensus remain separate fields. Feed ACTIVE
+and IntelligenceEvent ACTIVE are labeled as lifecycle states and are not
+described as current investor activity. Data quality remains quiet, explicit,
+and non-blocking:
+
+- historical completeness is UNKNOWN;
+- historical comparison is unsupported for this Product View V0; and
+- absence inference is unsupported.
+
+Evolution renders recent fact-time steps, not synthetic phases. Traceability
+renders source counts and persisted source references. Listing identity is
+always Asset ID + market + symbol; Asset name is never used as a UI key or
+cache identity, preserving A/H isolation.
+
+## Investor Intelligence Product Read Model V0 (Sprint 2J.1)
+
+Sprint 2J.1 adds the query-time `InvestorIntelligenceView` as the product
+composition counterpart to `AssetIntelligenceView`. It answers what the
+system has observed about one Investor without adding a new Intelligence
+semantic layer or rewriting the existing Investor API.
+
+The read path is:
+
+```text
+InvestorIntelligenceReadScope
+        ↓
+effective Attention / Opinion / ThesisChange + Asset identity
+        ↓
+InvestorIntelligenceView
+        ↓
+existing Investor Detail Product V0
+```
+
+`InvestorIntelligenceReadScope` is immutable, Investor-scoped, typed,
+read-only, and bounded to one request. It loads the Investor, effective
+AttentionOccurrences, effective Opinion timeline, effective ThesisChanges,
+and the referenced listing-level Assets once. It only reads and canonically
+groups facts; it does not calculate Opinion, ThesisChange, Signal,
+Cross-Investor state, Asset Intelligence, quality, or ranking semantics.
+
+The Product View preserves the following distinctions:
+
+- Investor Attention is an observed AttentionOccurrence, not an Opinion.
+- Opinion is a persisted interpretation and its latest direction is read from
+  the latest effective persisted Opinion only; it is not a recommendation.
+- Repeated Attention is an occurrence count and does not establish conviction,
+  skill, quality, influence, or a ranking.
+- Attention-only means no effective persisted Opinion is present in this read
+  scope. It does not mean disinterest, lack of conviction, or a negative view.
+- `THESIS_UNCHANGED`, `INSUFFICIENT_EVIDENCE`, `NEW_THESIS`, and each other
+  ThesisChange enum retain their source semantic. Product composition does not
+  turn every ThesisChange into a material transition.
+- Historical completeness remains UNKNOWN. Historical absence cannot be
+  inferred from a zero previous window or a missing current artifact.
+
+The endpoint is:
+
+    GET /api/intelligence/investors/{investor_id}/view
+
+Unknown Investors return 404. An existing Investor with Attention and no
+Opinion still returns a valid Product View. The route is read-only and does
+not persist the composition.
+
+Investor Discovery remains a collection surface and does not request one
+Product View per card. Investor Detail makes one Investor-specific Product
+View request. Its Asset rows navigate to the existing Asset Detail using
+`asset_id`; the page does not prefetch one Asset Product View for every row.
+This completes the Investor → Asset half of the product navigation without
+introducing a frontend N+1. Asset Evolution now resolves the Investor name
+from the existing Investor catalog when available and falls back to a short
+canonical ID; this is a presentation mapping, not a new backend semantic.
+Direct Asset → Investor click-through remains a follow-up Product polish item.
+
+The real PostgreSQL query audit for Investor `管我财` changed from the legacy
+Investor Detail composition's 342 SELECT statements and 15 transaction/setup
+statements (357 total) to 6 SELECT statements and 3 transaction/setup
+statements (9 total) for the unified Product View. The new path has no
+Investor × Asset repository loop.
+
+The Product UI is an evidence workspace. It exposes recorded counts,
+listing-level Asset identity, latest persisted Opinion direction, ThesisChange
+type, fact-time activity, data-quality limitations, and source-reference
+counts. It never renders Investor score, ranking, recommendation, prediction,
+expected return, buy/sell language, or target price.

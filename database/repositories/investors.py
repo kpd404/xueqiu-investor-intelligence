@@ -18,6 +18,16 @@ class InvestorRepository:
     def get(self, investor_id: UUID) -> Investor | None:
         return self._session.get(Investor, investor_id)
 
+    def list_by_ids(self, investor_ids: tuple[UUID, ...]) -> tuple[Investor, ...]:
+        if not investor_ids:
+            return ()
+        statement = (
+            select(Investor)
+            .where(Investor.id.in_(investor_ids))
+            .order_by(Investor.name, Investor.id)
+        )
+        return tuple(self._session.scalars(statement))
+
     def get_by_platform_user_id(self, platform: str, platform_user_id: str) -> Investor | None:
         normalized_platform, normalized_user_id = self._normalize_identity(
             platform, platform_user_id

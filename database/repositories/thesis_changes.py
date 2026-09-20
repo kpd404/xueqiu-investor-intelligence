@@ -142,15 +142,51 @@ class ThesisChangeRepository:
     ) -> list[ThesisChangeView]:
         """Return effective Thesis Change artifacts for one investor."""
 
-        return [
-            artifact
-            for artifact in self.list_effective(
-                policy,
-                comparison_version,
-                as_of=as_of,
+        expected_predecessors = self._expected_predecessors(
+            policy,
+            as_of=as_of,
+            investor_id=investor_id,
+        )
+        statement = (
+            select(ThesisChange)
+            .join(Opinion, ThesisChange.current_opinion_id == Opinion.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .join(RawEvent, ThesisChange.current_event_id == RawEvent.id)
+            .where(
+                ThesisChange.investor_id == investor_id,
+                EventAnalysis.analysis_version == policy.active_analysis_version,
+                EventAnalysis.status.in_(
+                    [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                ),
+                ThesisChange.investor_id == Opinion.investor_id,
+                ThesisChange.asset_id == Opinion.asset_id,
+                ThesisChange.current_event_id == Opinion.event_id,
+                ThesisChange.opinion_analysis_version == policy.active_analysis_version,
             )
-            if artifact.investor_id == investor_id
-        ]
+        )
+        if comparison_version is not None:
+            statement = statement.where(ThesisChange.comparison_version == comparison_version)
+        if as_of is not None:
+            statement = statement.where(RawEvent.published_time <= as_of)
+        statement = statement.order_by(
+            RawEvent.published_time,
+            RawEvent.id,
+            ThesisChange.id,
+        )
+
+        effective: list[ThesisChangeView] = []
+        for entity in self._session.scalars(statement):
+            expected = expected_predecessors.get(entity.current_opinion_id)
+            if expected is None:
+                continue
+            expected_previous_opinion_id, expected_previous_event_id = expected
+            if (
+                entity.previous_opinion_id != expected_previous_opinion_id
+                or entity.previous_event_id != expected_previous_event_id
+            ):
+                continue
+            effective.append(self._to_view(entity))
+        return effective
 
     def list_effective_by_asset(
         self,
@@ -162,21 +198,55 @@ class ThesisChangeRepository:
     ) -> list[ThesisChangeView]:
         """Return effective ThesisChange artifacts for one Asset."""
 
-        return [
-            artifact
-            for artifact in self.list_effective(
-                policy,
-                comparison_version,
-                as_of=as_of,
+        expected_predecessors = self._expected_predecessors(
+            policy,
+            as_of=as_of,
+            asset_id=asset_id,
+        )
+        statement = (
+            select(ThesisChange)
+            .join(Opinion, ThesisChange.current_opinion_id == Opinion.id)
+            .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
+            .join(RawEvent, ThesisChange.current_event_id == RawEvent.id)
+            .where(
+                ThesisChange.asset_id == asset_id,
+                EventAnalysis.analysis_version == policy.active_analysis_version,
+                EventAnalysis.status.in_(
+                    [EventAnalysisStatus.SUCCESS, EventAnalysisStatus.PARTIALLY_RESOLVED]
+                ),
+                ThesisChange.investor_id == Opinion.investor_id,
+                ThesisChange.asset_id == Opinion.asset_id,
+                ThesisChange.current_event_id == Opinion.event_id,
+                ThesisChange.opinion_analysis_version == policy.active_analysis_version,
             )
-            if artifact.asset_id == asset_id
-        ]
+        )
+        if comparison_version is not None:
+            statement = statement.where(ThesisChange.comparison_version == comparison_version)
+        if as_of is not None:
+            statement = statement.where(RawEvent.published_time <= as_of)
+        statement = statement.order_by(RawEvent.published_time, RawEvent.id, ThesisChange.id)
+
+        effective: list[ThesisChangeView] = []
+        for entity in self._session.scalars(statement):
+            expected = expected_predecessors.get(entity.current_opinion_id)
+            if expected is None:
+                continue
+            expected_previous_opinion_id, expected_previous_event_id = expected
+            if (
+                entity.previous_opinion_id != expected_previous_opinion_id
+                or entity.previous_event_id != expected_previous_event_id
+            ):
+                continue
+            effective.append(self._to_view(entity))
+        return effective
 
     def _expected_predecessors(
         self,
         policy: EffectiveAnalysisPolicy,
         *,
         as_of: datetime | None = None,
+        asset_id: UUID | None = None,
+        investor_id: UUID | None = None,
     ) -> dict[UUID, tuple[UUID | None, UUID | None]]:
         """Build current predecessor identities from the effective fact timeline."""
 
@@ -193,6 +263,10 @@ class ThesisChangeRepository:
             .join(EventAnalysis, Opinion.analysis_id == EventAnalysis.id)
             .where(*self._effective_analysis_predicates(policy))
         )
+        if asset_id is not None:
+            statement = statement.where(Opinion.asset_id == asset_id)
+        if investor_id is not None:
+            statement = statement.where(Opinion.investor_id == investor_id)
         if as_of is not None:
             statement = statement.where(RawEvent.published_time <= as_of)
         statement = statement.order_by(

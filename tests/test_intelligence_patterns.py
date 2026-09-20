@@ -112,7 +112,7 @@ def test_pattern_enum_and_each_primary_rule() -> None:
     assert IntelligencePatternType.CONSENSUS_FORMATION not in types
 
 
-def test_new_discovery_formation_and_insufficient_history() -> None:
+def test_zero_previous_window_does_not_infer_new_discovery_or_acceleration() -> None:
     context = _context(
         current_signals=1,
         previous_signals=0,
@@ -127,10 +127,44 @@ def test_new_discovery_formation_and_insufficient_history() -> None:
     )
     types = {item.type for item in detect_patterns(context, multi_investor_threshold=3)}
 
-    assert IntelligencePatternType.NEW_DISCOVERY in types
+    assert IntelligencePatternType.NEW_DISCOVERY not in types
+    assert IntelligencePatternType.ACCELERATING_ACTIVITY not in types
     assert IntelligencePatternType.CONSENSUS_FORMATION in types
     assert IntelligencePatternType.INSUFFICIENT_HISTORY not in types
     assert any(item.type.value == "INSUFFICIENT_HISTORY" for item in detect_data_quality(context))
+
+
+def test_thesis_transition_requires_material_existing_thesis_semantic() -> None:
+    non_material = _context(current_thesis=3)
+    non_material = non_material.model_copy(
+        update={
+            "thesis_context": ThesisContext(
+                current_thesis_changes=3,
+                historical_thesis_changes=0,
+                direction_changes=[
+                    "NEW_THESIS",
+                    "THESIS_UNCHANGED",
+                    "INSUFFICIENT_EVIDENCE",
+                ],
+            )
+        }
+    )
+    material = non_material.model_copy(
+        update={
+            "thesis_context": ThesisContext(
+                current_thesis_changes=1,
+                historical_thesis_changes=0,
+                direction_changes=["THESIS_CHANGED"],
+            )
+        }
+    )
+
+    assert IntelligencePatternType.THESIS_TRANSITION not in {
+        item.type for item in detect_patterns(non_material, multi_investor_threshold=3)
+    }
+    assert IntelligencePatternType.THESIS_TRANSITION in {
+        item.type for item in detect_patterns(material, multi_investor_threshold=3)
+    }
 
 
 def test_pattern_service_is_read_only_and_threshold_is_configurable() -> None:

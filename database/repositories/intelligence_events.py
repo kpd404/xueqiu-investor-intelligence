@@ -69,6 +69,18 @@ class IntelligenceEventRepository:
         )
         return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
 
+    def list_by_asset(self, asset_id: UUID) -> tuple[IntelligenceEventView, ...]:
+        statement = (
+            select(IntelligenceEvent)
+            .where(IntelligenceEvent.asset_id == asset_id)
+            .order_by(
+                IntelligenceEvent.last_observed_at,
+                IntelligenceEvent.event_type,
+                IntelligenceEvent.id,
+            )
+        )
+        return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
+
     @classmethod
     def _to_view(cls, entity: IntelligenceEvent | None) -> IntelligenceEventView | None:
         if entity is None:

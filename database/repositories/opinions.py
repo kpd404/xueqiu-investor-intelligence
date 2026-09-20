@@ -128,6 +128,8 @@ class OpinionRepository:
         self,
         investor_id: UUID,
         policy: EffectiveAnalysisPolicy,
+        *,
+        as_of: datetime | None = None,
     ) -> list[OpinionTimelineEntry]:
         """Return all active Opinion facts for one investor in fact-time order."""
 
@@ -139,7 +141,11 @@ class OpinionRepository:
                 Opinion.investor_id == investor_id,
                 *self._effective_analysis_predicates(policy),
             )
-            .order_by(Opinion.asset_id, RawEvent.published_time, RawEvent.id, Opinion.id)
+        )
+        if as_of is not None:
+            statement = statement.where(RawEvent.published_time <= self._as_utc(as_of))
+        statement = statement.order_by(
+            Opinion.asset_id, RawEvent.published_time, RawEvent.id, Opinion.id
         )
         return [self._timeline_entry(row[0], row[1]) for row in self._session.execute(statement)]
 

@@ -5,12 +5,17 @@ from sqlalchemy.orm import Session
 
 from database.session import SessionFactory
 from database.unit_of_work import SqlAlchemyObservedAttentionUnitOfWork
+from intelligence.attention_classification.service import (
+    IntelligenceAttentionClassificationService,
+)
 from intelligence.context.service import IntelligenceContextService
 from intelligence.discovery.service import IntelligenceDiscoveryService
 from intelligence.evolution.service import IntelligenceEvolutionService
 from intelligence.feed.query import IntelligenceFeedQueryService
+from intelligence.investor_product.service import InvestorIntelligenceProductService
 from intelligence.narrative.service import IntelligenceNarrativeService
 from intelligence.patterns.service import IntelligencePatternService
+from intelligence.product.service import AssetIntelligenceProductService
 from intelligence.services.combined_asset_intelligence import (
     CombinedAssetIntelligenceService,
 )
@@ -109,3 +114,23 @@ def get_intelligence_evolution_service() -> IntelligenceEvolutionService:
     """Compose Evolution over the existing read-only Intelligence layers."""
 
     return IntelligenceEvolutionService.from_production(SessionFactory)
+
+
+def get_intelligence_attention_classification_service() -> (
+    IntelligenceAttentionClassificationService
+):
+    """Compose Attention Classification over a rollback-only read scope."""
+
+    return IntelligenceAttentionClassificationService.from_production(_read_only_session)
+
+
+def get_asset_intelligence_product_service() -> AssetIntelligenceProductService:
+    """Compose the unified Product View over one shared read-only scope."""
+
+    return AssetIntelligenceProductService.from_production(_read_only_session)
+
+
+def get_investor_intelligence_product_service() -> InvestorIntelligenceProductService:
+    """Compose Investor Product View over a rollback-only read scope."""
+
+    return InvestorIntelligenceProductService.from_production(_read_only_session)

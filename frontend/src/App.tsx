@@ -2,21 +2,23 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   ApiError,
-  getAsset,
+  getAssetIntelligenceView,
   getAssetList,
-  getAssetTimeline,
-  getInvestor,
+  getInvestorIntelligenceView,
   getInvestorList
 } from "./api";
+import { AssetProductViewPage } from "./AssetProductViewPage";
 import { DiscoveryPage } from "./DiscoveryPage";
-import { InvestorDetailPage, InvestorDiscoveryPage } from "./InvestorPage";
+import { InvestorProductViewPage } from "./InvestorProductViewPage";
+import { InvestorDiscoveryPage } from "./InvestorPage";
 import { OverviewPage } from "./OverviewPage";
 import type {
   AssetListItem,
+  AssetIntelligenceView,
   AttentionObservation,
   CombinedAssetView,
   Direction,
-  InvestorIntelligenceView,
+  InvestorProductView,
   InvestorListItem,
   InvestorView,
   TimelineEvent,
@@ -83,15 +85,6 @@ function navigateToInvestor(investorId: string): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-function navigateToInvestorQuery(investorId: string, queryString: string): void {
-  window.history.pushState(
-    {},
-    "",
-    "/investors/" + investorId + (queryString ? "?" + queryString : "")
-  );
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
 export default function App() {
   const [assets, setAssets] = useState<AssetListItem[]>([]);
   const [investors, setInvestors] = useState<InvestorListItem[]>([]);
@@ -99,13 +92,12 @@ export default function App() {
   const [route, setRoute] = useState<RouteState>(readRouteState);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<Error | null>(null);
-  const [view, setView] = useState<CombinedAssetView | null>(null);
-  const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
+  const [view, setView] = useState<AssetIntelligenceView | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewError, setViewError] = useState<Error | null>(null);
   const [investorCatalogLoading, setInvestorCatalogLoading] = useState(true);
   const [investorCatalogError, setInvestorCatalogError] = useState<Error | null>(null);
-  const [investorView, setInvestorView] = useState<InvestorIntelligenceView | null>(null);
+  const [investorView, setInvestorView] = useState<InvestorProductView | null>(null);
   const [investorViewLoading, setInvestorViewLoading] = useState(false);
   const [investorViewError, setInvestorViewError] = useState<Error | null>(null);
   const assetId = route.assetId;
@@ -164,22 +156,19 @@ export default function App() {
   useEffect(() => {
     if (!assetId) {
       setView(null);
-      setTimeline(null);
       return;
     }
     let active = true;
     setViewLoading(true);
     setViewError(null);
-    Promise.all([getAsset(assetId), getAssetTimeline(assetId)])
-      .then(([asset, assetTimeline]) => {
+    getAssetIntelligenceView(assetId)
+      .then((asset) => {
         if (!active) return;
         setView(asset);
-        setTimeline(assetTimeline);
       })
       .catch((error: unknown) => {
         if (!active) return;
         setView(null);
-        setTimeline(null);
         setViewError(error instanceof Error ? error : new Error("API unavailable"));
       })
       .finally(() => {
@@ -199,7 +188,7 @@ export default function App() {
     let active = true;
     setInvestorViewLoading(true);
     setInvestorViewError(null);
-    getInvestor(investorId)
+    getInvestorIntelligenceView(investorId)
       .then((value) => {
         if (active) setInvestorView(value);
       })
@@ -223,6 +212,10 @@ export default function App() {
   const visibleAssets = useMemo(
     () => filterAssets(assets, assetQuery),
     [assets, assetQuery]
+  );
+  const investorNames = useMemo(
+    () => Object.fromEntries(investors.map((investor) => [investor.investor_id, investor.investor_name])),
+    [investors]
   );
 
   const handleSelect = (nextAssetId: string) => {
@@ -410,15 +403,7 @@ export default function App() {
               }
             />
           ) : investorView ? (
-            <InvestorDetailPage
-              view={investorView}
-              queryString={route.queryString}
-              onOpenAsset={handleSelect}
-              onOpenInvestor={navigateToInvestor}
-              onQueryChange={(queryString) =>
-                navigateToInvestorQuery(investorId ?? "", queryString)
-              }
-            />
+            <InvestorProductViewPage view={investorView} onOpenAsset={handleSelect} />
           ) : (
             <PageState
               kind="empty"
@@ -439,17 +424,17 @@ export default function App() {
             kind={viewError instanceof ApiError && viewError.status === 404 ? "empty" : "error"}
             title={
               viewError instanceof ApiError && viewError.status === 404
-                ? "No evidence in selected window"
+                ? "No Asset Intelligence evidence"
                 : "API unavailable"
             }
             description={
               viewError instanceof ApiError && viewError.status === 404
-                ? "This page only presents effective evidence observed in the current database window."
+                ? "This Asset has no Product View in the current observed database window."
                 : "The read-only API returned an unexpected response. No intelligence has been inferred."
             }
           />
-        ) : view && timeline ? (
-          <AssetPage view={view} timeline={timeline} />
+        ) : view ? (
+          <AssetProductViewPage view={view} investorNames={investorNames} />
         ) : selectedAsset ? (
           <PageState
             kind="empty"

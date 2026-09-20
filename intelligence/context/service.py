@@ -34,11 +34,60 @@ from intelligence.discovery.service import (
     DiscoveryAssetNotFoundError,
     IntelligenceDiscoveryService,
 )
+from intelligence.read_scope import AssetIntelligenceReadScope
 from intelligence.schemas.discovery import IntelligenceDiscoveryCandidate
 
 
 class _Reader(Protocol):
     def list(self): ...
+
+
+class _ScopeReader:
+    def __init__(self, values: tuple[object, ...]) -> None:
+        self._values = values
+
+    def list(self) -> tuple[object, ...]:
+        return self._values
+
+
+class _ScopeAssetReader:
+    def __init__(self, scope: AssetIntelligenceReadScope) -> None:
+        self._scope = scope
+
+    def list(self) -> tuple[object, ...]:
+        return (self._scope.asset,)
+
+
+class _ScopeThesisReader:
+    def __init__(self, scope: AssetIntelligenceReadScope) -> None:
+        self._scope = scope
+
+    def list_effective_by_asset(self, asset_id, policy, comparison_version, *, as_of=None):
+        if asset_id != self._scope.asset.asset_id:
+            return []
+        return list(self._scope.thesis_changes)
+
+
+class _ScopeCrossReader:
+    def __init__(self, values: tuple[object, ...]) -> None:
+        self._values = values
+
+    def list_by_asset(self, asset_id):
+        return [item for item in self._values if item.asset_id == asset_id]
+
+
+class _ScopeContextUoW:
+    def __init__(self, scope: AssetIntelligenceReadScope) -> None:
+        self.intelligence_feed_items = _ScopeReader(scope.feed_items)
+        self.intelligence_event_priorities = _ScopeReader(scope.priorities)
+        self.intelligence_events = _ScopeReader(scope.events)
+        self.intelligence_event_evidence = _ScopeReader(scope.event_evidence)
+        self.signals = _ScopeReader(scope.signals)
+        self.assets = _ScopeAssetReader(scope)
+        self.thesis_changes = _ScopeThesisReader(scope)
+        self.cross_investor_asset_snapshots = _ScopeCrossReader(scope.snapshots)
+        self.cross_investor_asset_alignments = _ScopeCrossReader(scope.alignments)
+        self.cross_investor_consensus_evidences = _ScopeCrossReader(scope.consensus_evidences)
 
 
 class ThesisReader(Protocol):
@@ -174,6 +223,26 @@ class IntelligenceContextService:
     ) -> IntelligenceContextView:
         return self._get_candidate_context(candidate, self._window(as_of))
 
+    def get_scope_context(
+        self,
+        scope: AssetIntelligenceReadScope,
+        candidate: IntelligenceDiscoveryCandidate | None,
+        *,
+        as_of: datetime | None = None,
+    ) -> IntelligenceContextView:
+        window = self._window(as_of or scope.as_of)
+        if candidate is None:
+            return self._empty_context(
+                ContextAssetIdentity(
+                    asset_id=scope.asset.asset_id,
+                    name=scope.asset.name,
+                    market=scope.asset.market,
+                    symbol=scope.asset.symbol,
+                ),
+                window,
+            )
+        return self._project(_ScopeContextUoW(scope), candidate, window)
+
     def batch_get_context(
         self,
         candidates: Iterable[IntelligenceDiscoveryCandidate] | None = None,
@@ -299,7 +368,7 @@ class IntelligenceContextService:
             ),
             "Observed evidence only; no absence inference is made.",
             "Historical completeness is UNKNOWN.",
-            "Collection provenance is unavailable for the historical sample.",
+            "Available collection provenance does not establish historical completeness.",
             *cross_limitations,
         ]
         return IntelligenceContextView(
@@ -449,7 +518,7 @@ class IntelligenceContextService:
                 "No ACTIVE DiscoveryCandidate source is available.",
                 "Comparison window is explicit, but historical evidence is insufficient.",
                 "Observed evidence only; no absence inference is made.",
-                "Historical completeness and collection provenance remain UNKNOWN/unavailable.",
+                "Available collection provenance does not establish historical completeness.",
             ],
         )
 

@@ -495,6 +495,101 @@ class SqlAlchemyObservedAttentionUnitOfWork:
         self._session = None
 
 
+class SqlAlchemyIntelligenceAttentionClassificationUnitOfWork:
+    """Rollback-only repository scope for Attention Classification reads."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+
+    def __enter__(self) -> "SqlAlchemyIntelligenceAttentionClassificationUnitOfWork":
+        self._session = self._session_factory()
+        self.intelligence_events = IntelligenceEventRepository(self._session)
+        self.intelligence_event_priorities = IntelligenceEventPriorityRepository(self._session)
+        self.intelligence_feed_items = IntelligenceFeedItemRepository(self._session)
+        self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
+        self.signals = SignalRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        self._session.rollback()
+        self._session.close()
+        self._session = None
+
+
+class SqlAlchemyAssetIntelligenceReadUnitOfWork:
+    """Rollback-only repositories for one bounded Asset read scope."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+
+    def __enter__(self) -> "SqlAlchemyAssetIntelligenceReadUnitOfWork":
+        self._session = self._session_factory()
+        self.assets = AssetRepository(self._session)
+        self.signals = SignalRepository(self._session)
+        self.intelligence_events = IntelligenceEventRepository(self._session)
+        self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
+        self.intelligence_event_priorities = IntelligenceEventPriorityRepository(self._session)
+        self.intelligence_feed_items = IntelligenceFeedItemRepository(self._session)
+        self.thesis_changes = ThesisChangeRepository(self._session)
+        self.attention_occurrences = AttentionOccurrenceRepository(self._session)
+        self.cross_investor_asset_snapshots = CrossInvestorAssetSnapshotRepository(self._session)
+        self.cross_investor_asset_alignments = CrossInvestorAssetAlignmentRepository(self._session)
+        self.cross_investor_consensus_evidences = CrossInvestorConsensusEvidenceRepository(
+            self._session
+        )
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        self._session.rollback()
+        self._session.close()
+        self._session = None
+
+
+class SqlAlchemyInvestorIntelligenceReadUnitOfWork:
+    """Rollback-only repositories for one bounded Investor read scope."""
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self._session_factory = session_factory
+        self._session: Session | None = None
+
+    def __enter__(self) -> "SqlAlchemyInvestorIntelligenceReadUnitOfWork":
+        self._session = self._session_factory()
+        self.investors = InvestorRepository(self._session)
+        self.attention_occurrences = AttentionOccurrenceRepository(self._session)
+        self.opinions = OpinionRepository(self._session)
+        self.thesis_changes = ThesisChangeRepository(self._session)
+        self.assets = AssetRepository(self._session)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._session is None:
+            return
+        self._session.rollback()
+        self._session.close()
+        self._session = None
+
+
 class SqlAlchemyIntelligenceEventUnitOfWork:
     """Transactional scope for Signal-to-IntelligenceEvent aggregation."""
 

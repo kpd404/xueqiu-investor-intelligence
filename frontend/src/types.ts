@@ -350,3 +350,244 @@ export interface TimelineResponse {
   missing_thesis_comparison_count: number;
   data_quality_flags: string[];
 }
+
+export type AttentionClass =
+  | "IMMEDIATE_REVIEW"
+  | "ACTIVE_REVIEW"
+  | "BACKGROUND_MONITORING"
+  | "LIMITED_CONTEXT";
+
+export interface ProductAssetIdentity {
+  asset_id: string;
+  name: string;
+  market: string;
+  symbol: string;
+}
+
+export interface ProductReviewView {
+  attention_class: AttentionClass;
+  reasons: string[];
+  latest_observed_at: string | null;
+}
+
+export interface ProductDiscoveryView {
+  is_discoverable: boolean;
+  discovery_reasons: string[];
+  activity_summary: {
+    investor_count: number;
+    signal_count: number;
+    event_count: number;
+    feed_count: number;
+  } | null;
+}
+
+export interface ProductContextView {
+  activity_context: {
+    current_signal_count: number;
+    previous_signal_count: number;
+    change_description: string;
+  };
+  investor_context: {
+    current_investor_count: number;
+    previous_investor_count: number;
+    new_investors: string[];
+    returning_investors: string[];
+  };
+  attention_context: {
+    current_attention_count: number;
+    historical_attention_count: number;
+    change_description: string;
+  };
+  thesis_context: {
+    current_thesis_changes: number;
+    historical_thesis_changes: number;
+    direction_changes: string[];
+  };
+  timeline_context: {
+    first_observed_at: string | null;
+    latest_observed_at: string | null;
+    current_window_start: string;
+    current_window_end: string;
+    previous_window_start: string;
+    previous_window_end: string;
+  };
+}
+
+export interface ProductNarrativeView {
+  headline: string;
+  summary: string;
+  attention_summary: string;
+  thesis_summary: string;
+  cross_investor_summary: string;
+  consensus_summary: string;
+}
+
+export interface ProductEvolutionStep {
+  step_id: string;
+  observed_at: string;
+  step_type: string;
+  asset_id: string;
+  investor_id: string | null;
+  title: string;
+  facts: string[];
+  source_refs: Array<{ source_type: string; source_id: string }>;
+}
+
+export interface ProductEvolutionView {
+  timeline_range: {
+    first_observed_at: string | null;
+    latest_observed_at: string | null;
+  };
+  step_count: number;
+  recent_steps: ProductEvolutionStep[];
+}
+
+export interface ProductLifecycleSummary {
+  active_count: number;
+  states: Record<string, number>;
+}
+
+export interface ProductDataQualityView {
+  historical_completeness: "UNKNOWN";
+  historical_comparison_supported: false;
+  absence_inference_supported: false;
+  limitations: string[];
+}
+
+export interface ProductTraceabilitySummary {
+  source_ref_count: number;
+  canonical_source_count: number;
+  source_types: string[];
+  signal_count: number;
+  evidence_refs: Array<{ source_type: string; source_id: string }>;
+}
+
+export interface AssetIntelligenceView {
+  asset: ProductAssetIdentity;
+  review: ProductReviewView;
+  discovery: ProductDiscoveryView;
+  current_state: {
+    alignment: string | null;
+    consensus: string | null;
+    patterns: string[];
+  };
+  context: ProductContextView;
+  narrative: ProductNarrativeView;
+  evolution: ProductEvolutionView;
+  feed: ProductLifecycleSummary;
+  events: ProductLifecycleSummary;
+  data_quality: ProductDataQualityView;
+  traceability_summary: ProductTraceabilitySummary;
+}
+
+export interface InvestorProductIdentity {
+  investor_id: string;
+  name: string;
+  source_platform: string;
+  source_user_id: string;
+}
+
+export interface InvestorProductAssetIdentity {
+  asset_id: string;
+  name: string;
+  market: string;
+  symbol: string;
+}
+
+export interface InvestorProductAttention {
+  occurrence_count: number;
+  first_observed_at: string | null;
+  latest_observed_at: string | null;
+  evidence_types: EvidenceType[];
+}
+
+export interface InvestorProductOpinion {
+  opinion_count: number;
+  latest_direction: Direction | null;
+  latest_opinion_at: string | null;
+  latest_opinion_id: string | null;
+}
+
+export interface InvestorProductThesis {
+  thesis_change_count: number;
+  latest_change_type: ThesisChangeType | null;
+  latest_change_at: string | null;
+  latest_thesis_change_id: string | null;
+}
+
+export interface InvestorProductRelationship {
+  has_attention: boolean;
+  has_opinion: boolean;
+  attention_only: boolean;
+}
+
+export interface InvestorProductTraceability {
+  attention_occurrence_ids: string[];
+  raw_event_ids: string[];
+  opinion_ids: string[];
+  thesis_change_ids: string[];
+}
+
+export interface InvestorAssetIntelligenceProductView {
+  asset: InvestorProductAssetIdentity;
+  attention: InvestorProductAttention;
+  opinion: InvestorProductOpinion;
+  thesis: InvestorProductThesis;
+  relationship: InvestorProductRelationship;
+  latest_observed_at: string | null;
+  traceability: InvestorProductTraceability;
+}
+
+export interface InvestorProductSummary {
+  observed_asset_count: number;
+  opinion_asset_count: number;
+  thesis_change_count: number;
+  attention_occurrence_count: number;
+  opinion_count: number;
+  latest_observed_at: string | null;
+}
+
+export interface InvestorProductCoverage {
+  observed_assets: InvestorProductAssetIdentity[];
+  opinion_assets: InvestorProductAssetIdentity[];
+  attention_only_assets: InvestorProductAssetIdentity[];
+}
+
+export type InvestorProductActivityType =
+  | "ATTENTION_OBSERVED"
+  | "OPINION_RECORDED"
+  | "THESIS_CHANGE_OBSERVED";
+
+export interface InvestorProductActivityEvent {
+  observed_at: string;
+  event_type: InvestorProductActivityType;
+  asset: InvestorProductAssetIdentity;
+  source_refs: Array<[string, string]>;
+}
+
+export interface InvestorProductDataQuality {
+  historical_completeness: "UNKNOWN";
+  historical_comparison_supported: false;
+  absence_inference_supported: false;
+  limitations: string[];
+}
+
+export interface InvestorProductTraceabilitySummary {
+  attention_occurrence_ref_count: number;
+  raw_event_ref_count: number;
+  opinion_ref_count: number;
+  thesis_change_ref_count: number;
+  activity_source_ref_count: number;
+}
+
+export interface InvestorProductView {
+  investor: InvestorProductIdentity;
+  window_start: string;
+  window_end: string;
+  summary: InvestorProductSummary;
+  coverage: InvestorProductCoverage;
+  asset_views: InvestorAssetIntelligenceProductView[];
+  recent_activity: InvestorProductActivityEvent[];
+  data_quality: InvestorProductDataQuality;
+  traceability_summary: InvestorProductTraceabilitySummary;
+}

@@ -33,11 +33,51 @@ from intelligence.evolution.schemas import (
 )
 from intelligence.patterns.schemas import IntelligencePatternView
 from intelligence.patterns.service import IntelligencePatternService
+from intelligence.read_scope import AssetIntelligenceReadScope
 from intelligence.schemas.discovery import IntelligenceDiscoveryCandidate
 
 
 class EvolutionReader(Protocol):
     def list(self): ...
+
+
+class _ScopeReader:
+    def __init__(self, values: tuple[object, ...]) -> None:
+        self._values = values
+
+    def list(self) -> tuple[object, ...]:
+        return self._values
+
+
+class _ScopeThesisReader:
+    def __init__(self, scope: AssetIntelligenceReadScope) -> None:
+        self._scope = scope
+
+    def list_effective_by_asset(self, asset_id, policy, comparison_version, *, as_of=None):
+        if asset_id != self._scope.asset.asset_id:
+            return []
+        return list(self._scope.thesis_changes)
+
+
+class _ScopeCrossReader:
+    def __init__(self, values: tuple[object, ...]) -> None:
+        self._values = values
+
+    def list_by_asset(self, asset_id):
+        return [item for item in self._values if item.asset_id == asset_id]
+
+
+class _ScopeEvolutionUoW:
+    def __init__(self, scope: AssetIntelligenceReadScope) -> None:
+        self.intelligence_feed_items = _ScopeReader(scope.feed_items)
+        self.intelligence_event_priorities = _ScopeReader(scope.priorities)
+        self.intelligence_events = _ScopeReader(scope.events)
+        self.intelligence_event_evidence = _ScopeReader(scope.event_evidence)
+        self.signals = _ScopeReader(scope.signals)
+        self.thesis_changes = _ScopeThesisReader(scope)
+        self.cross_investor_asset_snapshots = _ScopeCrossReader(scope.snapshots)
+        self.cross_investor_asset_alignments = _ScopeCrossReader(scope.alignments)
+        self.cross_investor_consensus_evidences = _ScopeCrossReader(scope.consensus_evidences)
 
 
 class EvolutionThesisReader(Protocol):
@@ -137,6 +177,25 @@ class IntelligenceEvolutionService:
                 name=candidate.asset.name,
                 market=candidate.asset.market,
                 symbol=candidate.asset.symbol,
+            ),
+            context,
+            pattern,
+        )
+
+    def get_scope_evolution(
+        self,
+        scope: AssetIntelligenceReadScope,
+        context: IntelligenceContextView,
+        pattern: IntelligencePatternView,
+    ) -> IntelligenceEvolutionView:
+        return self._project(
+            _ScopeEvolutionUoW(scope),
+            scope.asset.asset_id,
+            EvolutionAssetIdentity(
+                asset_id=scope.asset.asset_id,
+                name=scope.asset.name,
+                market=scope.asset.market,
+                symbol=scope.asset.symbol,
             ),
             context,
             pattern,

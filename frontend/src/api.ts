@@ -1,12 +1,15 @@
 import type {
   AssetListResponse,
+  AssetIntelligenceView,
   CombinedAssetView,
   InvestorIntelligenceView,
+  InvestorProductView,
   InvestorListResponse,
   TimelineResponse
 } from "./types";
 
 const API_BASE = "/api/v1/intelligence";
+const PRODUCT_API_BASE = "/api/intelligence";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -49,6 +52,12 @@ export function getAssetTimeline(assetId: string): Promise<TimelineResponse> {
   );
 }
 
+export function getAssetIntelligenceView(assetId: string): Promise<AssetIntelligenceView> {
+  return request<AssetIntelligenceView>(
+    PRODUCT_API_BASE + "/assets/" + encodeURIComponent(assetId) + "/view"
+  );
+}
+
 export function getInvestorList(): Promise<InvestorListResponse> {
   return request<InvestorListResponse>(API_BASE + "/investors");
 }
@@ -56,5 +65,11 @@ export function getInvestorList(): Promise<InvestorListResponse> {
 export function getInvestor(investorId: string): Promise<InvestorIntelligenceView> {
   return request<InvestorIntelligenceView>(
     API_BASE + "/investors/" + encodeURIComponent(investorId)
+  );
+}
+
+export function getInvestorIntelligenceView(investorId: string): Promise<InvestorProductView> {
+  return request<InvestorProductView>(
+    PRODUCT_API_BASE + "/investors/" + encodeURIComponent(investorId) + "/view"
   );
 }

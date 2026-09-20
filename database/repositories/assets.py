@@ -20,6 +20,16 @@ class AssetRepository:
     def get(self, asset_id: UUID) -> Asset | None:
         return self._session.get(Asset, asset_id)
 
+    def list_by_ids(self, asset_ids: tuple[UUID, ...]) -> tuple[Asset, ...]:
+        if not asset_ids:
+            return ()
+        statement = (
+            select(Asset)
+            .where(Asset.id.in_(asset_ids))
+            .order_by(Asset.name, Asset.market, Asset.symbol, Asset.id)
+        )
+        return tuple(self._session.scalars(statement))
+
     def get_by_market_symbol(self, market: str, symbol: str) -> Asset | None:
         statement = select(Asset).where(
             func.upper(Asset.market) == market.strip().upper(),

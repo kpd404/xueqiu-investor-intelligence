@@ -38,6 +38,25 @@ Default ordering is asset_name, market, symbol, and asset_id.
 
 The response contains items, total, limit, offset, and has_more.
 
+### GET /api/intelligence/investors/{investor_id}/view
+
+Returns the query-time `InvestorIntelligenceView` Product composition for one
+Investor. It includes listing-level observed Assets, Attention occurrence
+counts, effective persisted Opinion counts/latest direction, persisted
+ThesisChange state, fact-time activity, data-quality limitations, and source
+reference counts.
+
+Investor Attention is not Opinion, repeated Attention is not conviction, and
+Opinion direction is not a recommendation. Historical completeness remains
+UNKNOWN; the endpoint does not infer historical absence from an empty window
+or missing current artifact. Unknown Investors return 404. An existing
+Investor with Attention but no Opinion still returns a valid view.
+
+Investor Detail uses this endpoint once per opened Investor. Investor
+Discovery continues to use its collection endpoint and does not request one
+Product View per card. Asset links in the Product View use `asset_id` and
+preserve market/symbol listing identity.
+
 ### GET /api/v1/intelligence/assets/{asset_id}
 
 Returns the complete CombinedAssetIntelligenceView, including Attention,

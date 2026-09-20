@@ -61,6 +61,18 @@ class IntelligenceFeedItemRepository:
         )
         return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
 
+    def list_by_asset(self, asset_id: UUID) -> tuple[FeedItem, ...]:
+        statement = (
+            select(IntelligenceFeedItem)
+            .where(IntelligenceFeedItem.asset_id == asset_id)
+            .order_by(
+                IntelligenceFeedItem.observed_at,
+                IntelligenceFeedItem.priority_id,
+                IntelligenceFeedItem.id,
+            )
+        )
+        return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
+
     def update_state(self, feed_item_id: UUID, state: FeedState) -> FeedItem:
         """Update only lifecycle state; identity and evidence stay fixed."""
 

@@ -9,6 +9,15 @@ from intelligence.patterns.schemas import (
     IntelligencePatternType,
     PatternDataQuality,
 )
+from intelligence.policies.activity import has_multi_investor_activity
+
+MATERIAL_THESIS_TRANSITION_TYPES = frozenset(
+    {
+        "THESIS_REINFORCED",
+        "THESIS_EXTENDED",
+        "THESIS_CHANGED",
+    }
+)
 
 
 def detect_patterns(
@@ -26,22 +35,7 @@ def detect_patterns(
     historical_cross_state = context.cross_investor_context.historical_state
     patterns: list[IntelligencePatternEvidence] = []
 
-    if activity.current_signal_count > 0 and activity.previous_signal_count == 0:
-        patterns.append(
-            IntelligencePatternEvidence(
-                type=IntelligencePatternType.NEW_DISCOVERY,
-                description=(
-                    "Current-window Intelligence activity is present while the "
-                    "previous window has no Signal activity."
-                ),
-                evidence=(
-                    f"Current Signals: {activity.current_signal_count}; "
-                    f"previous Signals: {activity.previous_signal_count}."
-                ),
-            )
-        )
-
-    if (
+    if (activity.previous_signal_count > 0 or investors.previous_investor_count > 0) and (
         activity.current_signal_count > activity.previous_signal_count
         or investors.current_investor_count > investors.previous_investor_count
     ):
@@ -57,7 +51,10 @@ def detect_patterns(
             )
         )
 
-    if investors.current_investor_count >= multi_investor_threshold:
+    if has_multi_investor_activity(
+        investors.current_investor_count,
+        threshold=multi_investor_threshold,
+    ):
         patterns.append(
             IntelligencePatternEvidence(
                 type=IntelligencePatternType.MULTI_INVESTOR_EXPANSION,
@@ -85,14 +82,15 @@ def detect_patterns(
                 )
             )
 
-    if thesis.current_thesis_changes > 0:
+    material_thesis_types = MATERIAL_THESIS_TRANSITION_TYPES.intersection(thesis.direction_changes)
+    if thesis.current_thesis_changes > 0 and material_thesis_types:
         patterns.append(
             IntelligencePatternEvidence(
                 type=IntelligencePatternType.THESIS_TRANSITION,
                 description="Persisted ThesisChange artifacts are present in the current window.",
                 evidence=(
                     f"Current ThesisChange count: {thesis.current_thesis_changes}; "
-                    f"change types: {', '.join(thesis.direction_changes) or 'none'}."
+                    f"material change types: {', '.join(sorted(material_thesis_types))}."
                 ),
             )
         )
@@ -167,4 +165,8 @@ def detect_data_quality(context: IntelligenceContextView) -> list[PatternDataQua
     return quality
 
 
-__all__ = ["detect_data_quality", "detect_patterns"]
+__all__ = [
+    "MATERIAL_THESIS_TRANSITION_TYPES",
+    "detect_data_quality",
+    "detect_patterns",
+]

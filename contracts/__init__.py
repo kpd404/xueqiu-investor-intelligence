@@ -132,6 +132,14 @@ from contracts.intelligence import (
     InvestorStateAggregationInput,
     InvestorStateContribution,
 )
+from contracts.intelligence_attention import (
+    IntelligenceAttentionAssetIdentity,
+    IntelligenceAttentionClass,
+    IntelligenceAttentionClassificationView,
+    IntelligenceAttentionEvidenceRef,
+    IntelligenceAttentionEvidenceSummary,
+    IntelligenceAttentionReason,
+)
 from contracts.intelligence_event import (
     IntelligenceEventCreate,
     IntelligenceEventEvidenceCreate,
@@ -486,6 +494,12 @@ __all__ = [
     "IntelligenceEventState",
     "IntelligenceEventType",
     "IntelligenceEventView",
+    "IntelligenceAttentionAssetIdentity",
+    "IntelligenceAttentionClass",
+    "IntelligenceAttentionClassificationView",
+    "IntelligenceAttentionEvidenceRef",
+    "IntelligenceAttentionEvidenceSummary",
+    "IntelligenceAttentionReason",
     "IntelligenceEventPriorityCreate",
     "IntelligenceEventPriorityView",
     "IntelligencePriorityGenerationResult",

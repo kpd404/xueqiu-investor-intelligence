@@ -69,6 +69,19 @@ class SignalRepository:
         )
         return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
 
+    def list_by_asset(self, asset_id: UUID) -> tuple[SignalView, ...]:
+        statement = (
+            select(Signal)
+            .where(Signal.asset_id == asset_id)
+            .order_by(
+                Signal.observed_at,
+                Signal.signal_type,
+                Signal.source_id,
+                Signal.id,
+            )
+        )
+        return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
+
     @classmethod
     def _to_view(cls, entity: Signal | None) -> SignalView | None:
         if entity is None:

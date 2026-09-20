@@ -19,6 +19,7 @@ from contracts import (
     IntelligencePriorityLevel,
     IntelligencePriorityReason,
 )
+from intelligence.policies.activity import has_multi_investor_activity
 
 
 class IntelligenceEventReader(Protocol):
@@ -195,7 +196,7 @@ class IntelligencePriorityService:
         metadata = event.metadata
         if event.event_type is IntelligenceEventType.ASSET_ACTIVITY_SPIKE:
             investor_count = len(metadata.get("investor_ids", ()))
-            if investor_count >= 3:
+            if has_multi_investor_activity(investor_count, threshold=3):
                 return (
                     IntelligencePriorityLevel.HIGH,
                     IntelligencePriorityReason.MULTI_INVESTOR_ATTENTION,

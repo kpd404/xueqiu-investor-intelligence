@@ -18,6 +18,7 @@ from contracts import (
     IntelligencePriorityReason,
     SignalView,
 )
+from intelligence.read_scope import AssetIntelligenceReadScope
 from intelligence.schemas.discovery import (
     DiscoveryActivitySummary,
     DiscoveryAssetIdentity,
@@ -274,6 +275,66 @@ class IntelligenceDiscoveryService:
 
         return self.get_candidate_by_asset(asset_id, event_type=event_type)
 
+    def get_scope_candidate(
+        self,
+        scope: AssetIntelligenceReadScope,
+        *,
+        event_type: IntelligenceEventType | None = None,
+    ) -> IntelligenceDiscoveryCandidate | None:
+        priorities = {item.id: item for item in scope.priorities}
+        events = {item.id: item for item in scope.events}
+        signals = {item.id: item for item in scope.signals}
+        links_by_event = scope.evidence_by_event
+        accumulator = _AssetAccumulator(scope.asset.asset_id)
+
+        for feed_item in scope.feed_items:
+            if feed_item.state is not FeedState.ACTIVE:
+                continue
+            priority = priorities.get(feed_item.priority_id)
+            if priority is None:
+                raise ValueError(f"Priority not found for FeedItem: {feed_item.id}")
+            event = events.get(priority.event_id)
+            if event is None:
+                raise ValueError(f"IntelligenceEvent not found for Priority: {priority.id}")
+            if feed_item.asset_id != scope.asset.asset_id or event.asset_id != feed_item.asset_id:
+                raise ValueError(f"FeedItem asset does not match Event: {feed_item.id}")
+            if feed_item.event_type != event.event_type or feed_item.reason != priority.reason:
+                raise ValueError(f"FeedItem semantic identity mismatch: {feed_item.id}")
+            if event_type is not None and event.event_type is not event_type:
+                continue
+            links = links_by_event.get(event.id, ())
+            if len(links) != priority.evidence_count:
+                raise ValueError(f"Priority evidence count mismatch: {priority.id}")
+
+            accumulator.event_ids.add(event.id)
+            accumulator.feed_ids.add(feed_item.id)
+            accumulator.event_types.add(event.event_type)
+            accumulator.priority_reasons.add(priority.reason)
+            accumulator.discovery_reasons.add(_DISCOVERY_REASONS[event.event_type])
+            accumulator.first_observed_at = (
+                feed_item.observed_at
+                if accumulator.first_observed_at is None
+                else min(accumulator.first_observed_at, feed_item.observed_at)
+            )
+            accumulator.latest_observed_at = (
+                feed_item.observed_at
+                if accumulator.latest_observed_at is None
+                else max(accumulator.latest_observed_at, feed_item.observed_at)
+            )
+            for link in links:
+                signal = signals.get(link.signal_id)
+                if signal is None:
+                    raise ValueError(f"Signal not found for Event evidence: {link.id}")
+                if signal.asset_id != scope.asset.asset_id:
+                    raise ValueError(f"Signal asset does not match Event evidence: {link.id}")
+                accumulator.signal_ids.add(signal.id)
+                if signal.investor_id is not None:
+                    accumulator.investor_ids.add(signal.investor_id)
+
+        if not accumulator.feed_ids:
+            return None
+        return self._to_candidate(accumulator, scope.asset)
+
     @staticmethod
     def _to_candidate(
         accumulator: _AssetAccumulator,
@@ -283,10 +344,11 @@ class IntelligenceDiscoveryService:
         latest_observed_at = accumulator.latest_observed_at
         if first_observed_at is None or latest_observed_at is None:
             raise ValueError(f"Discovery accumulator has no observed time: {accumulator.asset_id}")
+        asset_id = asset.id if hasattr(asset, "id") else asset.asset_id
         return IntelligenceDiscoveryCandidate(
             candidate_id=accumulator.asset_id,
             asset=DiscoveryAssetIdentity(
-                asset_id=asset.id,
+                asset_id=asset_id,
                 name=asset.name,
                 market=asset.market,
                 symbol=asset.symbol,
