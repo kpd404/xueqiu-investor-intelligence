@@ -1,9 +1,12 @@
+import type { MouseEvent } from "react";
+
 import type { AssetIntelligenceView, AttentionClass, ProductEvolutionStep } from "./types";
-import { formatTime } from "./presentation";
+import { formatTime, shortId } from "./presentation";
 
 interface AssetProductViewPageProps {
   view: AssetIntelligenceView;
   investorNames?: Record<string, string>;
+  onOpenInvestor: (investorId: string) => void;
 }
 
 const reviewLabels: Record<AttentionClass, string> = {
@@ -38,7 +41,11 @@ const discoveryReasonLabels: Record<string, string> = {
   CONSENSUS_ACTIVITY: "Consensus activity"
 };
 
-export function AssetProductViewPage({ view, investorNames = {} }: AssetProductViewPageProps) {
+export function AssetProductViewPage({
+  view,
+  investorNames = {},
+  onOpenInvestor
+}: AssetProductViewPageProps) {
   const reviewClass = view.review.attention_class.toLowerCase();
   const visibleSteps = [...view.evolution.recent_steps].sort(
     (left, right) => new Date(left.observed_at).getTime() - new Date(right.observed_at).getTime()
@@ -143,12 +150,15 @@ export function AssetProductViewPage({ view, investorNames = {} }: AssetProductV
         <div className="product-narrative">
           <h2>{view.narrative.headline}</h2>
           <p>{view.narrative.summary}</p>
-          <div className="product-narrative-grid">
-            <NarrativeFact label="Attention" value={view.narrative.attention_summary} />
-            <NarrativeFact label="Thesis" value={view.narrative.thesis_summary} />
-            <NarrativeFact label="Cross-Investor" value={view.narrative.cross_investor_summary} />
-            <NarrativeFact label="Consensus" value={view.narrative.consensus_summary} />
-          </div>
+          <details className="product-narrative-details">
+            <summary>Show narrative detail</summary>
+            <div className="product-narrative-grid">
+              <NarrativeFact label="Attention" value={view.narrative.attention_summary} />
+              <NarrativeFact label="Thesis" value={view.narrative.thesis_summary} />
+              <NarrativeFact label="Cross-Investor" value={view.narrative.cross_investor_summary} />
+              <NarrativeFact label="Consensus" value={view.narrative.consensus_summary} />
+            </div>
+          </details>
         </div>
       </section>
 
@@ -181,6 +191,7 @@ export function AssetProductViewPage({ view, investorNames = {} }: AssetProductV
                 key={step.step_id}
                 step={step}
                 investorNames={investorNames}
+                onOpenInvestor={onOpenInvestor}
               />
             ))}
           </div>
@@ -270,12 +281,22 @@ function ContextFact({ label, value }: { label: string; value: string }) {
 
 function EvolutionRow({
   step,
-  investorNames
+  investorNames,
+  onOpenInvestor
 }: {
   step: ProductEvolutionStep;
   investorNames: Record<string, string>;
+  onOpenInvestor: (investorId: string) => void;
 }) {
   const investorName = step.investor_id ? investorNames[step.investor_id] : null;
+  const investorLabel = investorName ?? "Investor ID " + shortId(step.investor_id);
+  const handleInvestorClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    if (step.investor_id) onOpenInvestor(step.investor_id);
+  };
   return (
     <article className="product-evolution-row">
       <div className="product-evolution-time">{formatTime(step.observed_at)}</div>
@@ -284,9 +305,14 @@ function EvolutionRow({
         <span className="product-evolution-type">{formatEnum(step.step_type)}</span>
         <h3>{step.title}</h3>
         {step.investor_id && (
-          <small>
-            Investor observed · {investorName ?? step.investor_id.slice(0, 8) + "…"}
-          </small>
+          <a
+            className="product-investor-link"
+            href={`/investors/${encodeURIComponent(step.investor_id)}`}
+            onClick={handleInvestorClick}
+            aria-label={`Open Investor ${investorLabel}`}
+          >
+            Investor observed · {investorLabel}
+          </a>
         )}
         <ul>{step.facts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
       </div>

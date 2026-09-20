@@ -156,9 +156,12 @@ export default function App() {
   useEffect(() => {
     if (!assetId) {
       setView(null);
+      setViewError(null);
+      setViewLoading(false);
       return;
     }
     let active = true;
+    setView(null);
     setViewLoading(true);
     setViewError(null);
     getAssetIntelligenceView(assetId)
@@ -183,9 +186,11 @@ export default function App() {
     if (!investorId) {
       setInvestorView(null);
       setInvestorViewError(null);
+      setInvestorViewLoading(false);
       return;
     }
     let active = true;
+    setInvestorView(null);
     setInvestorViewLoading(true);
     setInvestorViewError(null);
     getInvestorIntelligenceView(investorId)
@@ -434,7 +439,11 @@ export default function App() {
             }
           />
         ) : view ? (
-          <AssetProductViewPage view={view} investorNames={investorNames} />
+          <AssetProductViewPage
+            view={view}
+            investorNames={investorNames}
+            onOpenInvestor={navigateToInvestor}
+          />
         ) : selectedAsset ? (
           <PageState
             kind="empty"

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -408,6 +408,34 @@ const investorProductPayload: InvestorProductView = {
   }
 };
 
+const emptyInvestorProductPayload: InvestorProductView = {
+  ...investorProductPayload,
+  investor: {
+    investor_id: "investor-empty",
+    name: "Forever",
+    source_platform: "xueqiu",
+    source_user_id: "empty-investor"
+  },
+  summary: {
+    observed_asset_count: 0,
+    opinion_asset_count: 0,
+    thesis_change_count: 0,
+    attention_occurrence_count: 0,
+    opinion_count: 0,
+    latest_observed_at: null
+  },
+  coverage: { observed_assets: [], opinion_assets: [], attention_only_assets: [] },
+  asset_views: [],
+  recent_activity: [],
+  traceability_summary: {
+    attention_occurrence_ref_count: 0,
+    raw_event_ref_count: 0,
+    opinion_ref_count: 0,
+    thesis_change_ref_count: 0,
+    activity_source_ref_count: 0
+  }
+};
+
 function mockApi(product: AssetIntelligenceView = productPayload) {
   return vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
@@ -415,7 +443,10 @@ function mockApi(product: AssetIntelligenceView = productPayload) {
       return Promise.resolve({ ok: true, status: 200, json: async () => investorList });
     }
     if (url.includes("/api/intelligence/investors/") && url.endsWith("/view")) {
-      return Promise.resolve({ ok: true, status: 200, json: async () => investorProductPayload });
+      const payload = url.includes("investor-empty")
+        ? emptyInvestorProductPayload
+        : investorProductPayload;
+      return Promise.resolve({ ok: true, status: 200, json: async () => payload });
     }
     if (url.includes("/api/intelligence/assets/") && url.endsWith("/view")) {
       const payload = url.includes("asset-hk-00883")
@@ -581,7 +612,7 @@ describe("Asset Intelligence Product View V0", () => {
     expect(await screen.findByRole("heading", { name: "纳履而去" })).toBeInTheDocument();
     expect(screen.getAllByText("HK:01787").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SH:600547").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /山东黄金/ }).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByRole("link", { name: /山东黄金/ }).length).toBeGreaterThanOrEqual(2);
   });
 
   it("renders an unknown Investor as a read-only 404 state", async () => {
@@ -608,5 +639,93 @@ describe("Asset Intelligence Product View V0", () => {
 
     expect(await screen.findByText("No observed Investor evidence")).toBeInTheDocument();
     expect(screen.queryByText("No Intelligence")).not.toBeInTheDocument();
+  });
+
+  it("navigates Asset to Investor by investor_id without prefetching another Asset view", async () => {
+    const fetchMock = mockApi();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const investorLink = await screen.findByRole("link", {
+      name: "Open Investor Investor One"
+    });
+    expect(investorLink).toHaveAttribute("href", "/investors/investor-1");
+    act(() => fireEvent.click(investorLink));
+    expect(await screen.findByRole("heading", { name: "纳履而去" })).toBeInTheDocument();
+
+    expect(window.location.pathname).toBe("/investors/investor-1");
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input) === "/api/intelligence/investors/investor-1/view")
+    ).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/intelligence/assets/") && String(input).endsWith("/view"))
+    ).toHaveLength(1);
+  });
+
+  it("navigates Investor to Asset with an asset_id anchor and supports back route state", async () => {
+    window.history.replaceState({}, "", "/investors/investor-life");
+    const fetchMock = mockApi();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const assetLinks = await screen.findAllByRole("link", {
+      name: "Open Asset 紫金矿业 SH:601899"
+    });
+    expect(assetLinks[0]).toHaveAttribute("href", "/assets/asset-zijin-sh");
+    act(() => fireEvent.click(assetLinks[0]));
+    expect(await screen.findByRole("heading", { name: "招商轮船" })).toBeInTheDocument();
+
+    expect(window.location.pathname).toBe("/assets/asset-zijin-sh");
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input) === "/api/intelligence/assets/asset-zijin-sh/view")
+    ).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/intelligence/investors/") && String(input).endsWith("/view"))
+    ).toHaveLength(1);
+
+    act(() => {
+      window.history.pushState({}, "", "/investors/investor-life");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(await screen.findByRole("heading", { name: "纳履而去" })).toBeInTheDocument();
+  });
+
+  it("renders an existing empty Investor as collected-records empty state", async () => {
+    window.history.replaceState({}, "", "/investors/investor-empty");
+    vi.stubGlobal("fetch", mockApi());
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Forever" })).toBeInTheDocument();
+    expect(screen.getByText("No intelligence evidence is available for this Investor in the currently collected records.")).toBeInTheDocument();
+    expect(screen.getByText("Historical completeness is UNKNOWN; this state does not establish historical absence.")).toBeInTheDocument();
+    expect(screen.queryByText("No investor")).not.toBeInTheDocument();
+    expect(screen.queryByText("API unavailable")).not.toBeInTheDocument();
+  });
+
+  it("falls back to a short Investor ID when the catalog cannot resolve a name", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/v1/intelligence/investors") {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ items: [], total: 0 }) });
+        }
+        if (url.includes("/api/intelligence/assets/") && url.endsWith("/view")) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => productPayload });
+        }
+        if (url.includes("/api/v1/intelligence/assets?")) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => listPayload });
+        }
+        return Promise.resolve({ ok: true, status: 200, json: async () => listPayload });
+      })
+    );
+
+    render(<App />);
+
+    const fallbackLinks = await screen.findAllByRole("link", { name: /Open Investor Investor ID investor/ });
+    expect(fallbackLinks.some((link) => link.getAttribute("href") === "/investors/investor-1")).toBe(true);
   });
 });

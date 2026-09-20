@@ -1414,7 +1414,8 @@ This completes the Investor → Asset half of the product navigation without
 introducing a frontend N+1. Asset Evolution now resolves the Investor name
 from the existing Investor catalog when available and falls back to a short
 canonical ID; this is a presentation mapping, not a new backend semantic.
-Direct Asset → Investor click-through remains a follow-up Product polish item.
+Sprint 2J.2 completes the direct Asset → Investor click-through using the
+same catalog mapping and canonical Investor ID.
 
 The real PostgreSQL query audit for Investor `管我财` changed from the legacy
 Investor Detail composition's 342 SELECT statements and 15 transaction/setup
@@ -1427,3 +1428,51 @@ listing-level Asset identity, latest persisted Opinion direction, ThesisChange
 type, fact-time activity, data-quality limitations, and source-reference
 counts. It never renders Investor score, ranking, recommendation, prediction,
 expected return, buy/sell language, or target price.
+
+## Product Cross-Navigation & Polish V0 (Sprint 2J.2)
+
+The Product Navigation Graph is now:
+
+```text
+Asset Discovery
+      ↓
+Asset Intelligence Detail
+      ↔
+Investor Intelligence Detail
+      ↑
+Investor Discovery
+```
+
+Both directions use canonical IDs:
+
+- Asset → Investor uses `investor_id` from Asset Evolution/source context.
+- Investor → Asset uses `asset_id` and preserves market/symbol listing identity.
+
+The frontend uses semantic deep-link anchors with SPA pushState handling for
+normal clicks. Direct URL entry and browser Back remain valid because each
+detail page independently requests its own Product View. No hover prefetch or
+per-row Product View request is introduced.
+
+Investor names come from the existing Investor catalog. If a name cannot be
+resolved, the UI falls back to a short Investor ID; the route always retains
+the full `investor_id`. Asset names never act as route or React identity.
+
+The Product UI keeps full API contracts but reduces default information density:
+Asset Narrative detail is collapsed behind a secondary disclosure, while
+Review, Patterns, Context, Evolution, and Data Quality remain directly
+available. Traceability remains count-first with technical IDs behind an
+expandable section.
+
+Empty-state policy is evidence-safe:
+
+> No intelligence evidence is available for this Investor in the currently
+> collected records.
+
+This wording is used only for an existing Investor with no currently collected
+Attention, Opinion, or Thesis artifact. It never claims that the Investor has
+never discussed an Asset. Historical completeness remains UNKNOWN, historical
+comparison remains unsupported, and absence inference remains unsupported.
+
+Sprint 2J.2 changes only Product navigation and presentation. It adds no
+backend endpoint, Intelligence semantic, persistence, migration, collection
+scope, ranking, score, recommendation, or prediction.

@@ -138,7 +138,7 @@ export function InvestorDiscoveryPage({
         <div className="investor-boundary" role="note">
           <span>DATA BOUNDARY</span>
           <strong>Historical completeness: UNKNOWN</strong>
-          <small>Collection provenance unavailable</small>
+          <small>Available collection provenance does not establish historical completeness.</small>
         </div>
       </header>
 
@@ -238,7 +238,7 @@ export function InvestorDetailPage({
         <div className="investor-boundary" role="note">
           <span>DATA BOUNDARY</span>
           <strong>Historical completeness: UNKNOWN</strong>
-          <small>Observed evidence only · Collection provenance unavailable</small>
+          <small>Observed evidence only · Available collection provenance does not establish historical completeness.</small>
         </div>
       </header>
 

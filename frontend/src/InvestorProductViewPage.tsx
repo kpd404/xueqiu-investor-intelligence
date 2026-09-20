@@ -1,3 +1,5 @@
+import type { MouseEvent, ReactNode } from "react";
+
 import type {
   InvestorAssetIntelligenceProductView,
   InvestorProductActivityEvent,
@@ -67,6 +69,13 @@ export function InvestorProductViewPage({ view, onOpenAsset }: InvestorProductVi
         </span>
       </section>
 
+      {!view.asset_views.length && (
+        <section className="investor-product-empty-note" role="status">
+          <strong>No intelligence evidence is available for this Investor in the currently collected records.</strong>
+          <span>Historical completeness is UNKNOWN; this state does not establish historical absence.</span>
+        </section>
+      )}
+
       <section className="investor-section investor-product-coverage-section">
         <SectionHeading
           title="Coverage by evidence type"
@@ -93,7 +102,7 @@ export function InvestorProductViewPage({ view, onOpenAsset }: InvestorProductVi
           </div>
         ) : (
           <div className="investor-inline-empty">
-            No effective Attention, Opinion or Thesis artifacts are available in this read scope.
+            No intelligence evidence is available in the currently collected records.
           </div>
         )}
       </section>
@@ -108,11 +117,12 @@ export function InvestorProductViewPage({ view, onOpenAsset }: InvestorProductVi
           {thesisAssets.length ? (
             <div className="investor-product-thesis-list">
               {thesisAssets.map((asset) => (
-                <button
-                  type="button"
+                <AssetRouteLink
                   className="investor-product-thesis-row"
+                  assetId={asset.asset.asset_id}
+                  onOpen={onOpenAsset}
+                  ariaLabel={`Open Asset ${asset.asset.name} ${asset.asset.market}:${asset.asset.symbol}`}
                   key={asset.asset.asset_id}
-                  onClick={() => onOpenAsset(asset.asset.asset_id)}
                 >
                   <span>
                     <strong>{asset.asset.name}</strong>
@@ -120,7 +130,7 @@ export function InvestorProductViewPage({ view, onOpenAsset }: InvestorProductVi
                   </span>
                   <b>{asset.thesis.latest_change_type ? thesisLabel(asset.thesis.latest_change_type) : "—"}</b>
                   <small>{formatTime(asset.thesis.latest_change_at)}</small>
-                </button>
+                </AssetRouteLink>
               ))}
             </div>
           ) : (
@@ -226,9 +236,15 @@ function CoverageCard({
       <div><span>{title}</span><strong>{assets.length}</strong></div>
       <div className="investor-product-coverage-assets">
         {assets.slice(0, 8).map((asset) => (
-          <button type="button" key={asset.asset_id} onClick={() => onOpen(asset.asset_id)}>
+          <AssetRouteLink
+            key={asset.asset_id}
+            assetId={asset.asset_id}
+            onOpen={onOpen}
+            className="investor-product-coverage-asset-link"
+            ariaLabel={`Open Asset ${asset.name} ${asset.market}:${asset.symbol}`}
+          >
             {asset.name} <small>{asset.market}:{asset.symbol}</small>
-          </button>
+          </AssetRouteLink>
         ))}
         {assets.length > 8 && <small>+{assets.length - 8} more in Asset intelligence</small>}
       </div>
@@ -244,7 +260,12 @@ function InvestorAssetProductRow({
   onOpen: (assetId: string) => void;
 }) {
   return (
-    <button type="button" className="investor-asset-row" onClick={() => onOpen(asset.asset.asset_id)}>
+    <AssetRouteLink
+      className="investor-asset-row"
+      assetId={asset.asset.asset_id}
+      onOpen={onOpen}
+      ariaLabel={`Open Asset ${asset.asset.name} ${asset.asset.market}:${asset.asset.symbol}`}
+    >
       <div className="investor-asset-title">
         <strong>{asset.asset.name}</strong>
         <span>{asset.asset.market}:{asset.asset.symbol}</span>
@@ -279,18 +300,55 @@ function InvestorAssetProductRow({
         <small>Latest observed {formatTime(asset.latest_observed_at)}</small>
       </div>
       <span className="investor-open-mark" aria-hidden="true">→</span>
-    </button>
+    </AssetRouteLink>
   );
 }
 
 function ActivityRow({ event, onOpen }: { event: InvestorProductActivityEvent; onOpen: (assetId: string) => void }) {
   return (
-    <button type="button" className="investor-product-activity-row" onClick={() => onOpen(event.asset.asset_id)}>
+    <AssetRouteLink
+      className="investor-product-activity-row"
+      assetId={event.asset.asset_id}
+      onOpen={onOpen}
+      ariaLabel={`Open Asset ${event.asset.name} ${event.asset.market}:${event.asset.symbol}`}
+    >
       <span className="investor-product-activity-time">{formatTime(event.observed_at)}</span>
       <span className="investor-product-activity-type">{activityLabel(event.event_type)}</span>
       <strong>{event.asset.name}</strong>
       <small>{event.asset.market}:{event.asset.symbol} · {event.source_refs.length} source refs</small>
-    </button>
+    </AssetRouteLink>
+  );
+}
+
+function AssetRouteLink({
+  assetId,
+  onOpen,
+  className,
+  ariaLabel,
+  children
+}: {
+  assetId: string;
+  onOpen: (assetId: string) => void;
+  className: string;
+  ariaLabel: string;
+  children: ReactNode;
+}) {
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    onOpen(assetId);
+  };
+  return (
+    <a
+      className={className}
+      href={`/assets/${encodeURIComponent(assetId)}`}
+      onClick={handleClick}
+      aria-label={ariaLabel}
+    >
+      {children}
+    </a>
   );
 }
 
