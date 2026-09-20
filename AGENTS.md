@@ -441,6 +441,43 @@ Agent 必须先：
 
 当需求不明确时，优先提出设计问题，不要自行假设。
 
+# 17. Phase 3 — Operational MVP Rules
+
+Phase 0 Foundation、Phase 1 Data / Intelligence Foundation 和 Phase 2
+Intelligence Product Foundation 已基本完成。项目当前阶段是 **Phase 3 —
+Operational MVP**。
+
+## Highest-priority engineering rules
+
+1. The Intelligence semantic layer is frozen unless a correctness bug is
+   proven. This includes Attention, ThesisChange, CrossInvestorSnapshot,
+   Alignment, ConsensusEvidence, Signal, IntelligenceEvent, Priority, Feed
+   semantics, Discovery, Narrative, Context, Pattern, Evolution, Attention
+   Classification, Asset Product View, and Investor Product View.
+2. Operational MVP work takes precedence over semantic refinement,
+   architecture polish, new projections, ranking, scoring, and advanced
+   intelligence.
+3. Every Operational MVP Sprint must produce a new executable user capability.
+4. A Sprint is not complete because classes, schemas, or passing unit tests
+   exist. Operational completion requires real end-to-end execution.
+5. The critical path is:
+
+   ```text
+   Collect → Analyze → Materialize → Product
+   ```
+
+6. Do not create algorithms before real data exists. In particular:
+   **No real portfolio data → no further portfolio intelligence expansion.**
+7. Historical completeness remains `UNKNOWN` and continues to block
+   absence-sensitive inference.
+
+The operational orchestrator coordinates existing semantics; it must not
+recompute them. Stages must remain idempotent, use data-driven incremental
+selection, expose the exact failing stage, and make safe reruns possible.
+Do not introduce a new persistence table for orchestration unless a proven
+correctness requirement cannot be met by the existing `CollectionRun`,
+`CollectionObservation`, and business artifacts.
+
 ---
 
 # Final Principle

@@ -1,22 +1,59 @@
 # Project Status
 
-Last verified from the repository: 2026-09-10
+Last repository status reset: 2026-09-20
 
-This document is a repository-derived handoff for a new Codex session. The
-current files, migrations, tests, and PostgreSQL verification are authoritative;
-old chat descriptions are not.
+This document describes the current repository state. Existing semantic
+contracts and historical sprint records remain authoritative for what was
+implemented; the current engineering priority is operational execution.
 
 ## Current phase and sprint
 
-The project is in Phase 2, Cross-Investor Intelligence.
+The project is in **Phase 3 — Operational MVP**.
 
-- Latest completed sprint: **Sprint 2F.3.2 — Consensus Evidence Semantic Hardening**.
-- Current checkpoint: 2F.3.2 is implemented and verified; v2 calibration is data-limited but now semantically separates Neutral mixes from direct divergence.
-- Attention Momentum (2E.1) remains paused for temporal data calibration.
-- No Signal, ranking, recommendation, or portfolio-performance engine is implemented.
+- Phase 0 Foundation is complete.
+- Phase 1 Data / Intelligence Foundation is complete.
+- Phase 2 Intelligence Product Foundation is complete / frozen.
+- The verified product is browseable and manually refreshable through an
+  authenticated Edge CDP session.
+- OMVP-1.1 — Authenticated CDP Live Collection Recovery & Source-to-Product
+  Proof is **COMPLETE**.
+- OMVP-2 Scheduler/Freshness work is planned but not started.
+- Attention Momentum remains paused because historical completeness and
+  temporal coverage are `UNKNOWN` / insufficient for absence-sensitive
+  inference.
 
-The next candidate is a narrowly scoped Consensus/Divergence evidence design,
-not a score or trading recommendation. Directional Alignment != Consensus.
+## Product state
+
+The current product is a **Browseable, manually refreshable Intelligence
+Product**, not a **Self-Running Intelligence Product**. The verified live
+runtime requires an operator-started authenticated Edge CDP endpoint.
+
+Completed product-facing capability includes:
+
+- real Xueqiu Following Feed collector foundation and collection provenance;
+- real LLM Analysis with explicit production identity;
+- deterministic Asset Resolution and Opinion materialization;
+- Investor / Asset state, Attention, Thesis, Cross-Investor evidence,
+  Signal, IntelligenceEvent, Priority, Feed, and Feed lifecycle;
+- Asset Product View and Investor Product View;
+- React frontend and Asset ↔ Investor cross-navigation;
+- evidence traceability back to RawEvent and source artifacts.
+
+The verified critical path is:
+
+```text
+Collect → Analyze → Materialize → Product
+```
+
+## Deliberately not started in Sprint 1.1
+
+- scheduler and daily automatic processing;
+- freshness and run-status visibility;
+- automatic failure visibility;
+- always-on runtime and production deployment.
+
+The one-command live path is complete for the authenticated CDP runtime.
+Scheduler and always-on operation remain OMVP-2 scope.
 
 ## Completed functionality
 
@@ -364,38 +401,41 @@ The latest read-only audit of the development `snowball` database reports:
 | Entity/metric | Count or value |
 | --- | ---: |
 | Investors | 42 |
-| RawEvents | 1173 |
-| EventAnalyses | 1537 |
-| Active Opinion Analysis rows | 1173 / 1173 |
-| Effective Opinions | 76 |
-| Effective AttentionOccurrences | 122 |
-| Effective ThesisChange | 76 |
-| Canonical Assets | 31 |
-| AssetAlias rows | 45 |
+| RawEvents | 1609 |
+| EventAnalyses | 1973 |
+| Active Opinion Analysis rows | 1608 / 1609 |
+| Effective Opinions | 236 |
+| Effective AttentionOccurrences | 303 |
+| Effective ThesisChange | 222 |
+| Canonical Assets | 53 |
 | Portfolio rows | 0 |
 | PortfolioSnapshotBatch rows | 0 |
 | PositionSnapshot rows | 0 |
 | PortfolioAction rows | 0 |
 | InvestorActionConsistency rows | 0 |
-| CrossInvestorAssetSnapshot rows | 81 (51 prior + 30 recalculated) |
-| CrossInvestorAssetAlignment rows | 40 (26 prior + 14 recalculated) |
-| CrossInvestorConsensusEvidence rows | 43 (29 v1 + 14 v2) |
+| CollectionRun rows | 15 |
+| CollectionObservation rows | 230 |
+| CrossInvestorAssetSnapshot rows | 134 |
+| CrossInvestorAssetAlignment rows | 72 |
+| CrossInvestorConsensusEvidence rows | 75 |
+| Signals | 342 |
+| IntelligenceEvents | 96 |
+| IntelligenceEventEvidence | 317 |
+| Priorities | 68 |
+| FeedItems | 68 |
 
-The observed RawEvent range is 2026-08-11 through 2026-09-10, approximately
-30.64 days. Active Analysis statuses for the approved production identity are:
+The observed RawEvent range is 2026-08-11 through 2026-09-20, approximately
+40.29 days. Active Analysis statuses for the approved production identity are:
 
-- `NO_OPINION`: 808
-- `PARTIALLY_RESOLVED`: 317
-- `SUCCESS`: 48
-- `FAILED`: 0
+- `NO_OPINION`: 1016
+- `PARTIALLY_RESOLVED`: 459
+- `SUCCESS`: 133
+- `FAILED`: 1
 
-The 2F.3.1 targeted expansion added 555 RawEvents for one selected Investor;
-all 555 active Analyses succeeded with 610 Opinion-analysis calls including
-55 bounded retries. The active data has 47 Investor × Asset Attention pairs,
-11 Assets observed by two Investors, three Assets observed by three or more
-Investors, and one Asset observed by three or more Opinion Investors. There
-are 541 unresolved asset entries over 278 names; Portfolio facts remain
-absent.
+The explicit authenticated CDP refresh added 16 real RawEvents and 16 current
+production Analyses. It created no Opinions because the source batch produced
+13 `NO_OPINION` and 3 `PARTIALLY_RESOLVED` results with unresolved Asset
+references. No Asset was fabricated and no historical backfill was performed.
 
 The active evidence has 14 Assets observed by two or more Attention Investors,
 three Assets observed by three or more Attention Investors, 11 Assets
@@ -404,7 +444,7 @@ Opinion Investors.
 Sample-bias fields are not sufficiently populated to infer investor style or
 industry concentration.
 
-2F.3.2 calibration of the active Snapshot v2 / Alignment v1 inputs:
+Historical 2F.3.2 calibration snapshot (before Phase 3):
 
 Latest alignment coverage is COMPLETE=10, PARTIAL=3, and NONE=2.
 Directional alignment includes ALIGNED_BULLISH=4, ALIGNED_BEARISH=1, and
@@ -420,11 +460,20 @@ its v2 artifact is MIXED_WITH_NEUTRAL.
 
 The current repository verification is:
 
-- `pytest`: **450 passed**, with two non-failing environment warnings (FastAPI
+- `pytest`: **613 passed**, with two non-failing environment warnings (FastAPI
   test-client deprecation and `.pytest_cache` permission).
-- `ruff format --check .`: passed; 263 files formatted.
+- `ruff format --check .`: passed; 416 files formatted.
 - `ruff check .`: passed.
 - Alembic current/check against real PostgreSQL: `20260910_0018 (head)`, no drift.
+- Frontend `npm run lint`: passed.
+- Frontend `npm run test`: **26 passed**.
+- Frontend `npm run build`: passed.
+- Explicit CDP smoke: one Following Feed batch, 16 items, `MAX_BATCHES`,
+  no risk-control result.
+- Explicit CDP canonical refresh: `SUCCESS`, 16 new RawEvents, 16 LLM
+  requests, zero Analysis failures, Product verification passed.
+- Identical CDP rerun: `SUCCESS`, 16 existing RawEvents, zero new RawEvents,
+  zero LLM requests, no duplicate derived artifacts.
 - CrossInvestor evidence tests are in
   `tests/integration/test_cross_investor_asset_snapshot.py` and
   `tests/test_cross_investor_consensus_evidence.py`; Coverage/Alignment A-K
@@ -433,8 +482,10 @@ The current repository verification is:
   coverage is updated in `tests/test_models.py`.
 
 The pytest suite is offline and does not call real LLM providers or Xueqiu.
-Real provider/collector validation has been performed manually through the
-existing production entry points, outside pytest.
+The explicit CDP live run used the operator-started authenticated Edge session
+at `http://127.0.0.1:9222`. The collector observed one existing Xueqiu page
+in one context, fetched 16 Following Feed items, and completed the full
+canonical refresh. The second identical run reused all 16 RawEvents.
 
 ## Unfinished work
 
@@ -451,7 +502,8 @@ existing production entry points, outside pytest.
 - Portfolio Collector, real Portfolio snapshot ingestion, and broader Portfolio
   Intelligence are not implemented; the current database has no Portfolio facts.
 - Opinion × Action expansion, performance analysis, Research Signal/Candidate,
-  Scheduler, Dashboard, and Product API remain planned.
+  Scheduler, freshness/failure visibility, and always-on deployment remain
+  planned. Product API and frontend Product Views already exist.
 - Bounded unresolved-asset recovery and safe expansion exist, but no large
   securities master or automated external identity source exists.
 - No additional LLM prompt or model routing work is part of the current state.
@@ -469,11 +521,12 @@ existing production entry points, outside pytest.
 4. **Sparse overlap:** Thirteen Assets have two-Investor overlap and one has
    3+ Investors; the sample is still too small for production-level
    Consensus/Divergence validation.
-5. **Analysis quality:** Active Analysis coverage is complete and active
-   failures are zero, but most outputs remain PARTIALLY_RESOLVED because the
-   Asset Master does not yet cover the extracted references.
-6. **Manual operational checks:** Real PostgreSQL and browser/provider smoke
-   checks are command-line/manual workflows; they are not part of pytest.
+5. **Analysis quality:** Active Analysis coverage is 1608/1609; one existing
+   FAILED Analysis remains explicit, and many outputs remain
+   PARTIALLY_RESOLVED because the Asset Master does not cover all references.
+6. **Runtime requirement:** The verified live command requires an
+   operator-started authenticated Edge CDP endpoint. The no-argument
+   storage-state path remains a separate unverified runtime path.
 7. **Environment-specific database tooling:** This Windows development setup
    requires the established temporary psycopg client-cursor compatibility shim
    when invoking Alembic; no source migration drift was found.
@@ -483,32 +536,27 @@ existing production entry points, outside pytest.
 
 ## Current blockers
 
-There is no unresolved code or migration blocker for the implemented foundation.
-The practical blockers are data readiness:
+The Operational MVP Sprint 1.1 code and migration checks are clean. Remaining
+project limitations are runtime/data readiness:
 
 - Xueqiu browser-native pagination stops around the current history window;
   deeper historical coverage cannot be assumed or forced.
+- The verified live runtime depends on the operator-started authenticated CDP
+  session; Scheduler/always-on recovery is intentionally deferred to OMVP-2.
 - Asset Master coverage limits the number of resolved Opinions and Attention
   facts.
 - No real Portfolio snapshot stream exists.
 - Only one Asset has 3+ Investor overlap; broader overlap is still needed.
 - Asset resolution is the primary current data bottleneck.
+- OMVP-1.1 is complete; do not start OMVP-2 in this task.
 
 These are data/product-readiness limits, not reasons to add fallback inference,
 scores, or provider-specific logic.
 
 ## Recommended next task
 
-The next implementation candidate is broader evidence calibration:
-
-1. Keep the current Snapshot, Alignment, and Consensus evidence contracts
-   frozen as the only inputs.
-2. Wait for more 3+ Investor overlap and longer time series before adding
-   broader Consensus/Divergence semantics.
-3. Keep Momentum paused until natural 14d/28d data exists, and treat Portfolio
-   as optional auxiliary evidence until real snapshots arrive.
-
-Before that task, a new session should read `AGENTS.md`, this file, the current
-contracts/services/repositories, and run `git status`, `pytest`, Ruff, and
-Alembic checks. Do not start Signal, Scheduler, Dashboard, or Portfolio
-Collector work unless explicitly requested.
+Hold the project at the completed OMVP-1.1 boundary. OMVP-2 is the planned
+next phase for scheduled refresh, freshness, and failure visibility, but it
+must not be started as part of this task. Do not add new Intelligence
+semantics, ranking, scoring, recommendations, or portfolio analytics without
+real Portfolio facts.

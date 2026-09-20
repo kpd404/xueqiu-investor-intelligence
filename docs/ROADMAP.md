@@ -2,6 +2,24 @@
 
 ## Completed
 
+### Phase 0 — Foundation ✅
+
+Project bootstrap and the initial source-independent persistence/application
+boundaries are complete.
+
+### Phase 1 — Data / Intelligence Foundation ✅
+
+RawEvent, real Analysis, deterministic resolution, Opinion, Investor × Asset
+state, Attention, Thesis, and the evidence-backed derivation foundations are
+complete.
+
+### Phase 2 — Intelligence Product Foundation ✅ / FROZEN
+
+Cross-Investor evidence, Signal, IntelligenceEvent, Priority, Feed, Product
+Views, frontend, and Asset ↔ Investor navigation are implemented. Further
+semantic expansion is frozen during Phase 3 except for proven correctness
+bugs.
+
 ### Phase 0
 
 - Sprint 0.5 — Project Bootstrap ✅
@@ -250,76 +268,68 @@ eligible windows and longer time series.
 - No LLM, score, weighting, ranking, Momentum, Signal, or Research Candidate
   implementation ✅
 
-## Current / Next
+## Current phase — Phase 3 — Operational MVP
 
-### Sprint 2E.1 — Attention Momentum
+Phase 0 Foundation, Phase 1 Data / Intelligence Foundation, and Phase 2
+Intelligence Product Foundation are completed or frozen. The UI exists, but
+the product is not yet operationally self-running. The critical gap is the
+operational loop, not additional Intelligence semantics.
 
-Status: `PAUSED / DATA CALIBRATION / WAITING FOR TEMPORAL COVERAGE`
+### OMVP-1 — One-Command End-to-End Incremental Refresh
 
-The architecture and Behavior Evidence Foundation are in place, but real samples do not yet provide enough cross-day /
-cross-week temporal coverage. The 14d/28d baseline is not finalized. This is an intentional data-calibration state,
-not an architecture failure or a blocked implementation.
+Current sprint. One canonical command must coordinate the existing path from
+Following Feed collection through Product View verification, select work from
+actual database state, expose stage failures, and be safe to rerun. No new
+semantic layer, scheduler, or orchestration table is in scope.
 
-Product goals remain:
+Status: `COMPLETE`. An explicit authenticated Edge CDP smoke returned 16
+real Following Feed items. The canonical command created 16 RawEvents,
+processed them under the unchanged production Analysis identity, completed
+all downstream stages, verified four affected Investor Product Views, and
+passed an identical rerun with zero new RawEvents and zero LLM calls.
 
-- recency
-- frequency
-- acceleration
-- decay
-- `NEW` / `RISING` / `STABLE` / `COOLING` / `DORMANT`
+The verified runtime command is:
 
-Momentum must distinguish `occurrence_count` / occurrence frequency, distinct active days, and recency. For example, `3 occurrences / 1
-active day` is not the same sustained attention intensity as `3 occurrences / 3 active days`. No concrete 7d/14d/28d
-thresholds are defined yet.
+```powershell
+python -m operations.refresh --cdp-endpoint http://127.0.0.1:9222
+```
 
-Thesis Change V0 is available, but useful coverage remains limited by the current number of repeated effective Opinion
-pairs.
+### OMVP-2 — Scheduled Refresh + Freshness + Failure Visibility
 
-Sprint 2E.3-H closes the single-investor Behavior Intelligence foundation.
-The next engineering phase is Sprint 2F Cross-Investor Intelligence.
+Deferred until OMVP-1 has passed real controlled end-to-end validation. This
+sprint will add scheduled execution, freshness/status visibility, and
+collection/auth/risk-control run visibility.
 
-## Planned
+### OMVP-3 — Daily Intelligence Inbox
 
-### Remaining Sprint 2E.3 scope — Portfolio production orchestration
+Deferred until OMVP-2. This will reuse the existing Signal, IntelligenceEvent,
+Priority, and Feed artifacts so a user can see what changed since the last
+refresh without introducing new Intelligence semantics.
 
-The Portfolio Fact Foundation bootstrap is complete in Sprint 2E.3-A. The
-Snapshot Import Foundation is complete in Sprint 2E.3-B, Snapshot Provenance
-is complete in Sprint 2E.3-C, and Position Change Detection V0 is complete in
-Sprint 2E.3-D. The remaining scope
-is intentionally not implemented yet:
+## Post-MVP Productionization
 
-- Portfolio Collector
-- Production portfolio ingestion orchestration
+Deferred until Operational MVP is complete:
 
-### Sprint 2E.4 — Portfolio Intelligence / Performance Analysis
+- always-on deployment, CI/CD, restart recovery, metrics, alerts, backups,
+  production secrets, and runbooks;
+- deeper historical completeness, real portfolio acquisition, and a second
+  source;
+- RAG and advanced research workflows.
 
-- Portfolio intelligence extensions
-- Performance analysis (future)
-- Position / opinion longitudinal analysis
+## Deferred / Frozen
 
-### Sprint 2F — Cross-Investor Intelligence
+The following are explicitly deferred or frozen during Phase 3:
 
-- 2F.0 calibration, 2F.1 evidence foundation, and 2F.2 Coverage/Alignment V0 are complete; broader data remains limited.
-- Enhanced Consensus / Divergence
-- Multi-investor attention warming
-- Industry Trend
-- Theme Trend
+- new semantic layers, ranking, scoring, recommendation, and advanced
+  Pattern;
+- Context V2, Narrative V2, and advanced Consensus;
+- Momentum based on incomplete history;
+- Portfolio analytics without real portfolio data;
+- RAG and second-source expansion.
 
-### Sprint 2G — Research Signal / Candidate V0
-
-- Research Priority
-- Research Candidate
-
-Inputs include Attention Momentum, Opinion Change, Thesis Change, Consensus / Divergence, and Position Confirmation.
-These outputs are research prioritization, not Buy / Sell recommendations.
-
-### Sprint 2H — Scheduler / Continuous Monitoring
-
-Continuous collection, processing, and monitoring orchestration will be addressed here.
-
-### Phase 3 — Productization
-
-Product API, dashboard, reporting, and user-facing workflows follow the intelligence foundations.
+Attention Momentum remains `PAUSED / DATA CALIBRATION / WAITING FOR TEMPORAL
+COVERAGE`; this is preserved as a data-readiness fact, not a reason to expand
+the semantic layer now.
 
 ## Product boundary
 

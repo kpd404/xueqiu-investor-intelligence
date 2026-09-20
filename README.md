@@ -1,5 +1,68 @@
 # Xueqiu Investor Intelligence System
 
+## Current phase
+
+The project is now in **Phase 3 — Operational MVP**. The Intelligence
+semantic layer is frozen except for proven correctness bugs. The product is a
+**Browseable, manually refreshable Intelligence Product**. The verified live
+Source → Product loop uses an already authenticated Edge CDP session; the
+product is not always-on because Scheduler belongs to OMVP-2.
+
+## One-command refresh
+
+The verified canonical full refresh command is:
+
+```powershell
+python -m operations.refresh --cdp-endpoint http://127.0.0.1:9222
+```
+
+The endpoint must refer to an operator-started, authenticated Edge session.
+The refresh command does not guess an endpoint, create a second authenticated
+session, or automate login. `python -m operations.refresh` remains available
+for the storage-state browser path, but the explicit CDP command is the
+verified live runtime.
+
+It runs the existing pipeline in order:
+
+```text
+Following Feed collection
+→ RawEvent ingestion
+→ missing current-production Analysis only
+→ Current Analysis resolution / Opinion materialization
+→ affected Investor × Asset state, Attention, and Thesis derivation
+→ affected-Asset Cross-Investor Snapshot / Alignment / Consensus evidence
+→ Signal
+→ IntelligenceEvent and Evidence
+→ Priority
+→ Feed projection and Feed lifecycle
+→ Asset / Investor Product View verification
+```
+
+Selection is database-driven and the command is safe to rerun. It does not
+perform historical backfill, add semantic layers, add scheduler support, or
+create orchestration persistence. Collection authentication and Xueqiu
+risk-control failures are reported explicitly at the Collection stage.
+
+The refresh summary is structured and includes counts, stage durations, LLM
+request counts, affected entities, and the final `SUCCESS`,
+`PARTIAL_FAILURE`, or `FAILED` result.
+
+### OMVP-1 verification status
+
+**COMPLETE.** On 2026-09-20, explicit CDP smoke returned one Following Feed
+batch with 16 real items. The canonical refresh created 16 RawEvents,
+processed all 16 under the unchanged production Analysis identity, issued 16
+LLM requests, and produced 13 `NO_OPINION` plus 3
+`PARTIALLY_RESOLVED` results with zero failures. No Asset was fabricated for
+unresolved/no-opinion items. Product verification read four affected
+Investor Product Views successfully.
+
+A second identical CDP refresh observed the same 16 source items as existing,
+created zero RawEvents, issued zero LLM requests, and produced no duplicate
+Opinion, Attention, Thesis, Signal, Event, Priority, or Feed artifacts.
+
+## Advanced / Debugging
+
 Current delivery status includes Sprint 2E.3-G/H correctness closure and
 Sprint 2F.0 Data Reality Check, Sprint 2F.1 Cross-Investor Asset Evidence
 Snapshot Foundation, Sprint 2F.2 Opinion Coverage & Directional Alignment V0,
@@ -34,7 +97,7 @@ ruff check .
 API 启动后可访问 `GET /health` 检查应用与数据库连通性。
 
 
-## Xueqiu Following Feed collector
+### Xueqiu Following Feed collector
 
 首次使用时启动可见浏览器，并在浏览器中手动完成登录：
 
@@ -86,7 +149,7 @@ Collector 默认通过 Playwright `channel="msedge"` 启动系统 Edge，无需�
 如雪球显示登录失效、滑动验证或访问限制页面，Collector 会停止并返回明确错误，
 不会尝试绕过。
 
-## Core intelligence pipeline demo
+### Core intelligence pipeline demo
 
 无需实时雪球采集，使用 Manual Import 与 Mock Extractor 运行完整核心链路：
 
@@ -94,7 +157,7 @@ Collector 默认通过 Playwright `channel="msedge"` 启动系统 Edge，无需�
 python -m pipeline.demo
 ```
 
-## Generic LLM opinion extraction smoke test
+### Generic LLM opinion extraction smoke test
 
 系统支持 OpenAI-compatible Responses API providers。离线测试使用 Fake Client，不会访问公网或消耗
 token。真实 smoke test 只从通用环境配置读取，不会回退到 Mock：
@@ -119,7 +182,7 @@ Provider 使用版本化 Prompt `opinion-extraction-v5`、`analysis_policy_versi
 Consensus、Signal 等仍由确定性领域层计算。Provider 错误会区分认证、限流、超时、不可用和结构化输出失败，
 并标记是否可重试。
 
-## Production analysis recovery
+### Production analysis recovery
 
 Full backfill 只处理当前 production AnalysisSpec 下缺少 Analysis 的 RawEvent；已经存在的有效 Analysis
 不会重跑，FAILED 会保留真实失败状态。命令支持通过重复执行从 remaining missing set 断点续跑；完成后会按
@@ -157,7 +220,7 @@ RawEvent
 ```
 
 
-## Project status
+### Project status
 
 当前已完成的核心链路可以离线重放，并且生产解释使用显式批准的 AnalysisSpec：
 
@@ -392,7 +455,11 @@ version in their input identity.
 This boundary does not implement Consensus scores, Investor weighting,
 Ranking, Momentum, Warming, Signal, or Research Candidate.
 
-## Current / Next
+## Historical semantic status (frozen reference)
+
+The following sections preserve completed semantic work and known data
+calibration facts. They are not the current implementation roadmap; Phase 3
+Operational MVP is the active direction.
 
 ### Sprint 2E.2 — Thesis Change V0
 
@@ -447,8 +514,8 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 - Multi-investor warming
 - Industry / Theme Trend
 - Research Signal / Research Candidate
-- Scheduler
-- Dashboard / Product API
+- Scheduler, freshness, and automatic failure visibility
+- always-on runtime and production deployment
 
 本项目不是 Xueqiu crawler product、stock recommendation system、auto trading system 或 price prediction system；
 它是 Investor Behavior Intelligence System，关注谁在关注什么、为什么关注、观点如何变化、是否发生行为，以及多位投资者是否形成共识或分歧。

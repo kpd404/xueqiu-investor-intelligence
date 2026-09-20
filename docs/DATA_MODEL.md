@@ -1016,3 +1016,21 @@ The table stores event_id, priority_level (LOW/MEDIUM/HIGH), reason, evidence_co
 IntelligenceFeedItem is a user-facing projection of one IntelligenceEventPriority. Its unique identity is priority_id. It stores asset_id, event_type, deterministic title, compact context JSON, reason, FeedState, observed_at, and created_at.
 
 It is presentation data only. It does not add ranking, score, recommendation, prediction, or new intelligence semantics.
+
+## Operational MVP persistence boundary
+
+Operational orchestration does not require a new table in Sprint 1. The
+refresh command reuses `CollectionRun` and `CollectionObservation` for
+source run/provenance, and reuses the existing Analysis, Opinion, Attention,
+State, Thesis, Cross-Investor, Signal, Event, Priority, and Feed artifacts for
+downstream results.
+
+`RefreshRun`, `JobRun`, `Task`, or `Worker` persistence is deferred until
+OMVP-2 demonstrates a concrete freshness or failure-visibility requirement
+that cannot be met by the existing records and structured console summary.
+
+Data-model maturity is not operational maturity. The repository can have
+complete schemas and idempotent services while the product is still not
+self-running. Phase 3 therefore measures executable source-to-product
+refreshes, safe reruns, explicit stage failures, and Product readback rather
+than additional tables or semantic projections.

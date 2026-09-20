@@ -36,21 +36,78 @@ Version: 1.6
 
 ## 1.3 Delivery Status
 
-Sprint 2D Asset Resolution is complete, including deterministic resolution, AssetAlias, evidence-backed Asset Master
-data, cross-listing / alias safety, and unresolved recovery. Sprint 2E.0 Behavior Evidence Foundation, Sprint 2E.2-A
-Opinion Attribution & Identity Hardening, Sprint 2E.2-B Production Analysis Policy & Projection Provenance, Thesis
-Change V0, and Sprint 2E.3-A–F Portfolio / Behavior foundations are complete. Attention Momentum has its architecture
-and evidence foundation, but production calculation is paused for data calibration pending broader temporal coverage.
-Current Asset Intelligence remains a basic aggregation / Consensus foundation rather than a complete Intelligence
-Engine.
+Phase 0 Foundation, Phase 1 Data / Intelligence Foundation, and Phase 2
+Intelligence Product Foundation are complete or frozen, including the
+collector, real LLM Analysis, Asset / Investor intelligence, Signal/Event/
+Priority/Feed projections, Product Views, frontend, and cross-navigation.
+Attention Momentum remains paused because historical completeness and temporal
+coverage are insufficient for absence-sensitive inference.
 
-The delivery status also includes Sprint 2E.3-G/H correctness closure and the
-Sprint 2F.0 Data Reality Check. This audit added no business model or table:
-it records the observed data limits before Cross-Investor Intelligence work.
-Sprint 2F.1 now adds the asset-centric evidence snapshot foundation without
-introducing consensus, scoring, Momentum, or Signal logic. Sprint 2F.2 adds
-the deterministic Opinion Coverage and Directional Alignment view on top of
-that immutable snapshot; it is explicitly not Consensus.
+The project is now in **Phase 3 — Operational MVP**. The UI exists, but the
+product is not yet operationally self-running. The current gap is a unified,
+incremental operational loop, not another Intelligence semantic layer.
+
+## 1.4 Operational Architecture
+
+The target Phase 3 path is:
+
+```text
+Xueqiu
+↓
+Collection
+↓
+Ingestion
+↓
+RawEvent
+↓
+Incremental Analysis
+↓
+Current Resolution
+↓
+Opinion Materialization
+↓
+Attention / State / Thesis
+↓
+Cross-Investor Snapshot / Alignment / Consensus Evidence
+↓
+Signal
+↓
+IntelligenceEvent / Evidence
+↓
+Priority
+↓
+Feed
+↓
+Feed Lifecycle
+↓
+Product Read Models
+↓
+API
+↓
+UI
+```
+
+The components above already exist in the repository. A thin
+**Operational Refresh Orchestrator** now coordinates them in this order and
+reports one structured result. Live collection has been proven through an
+operator-started authenticated Edge CDP session at
+`http://127.0.0.1:9222`; the verified runtime must pass that endpoint
+explicitly.
+
+### Operational Boundary Principles
+
+- The Orchestrator coordinates existing semantics; it does not recompute
+  semantic rules.
+- Each stage remains idempotent and safe to rerun.
+- There is no hidden fallback to inactive or failed Analysis identities.
+- A failure identifies the exact stage and preserves individual-item failure
+  isolation where existing policy allows it.
+- Incremental selection is based on database state, never on expected cohort
+  counts or hardcoded historical assumptions.
+- Product verification reads existing Product services; it does not persist a
+  new Product View.
+- Historical completeness remains `UNKNOWN`; absence-sensitive inference is
+  unsupported.
 
 ## 6.9 Sprint 2F.0 data reality check
 

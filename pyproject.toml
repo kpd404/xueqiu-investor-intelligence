@@ -42,6 +42,7 @@ include = [
     "database*",
     "intelligence*",
     "ingestion*",
+    "operations*",
     "pipeline*",
     "portfolio*",
     "prompts*",
