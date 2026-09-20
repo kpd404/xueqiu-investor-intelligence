@@ -6,6 +6,7 @@ import {
   getAssetList,
   getInvestorIntelligenceView,
   getInvestorList,
+  getRecentIntelligence,
   getOperationalStatus
 } from "./api";
 import { AssetProductViewPage } from "./AssetProductViewPage";
@@ -22,6 +23,7 @@ import type {
   InvestorProductView,
   InvestorListItem,
   InvestorView,
+  IntelligenceFeedItem,
   OperationalStatusResponse,
   TimelineEvent,
   TimelineResponse
@@ -104,6 +106,9 @@ export default function App() {
   const [investorViewError, setInvestorViewError] = useState<Error | null>(null);
   const [operationalStatus, setOperationalStatus] = useState<OperationalStatusResponse | null>(null);
   const [operationalStatusError, setOperationalStatusError] = useState<Error | null>(null);
+  const [recentIntelligence, setRecentIntelligence] = useState<IntelligenceFeedItem[]>([]);
+  const [recentIntelligenceLoading, setRecentIntelligenceLoading] = useState(true);
+  const [recentIntelligenceError, setRecentIntelligenceError] = useState<Error | null>(null);
   const assetId = route.assetId;
   const investorId = route.investorId;
 
@@ -111,6 +116,36 @@ export default function App() {
     const handlePopState = () => setRoute(readRouteState());
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadRecentIntelligence = () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      setRecentIntelligenceLoading(true);
+      getRecentIntelligence(since)
+        .then((value) => {
+          if (!active) return;
+          setRecentIntelligence(value.items);
+          setRecentIntelligenceError(null);
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          setRecentIntelligence([]);
+          setRecentIntelligenceError(
+            error instanceof Error ? error : new Error("Recent intelligence unavailable")
+          );
+        })
+        .finally(() => {
+          if (active) setRecentIntelligenceLoading(false);
+        });
+    };
+    loadRecentIntelligence();
+    const interval = window.setInterval(loadRecentIntelligence, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -398,6 +433,11 @@ export default function App() {
             error={catalogError}
             onOpenAsset={handleSelect}
             onOpenDiscovery={navigateToDiscovery}
+            onOpenInvestor={navigateToInvestor}
+            recentItems={recentIntelligence}
+            recentLoading={recentIntelligenceLoading}
+            recentError={recentIntelligenceError}
+            operationalStatus={operationalStatus}
           />
         ) : route.discovery ? (
           <DiscoveryPage

@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OverviewPage } from "./OverviewPage";
-import type { AssetListItem } from "./types";
+import type { AssetListItem, IntelligenceFeedItem, OperationalStatusResponse } from "./types";
 
 const baseAsset: AssetListItem = {
   asset_id: "asset-dragon",
@@ -109,6 +109,44 @@ const assets: AssetListItem[] = [
   }
 ];
 
+const recentItem: IntelligenceFeedItem = {
+  id: "feed-1",
+  priority_id: "priority-1",
+  asset: {
+    asset_id: "asset-dragon",
+    name: "龙源电力",
+    market: "HK",
+    symbol: "00916"
+  },
+  event_type: "ASSET_ACTIVITY_SPIKE",
+  priority_level: "HIGH",
+  reason: "MULTI_INVESTOR_ATTENTION",
+  title: "Multiple investors started paying attention",
+  context: { investor_count: 2, signal_count: 3, source_count: 3 },
+  investors: [
+    { investor_id: "investor-a", name: "Investor A" },
+    { investor_id: "investor-b", name: "Investor B" }
+  ],
+  state: "ACTIVE",
+  observed_at: "2026-09-20T08:00:00Z",
+  created_at: "2026-09-20T08:01:00Z"
+};
+
+const healthyStatus: OperationalStatusResponse = {
+  status: "HEALTHY",
+  freshness: "FRESH",
+  freshness_age_seconds: 600,
+  last_refresh_started_at: "2026-09-20T08:00:00Z",
+  last_refresh_finished_at: "2026-09-20T08:01:00Z",
+  last_successful_refresh_at: "2026-09-20T08:01:00Z",
+  latest_status: "SUCCESS",
+  latest_trigger: "SCHEDULED",
+  latest_failure_stage: null,
+  latest_failure_code: null,
+  next_expected_refresh_at: "2026-09-20T09:01:00Z",
+  cdp_requirement: "AUTHENTICATED_EDGE_CDP_REQUIRED"
+};
+
 afterEach(cleanup);
 
 describe("Observed Intelligence Overview V0", () => {
@@ -205,5 +243,97 @@ describe("Observed Intelligence Overview V0", () => {
     );
     expect(screen.getByText("API unavailable")).toBeInTheDocument();
     expect(screen.queryByText("No interest")).not.toBeInTheDocument();
+  });
+
+  it("surfaces recent FeedItem facts with Asset and Investor navigation", () => {
+    const onOpenAsset = vi.fn();
+    const onOpenInvestor = vi.fn();
+    render(
+      <OverviewPage
+        assets={assets}
+        loading={false}
+        error={null}
+        onOpenAsset={onOpenAsset}
+        onOpenDiscovery={vi.fn()}
+        onOpenInvestor={onOpenInvestor}
+        recentItems={[recentItem]}
+        recentLoading={false}
+        recentError={null}
+        operationalStatus={healthyStatus}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Recent Intelligence" })).toBeInTheDocument();
+    expect(screen.getByText("Multiple investors surfaced this Asset")).toBeInTheDocument();
+    expect(screen.getByText("HIGH review priority")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Recent Intelligence" })).queryByText(
+        /investment rating|score|buy/i
+      )
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: /龙源电力.*HK:00916/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Investor A" }));
+    expect(onOpenAsset).toHaveBeenCalledWith("asset-dragon");
+    expect(onOpenInvestor).toHaveBeenCalledWith("investor-a");
+  });
+
+  it("uses safe empty wording when no recent intelligence is surfaced", () => {
+    render(
+      <OverviewPage
+        assets={assets}
+        loading={false}
+        error={null}
+        onOpenAsset={vi.fn()}
+        onOpenDiscovery={vi.fn()}
+        recentItems={[]}
+        recentLoading={false}
+        recentError={null}
+        operationalStatus={healthyStatus}
+      />
+    );
+
+    expect(
+      screen.getByText("No intelligence items were surfaced in the current recent window.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No investor activity|Nothing happened today/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps recent intelligence visible while warning about stale data", () => {
+    render(
+      <OverviewPage
+        assets={assets}
+        loading={false}
+        error={null}
+        onOpenAsset={vi.fn()}
+        onOpenDiscovery={vi.fn()}
+        recentItems={[recentItem]}
+        recentLoading={false}
+        recentError={null}
+        operationalStatus={{ ...healthyStatus, status: "STALE", freshness: "STALE" }}
+      />
+    );
+
+    expect(screen.getByText("Data may be stale; showing the latest available intelligence.")).toBeInTheDocument();
+    expect(screen.getByText("Multiple investors surfaced this Asset")).toBeInTheDocument();
+  });
+
+  it("separates Feed API failure from refresh failure", () => {
+    render(
+      <OverviewPage
+        assets={assets}
+        loading={false}
+        error={null}
+        onOpenAsset={vi.fn()}
+        onOpenDiscovery={vi.fn()}
+        recentItems={[]}
+        recentLoading={false}
+        recentError={new Error("feed unavailable")}
+        operationalStatus={healthyStatus}
+      />
+    );
+
+    expect(screen.getByText("Recent intelligence is unavailable.")).toBeInTheDocument();
+    expect(screen.queryByText("feed unavailable")).not.toBeInTheDocument();
   });
 });

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
+from datetime import UTC, datetime
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
 from contracts import (
     FeedItem,
+    FeedState,
     IntelligenceEventEvidenceView,
     IntelligenceEventPriorityView,
     IntelligenceEventType,
@@ -18,6 +20,7 @@ from contracts import (
 )
 from intelligence.schemas.feed import (
     FeedAssetIdentity,
+    FeedInvestorIdentity,
     IntelligenceFeedListResponse,
     IntelligenceFeedResponse,
 )
@@ -101,12 +104,18 @@ class IntelligenceFeedQueryService:
         investor_id: UUID | None = None,
         priority_level: IntelligencePriorityLevel | None = None,
         event_type: IntelligenceEventType | None = None,
+        state: FeedState | None = None,
+        since: datetime | None = None,
     ) -> IntelligenceFeedListResponse:
         if limit < 1 or limit > 100:
             raise ValueError("limit must be between 1 and 100")
+        if since is not None:
+            if since.tzinfo is None or since.utcoffset() is None:
+                raise ValueError("since must be timezone-aware")
+            since = since.astimezone(UTC)
         with self._unit_of_work_factory() as unit_of_work:
             assets = {asset.id: asset for asset in unit_of_work.assets.list()}
-            investors = {investor.id for investor in unit_of_work.investors.list()}
+            investors = {investor.id: investor for investor in unit_of_work.investors.list()}
             if asset_id is not None and asset_id not in assets:
                 raise FeedAssetNotFoundError(f"asset not found: {asset_id}")
             if investor_id is not None and investor_id not in investors:
@@ -135,6 +144,10 @@ class IntelligenceFeedQueryService:
                     continue
                 if event_type is not None and event.event_type is not event_type:
                     continue
+                if state is not None and item.state is not state:
+                    continue
+                if since is not None and item.observed_at < since:
+                    continue
                 if investor_id is not None:
                     linked_investors = {
                         signals[link.signal_id].investor_id
@@ -147,6 +160,21 @@ class IntelligenceFeedQueryService:
                 asset = assets.get(item.asset_id)
                 if asset is None:
                     raise ValueError(f"Asset not found for FeedItem: {item.id}")
+                linked_investors = tuple(
+                    FeedInvestorIdentity(
+                        investor_id=linked_id,
+                        name=investors[linked_id].name,
+                    )
+                    for linked_id in sorted(
+                        {
+                            signals[link.signal_id].investor_id
+                            for link in links_by_event.get(event.id, [])
+                            if link.signal_id in signals
+                            and signals[link.signal_id].investor_id in investors
+                        },
+                        key=lambda value: (investors[value].name, value.int),
+                    )
+                )
                 projected.append(
                     IntelligenceFeedResponse(
                         id=item.id,
@@ -162,6 +190,7 @@ class IntelligenceFeedQueryService:
                         reason=priority.reason,
                         title=item.title,
                         context=item.context,
+                        investors=linked_investors,
                         state=item.state,
                         observed_at=item.observed_at,
                         created_at=item.created_at,
@@ -193,12 +222,16 @@ class IntelligenceFeedQueryService:
         limit: int = 50,
         priority_level: IntelligencePriorityLevel | None = None,
         event_type: IntelligenceEventType | None = None,
+        state: FeedState | None = None,
+        since: datetime | None = None,
     ) -> IntelligenceFeedListResponse:
         return self.list_feed(
             limit=limit,
             asset_id=asset_id,
             priority_level=priority_level,
             event_type=event_type,
+            state=state,
+            since=since,
         )
 
     def get_investor_feed(
@@ -208,12 +241,16 @@ class IntelligenceFeedQueryService:
         limit: int = 50,
         priority_level: IntelligencePriorityLevel | None = None,
         event_type: IntelligenceEventType | None = None,
+        state: FeedState | None = None,
+        since: datetime | None = None,
     ) -> IntelligenceFeedListResponse:
         return self.list_feed(
             limit=limit,
             investor_id=investor_id,
             priority_level=priority_level,
             event_type=event_type,
+            state=state,
+            since=since,
         )
 
 

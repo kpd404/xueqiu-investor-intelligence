@@ -439,6 +439,33 @@ const emptyInvestorProductPayload: InvestorProductView = {
 function mockApi(product: AssetIntelligenceView = productPayload) {
   return vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
+    if (url === "/api/operations/status") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: "HEALTHY",
+          freshness: "FRESH",
+          freshness_age_seconds: 600,
+          last_refresh_started_at: "2026-09-20T08:00:00Z",
+          last_refresh_finished_at: "2026-09-20T08:01:00Z",
+          last_successful_refresh_at: "2026-09-20T08:01:00Z",
+          latest_status: "SUCCESS",
+          latest_trigger: "SCHEDULED",
+          latest_failure_stage: null,
+          latest_failure_code: null,
+          next_expected_refresh_at: "2026-09-20T09:01:00Z",
+          cdp_requirement: "AUTHENTICATED_EDGE_CDP_REQUIRED"
+        })
+      });
+    }
+    if (url.startsWith("/api/intelligence/feed")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ items: [], total: 0, limit: 20, has_more: false })
+      });
+    }
     if (url === "/api/v1/intelligence/investors") {
       return Promise.resolve({ ok: true, status: 200, json: async () => investorList });
     }

@@ -21,6 +21,13 @@ class FeedAssetIdentity(BaseModel):
     symbol: str = Field(min_length=1, max_length=64)
 
 
+class FeedInvestorIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    investor_id: UUID
+    name: str = Field(min_length=1, max_length=255)
+
+
 class IntelligenceFeedResponse(BaseModel):
     """One user-consumable FeedItem projection."""
 
@@ -34,6 +41,7 @@ class IntelligenceFeedResponse(BaseModel):
     reason: IntelligencePriorityReason
     title: str
     context: dict[str, object] = Field(default_factory=dict)
+    investors: tuple[FeedInvestorIdentity, ...] = ()
     state: FeedState
     observed_at: AwareDatetime
     created_at: AwareDatetime
@@ -50,6 +58,7 @@ class IntelligenceFeedListResponse(BaseModel):
 
 __all__ = [
     "FeedAssetIdentity",
+    "FeedInvestorIdentity",
     "IntelligenceFeedListResponse",
     "IntelligenceFeedResponse",
 ]

@@ -309,9 +309,13 @@ was introduced.
 
 ### OMVP-3 — Daily Intelligence Inbox
 
-Deferred until OMVP-2. This will reuse the existing Signal, IntelligenceEvent,
-Priority, and Feed artifacts so a user can see what changed since the last
-refresh without introducing new Intelligence semantics.
+Status: `COMPLETE`.
+
+The Overview product entry now shows Recent Intelligence using the existing
+FeedItem, Priority, Event, Signal, and evidence lineage. It uses a rolling
+24-hour query-time window, does not create user read state, and preserves the
+distinction between successful data refresh and no surfaced Intelligence.
+No new semantic layer or persistence artifact was introduced.
 
 ## Post-MVP Productionization
 

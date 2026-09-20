@@ -2,12 +2,12 @@
 
 ## Current phase
 
-The project is now in **Phase 3 — Operational MVP**. The Intelligence
+The project has completed **Phase 3 — Operational MVP**. The Intelligence
 semantic layer is frozen except for proven correctness bugs. The product is a
 **Browseable, manually refreshable Intelligence Product**. The verified live
 Source → Product loop uses an already authenticated Edge CDP session; the
-product is not always-on because always-on deployment and hosting are deferred
-post-MVP.
+product is not Production Ready because always-on deployment and hosting are
+deferred post-MVP.
 
 ## One-command refresh
 

@@ -1,6 +1,7 @@
 """Read-only HTTP projection for the Intelligence Feed."""
 
 from collections.abc import Callable
+from datetime import datetime
 from logging import getLogger
 from typing import Annotated
 from uuid import UUID
@@ -9,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.app.api.dependencies import get_intelligence_feed_query_service
-from contracts import IntelligenceEventType, IntelligencePriorityLevel
+from contracts import FeedState, IntelligenceEventType, IntelligencePriorityLevel
 from intelligence.feed.query import (
     FeedAssetNotFoundError,
     FeedInvestorNotFoundError,
@@ -68,6 +69,8 @@ def get_intelligence_feed(
     investor_id: Annotated[UUID | None, Query()] = None,
     priority_level: Annotated[IntelligencePriorityLevel | None, Query()] = None,
     event_type: Annotated[IntelligenceEventType | None, Query()] = None,
+    state: Annotated[FeedState | None, Query()] = None,
+    since: Annotated[datetime | None, Query()] = None,
 ) -> IntelligenceFeedListResponse:
     return _read(
         lambda: service.list_feed(
@@ -76,6 +79,8 @@ def get_intelligence_feed(
             investor_id=investor_id,
             priority_level=priority_level,
             event_type=event_type,
+            state=state,
+            since=since,
         )
     )
 

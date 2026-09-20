@@ -615,3 +615,43 @@ export interface OperationalStatusResponse {
   next_expected_refresh_at: string | null;
   cdp_requirement: string;
 }
+
+export interface IntelligenceFeedInvestor {
+  investor_id: string;
+  name: string;
+}
+
+export interface IntelligenceFeedItem {
+  id: string;
+  priority_id: string;
+  asset: {
+    asset_id: string;
+    name: string;
+    market: string;
+    symbol: string;
+  };
+  event_type:
+    | "ASSET_ACTIVITY_SPIKE"
+    | "INVESTOR_VIEW_CHANGE"
+    | "CROSS_INVESTOR_DISCOVERY"
+    | "CONSENSUS_STATE_CHANGE";
+  priority_level: "LOW" | "MEDIUM" | "HIGH";
+  reason:
+    | "MULTI_INVESTOR_ATTENTION"
+    | "THESIS_ACCELERATION"
+    | "CROSS_INVESTOR_DISCOVERY"
+    | "CONSENSUS_STATE_CHANGE";
+  title: string;
+  context: Record<string, unknown>;
+  investors: IntelligenceFeedInvestor[];
+  state: "NEW" | "ACTIVE" | "STALE" | "RESOLVED";
+  observed_at: string;
+  created_at: string;
+}
+
+export interface IntelligenceFeedListResponse {
+  items: IntelligenceFeedItem[];
+  total: number;
+  limit: number;
+  has_more: boolean;
+}

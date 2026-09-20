@@ -5,6 +5,7 @@ import type {
   InvestorIntelligenceView,
   InvestorProductView,
   InvestorListResponse,
+  IntelligenceFeedListResponse,
   OperationalStatusResponse,
   TimelineResponse
 } from "./types";
@@ -77,4 +78,16 @@ export function getInvestorIntelligenceView(investorId: string): Promise<Investo
 
 export function getOperationalStatus(): Promise<OperationalStatusResponse> {
   return request<OperationalStatusResponse>("/api/operations/status");
+}
+
+export function getRecentIntelligence(
+  since: string,
+  limit = 20
+): Promise<IntelligenceFeedListResponse> {
+  return request<IntelligenceFeedListResponse>(
+    "/api/intelligence/feed?limit=" +
+      limit +
+      "&state=ACTIVE&since=" +
+      encodeURIComponent(since)
+  );
 }

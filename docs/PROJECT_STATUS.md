@@ -8,7 +8,7 @@ implemented; the current engineering priority is operational execution.
 
 ## Current phase and sprint
 
-The project is in **Phase 3 — Operational MVP**.
+**Phase 3 — Operational MVP is COMPLETE.**
 
 - Phase 0 Foundation is complete.
 - Phase 1 Data / Intelligence Foundation is complete.
@@ -19,15 +19,16 @@ The project is in **Phase 3 — Operational MVP**.
   Proof is **COMPLETE**.
 - OMVP-2 — Scheduled Refresh + Freshness + Failure Visibility is
   **COMPLETE**.
+- OMVP-3 — Daily Intelligence Inbox is **COMPLETE**.
 - Attention Momentum remains paused because historical completeness and
   temporal coverage are `UNKNOWN` / insufficient for absence-sensitive
   inference.
 
 ## Product state
 
-The current product is a **Scheduled Operational Intelligence Product**, not
-Production Ready. The runtime requires an operator-started authenticated Edge
-CDP endpoint.
+The current product is a **Scheduled Operational Intelligence Product with a
+Recent Intelligence Inbox**, not Production Ready. The runtime requires an
+operator-started authenticated Edge CDP endpoint.
 
 Completed product-facing capability includes:
 
@@ -46,14 +47,14 @@ The verified critical path is:
 Collect → Analyze → Materialize → Product
 ```
 
-## Deliberately not started in Sprint 2
+## Deliberately deferred after Phase 3
 
-- Daily Intelligence Inbox;
 - notifications and since-last-visit logic;
 - always-on production deployment and CI/CD.
 
-Scheduled execution, freshness, failure visibility, and manual/scheduled
-consistency are complete. Always-on deployment remains deferred.
+Scheduled execution, freshness, failure visibility, manual/scheduled
+consistency, and Recent Intelligence presentation are complete. User read
+state, notifications, and always-on deployment remain deferred.
 
 ## Completed functionality
 
@@ -463,18 +464,21 @@ its v2 artifact is MIXED_WITH_NEUTRAL.
 
 The current repository verification is:
 
-- `pytest`: **623 passed**, with two non-failing environment warnings (FastAPI
+- `pytest`: **625 passed**, with two non-failing environment warnings (FastAPI
   test-client deprecation and `.pytest_cache` permission).
 - `ruff format --check .`: passed; 426 files formatted.
 - `ruff check .`: passed.
 - Alembic current/check against real PostgreSQL: `20260920_0024 (head)`, no drift.
 - Frontend `npm run lint`: passed.
-- Frontend `npm run test`: **34 passed**.
+- Frontend `npm run test`: **38 passed**.
 - Frontend `npm run build`: passed.
 - Real scheduled `--once` execution: `SCHEDULED / SUCCESS`.
 - Real CDP-unavailable scheduled failure: `CDP_UNAVAILABLE`.
 - Real recovery scheduled execution: `SCHEDULED / SUCCESS`.
 - Operational Status API: `HEALTHY / FRESH` after recovery.
+- Real PostgreSQL Feed audit: 66 ACTIVE items, 2 STALE items; the rolling
+  24-hour Inbox query currently returns zero items, so the product shows the
+  explicit recent-window empty state rather than inferring no activity.
 - Explicit CDP smoke: one Following Feed batch, 16 items, `MAX_BATCHES`,
   no risk-control result.
 - Explicit CDP canonical refresh: `SUCCESS`, 16 new RawEvents, 16 LLM
@@ -555,14 +559,16 @@ project limitations are runtime/data readiness:
 - No real Portfolio snapshot stream exists.
 - Only one Asset has 3+ Investor overlap; broader overlap is still needed.
 - Asset resolution is the primary current data bottleneck.
-- OMVP-1.1 and OMVP-2 are complete; do not start OMVP-3 in this task.
+- OMVP-1.1, OMVP-2, and OMVP-3 are complete; do not start a new phase in this
+  task.
 
 These are data/product-readiness limits, not reasons to add fallback inference,
 scores, or provider-specific logic.
 
 ## Recommended next task
 
-Hold the project at the completed OMVP-2 boundary. OMVP-3 is the planned
-Daily Intelligence Inbox phase, but it must not be started as part of this
-task. Do not add new Intelligence semantics, ranking, scoring,
-recommendations, or portfolio analytics without real Portfolio facts.
+Hold the project at the completed Phase 3 boundary. The next decision is
+post-MVP hosting/restart reliability versus deeper data readiness; do not
+start either in this task. Do not add new Intelligence semantics, ranking,
+scoring, recommendations, or portfolio analytics without real Portfolio
+facts.

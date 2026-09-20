@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 
-import type { AssetListItem } from "./types";
+import type {
+  AssetListItem,
+  IntelligenceFeedItem,
+  OperationalStatusResponse
+} from "./types";
 import { formatTime } from "./presentation";
 
 interface OverviewPageProps {
@@ -9,6 +13,11 @@ interface OverviewPageProps {
   error: Error | null;
   onOpenAsset: (assetId: string) => void;
   onOpenDiscovery: (queryString: string) => void;
+  onOpenInvestor?: (investorId: string) => void;
+  recentItems?: IntelligenceFeedItem[];
+  recentLoading?: boolean;
+  recentError?: Error | null;
+  operationalStatus?: OperationalStatusResponse | null;
 }
 
 export function OverviewPage({
@@ -16,7 +25,12 @@ export function OverviewPage({
   loading,
   error,
   onOpenAsset,
-  onOpenDiscovery
+  onOpenDiscovery,
+  onOpenInvestor = () => undefined,
+  recentItems = [],
+  recentLoading = false,
+  recentError = null,
+  operationalStatus = null
 }: OverviewPageProps) {
   const sharedAttentionAssets = useMemo(
     () => assets.filter((asset) => asset.attention_investor_count >= 2),
@@ -92,6 +106,15 @@ export function OverviewPage({
           <small>Observed evidence only</small>
         </div>
       </header>
+
+      <RecentIntelligencePanel
+        items={recentItems}
+        loading={recentLoading}
+        error={recentError}
+        operationalStatus={operationalStatus}
+        onOpenAsset={onOpenAsset}
+        onOpenInvestor={onOpenInvestor}
+      />
 
       <section className="overview-summary" aria-label="Observed universe summary">
         <OverviewMetric label="Observed Assets" value={assets.length} note="Evidence-bearing" />
@@ -233,6 +256,133 @@ export function OverviewPage({
         <span>Open an Asset to inspect its complete evidence view.</span>
       </footer>
     </div>
+  );
+}
+
+function RecentIntelligencePanel({
+  items,
+  loading,
+  error,
+  operationalStatus,
+  onOpenAsset,
+  onOpenInvestor
+}: {
+  items: IntelligenceFeedItem[];
+  loading: boolean;
+  error: Error | null;
+  operationalStatus: OperationalStatusResponse | null;
+  onOpenAsset: (assetId: string) => void;
+  onOpenInvestor: (investorId: string) => void;
+}) {
+  const statusNotice =
+    operationalStatus?.status === "STALE"
+      ? "Data may be stale; showing the latest available intelligence."
+      : operationalStatus?.status === "ACTION_REQUIRED"
+        ? "Refresh requires attention; existing intelligence remains available."
+        : operationalStatus?.status === "SOURCE_LIMITED"
+          ? "The source is temporarily limited; existing intelligence remains available."
+          : null;
+
+  return (
+    <section className="overview-section recent-intelligence-panel" aria-label="Recent Intelligence">
+      <OverviewSectionHeading
+        number="00"
+        title="Recent Intelligence"
+        subtitle="Available intelligence surfaced in the last 24 hours"
+      />
+      {statusNotice && <div className="recent-intelligence-notice">{statusNotice}</div>}
+      {loading ? (
+        <div className="recent-intelligence-loading" aria-label="Loading Recent Intelligence">
+          Loading recent intelligence…
+        </div>
+      ) : error ? (
+        <div className="recent-intelligence-empty" role="status">
+          <strong>Recent intelligence is unavailable.</strong>
+          <span>The feed query could not be loaded. Operational status remains available above.</span>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="recent-intelligence-empty" role="status">
+          <strong>No intelligence items were surfaced in the current recent window.</strong>
+          <span>Data refresh success and intelligence surfaced are separate facts; historical evidence remains available below.</span>
+        </div>
+      ) : (
+        <div className="recent-intelligence-grid">
+          {items.map((item) => (
+            <RecentIntelligenceCard
+              item={item}
+              key={item.id}
+              onOpenAsset={onOpenAsset}
+              onOpenInvestor={onOpenInvestor}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RecentIntelligenceCard({
+  item,
+  onOpenAsset,
+  onOpenInvestor
+}: {
+  item: IntelligenceFeedItem;
+  onOpenAsset: (assetId: string) => void;
+  onOpenInvestor: (investorId: string) => void;
+}) {
+  const eventCopy = {
+    ASSET_ACTIVITY_SPIKE: "Multiple investors surfaced this Asset",
+    INVESTOR_VIEW_CHANGE: "Investor view changed",
+    CROSS_INVESTOR_DISCOVERY: "Cross-investor attention was surfaced",
+    CONSENSUS_STATE_CHANGE: "Consensus state changed"
+  }[item.event_type];
+  const reasonCopy = {
+    MULTI_INVESTOR_ATTENTION: "Multiple monitored Investors contributed attention evidence.",
+    THESIS_ACCELERATION: "Multiple thesis changes were observed.",
+    CROSS_INVESTOR_DISCOVERY: "Cross-investor evidence was observed.",
+    CONSENSUS_STATE_CHANGE: "A consensus evidence state changed."
+  }[item.reason];
+
+  return (
+    <article className="recent-intelligence-card">
+      <div className="recent-intelligence-card-meta">
+        <span className={"priority-badge " + item.priority_level.toLowerCase()}>
+          {item.priority_level} review priority
+        </span>
+        <time dateTime={item.observed_at}>{formatTime(item.observed_at)}</time>
+      </div>
+      <h3>{eventCopy}</h3>
+      <a
+        href={"/assets/" + item.asset.asset_id}
+        onClick={(event) => {
+          event.preventDefault();
+          onOpenAsset(item.asset.asset_id);
+        }}
+      >
+        {item.asset.name} · {item.asset.market}:{item.asset.symbol}
+      </a>
+      <p>{reasonCopy}</p>
+      <div className="recent-intelligence-card-footer">
+        <span>Evidence {String(item.context.signal_count ?? item.context.source_count ?? 0)}</span>
+        {item.investors.length > 0 && (
+          <span className="recent-intelligence-investors">
+            {item.investors.slice(0, 3).map((investor) => (
+              <a
+                href={"/investors/" + investor.investor_id}
+                key={investor.investor_id}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onOpenInvestor(investor.investor_id);
+                }}
+              >
+                {investor.name}
+              </a>
+            ))}
+            {item.investors.length > 3 && " +" + (item.investors.length - 3)}
+          </span>
+        )}
+      </div>
+    </article>
   );
 }
 

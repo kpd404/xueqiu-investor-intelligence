@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -119,7 +119,9 @@ class _Uow:
                 )(),
             )
         )
-        self.investors = _Reader((type("Investor", (), {"id": values["investor_id"]})(),))
+        self.investors = _Reader(
+            (type("Investor", (), {"id": values["investor_id"], "name": "Investor A"})(),)
+        )
 
     def __enter__(self):
         return self
@@ -143,6 +145,20 @@ def test_feed_query_filters_and_descending_projection() -> None:
     assert result.items[0].priority_id == values["priority"].id
     assert result.items[0].asset.market == "SH"
     assert result.items[0].context["signal_count"] == 1
+    assert result.items[0].investors[0].name == "Investor A"
+
+
+def test_feed_query_supports_recent_state_filter() -> None:
+    values = _fixtures()
+    service = IntelligenceFeedQueryService(lambda: _Uow(values))
+
+    result = service.list_feed(
+        limit=10,
+        state=FeedState.NEW,
+        since=NOW - timedelta(minutes=1),
+    )
+
+    assert result.total == 1
 
 
 def test_feed_api_exposes_general_asset_and_investor_paths() -> None:
