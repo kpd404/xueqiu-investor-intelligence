@@ -379,7 +379,14 @@ class PlaywrightXueqiuBrowser:
         async with async_playwright() as playwright:
             try:
                 if self._config.cdp_endpoint is not None:
-                    browser = await playwright.chromium.connect_over_cdp(self._config.cdp_endpoint)
+                    try:
+                        browser = await playwright.chromium.connect_over_cdp(
+                            self._config.cdp_endpoint
+                        )
+                    except PlaywrightError as exc:
+                        raise CdpNotAvailable(
+                            f"could not connect to Edge CDP endpoint {self._config.cdp_endpoint}"
+                        ) from exc
                     contexts = list(browser.contexts)
                     pages = [
                         page for existing_context in contexts for page in existing_context.pages

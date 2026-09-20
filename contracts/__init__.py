@@ -182,6 +182,15 @@ from contracts.observed_attention import (
     ObservedAttentionSequence,
     ObservedAttentionTemporalRelation,
 )
+from contracts.operational import (
+    OperationalFreshness,
+    OperationalRefreshRunCreate,
+    OperationalRefreshRunView,
+    OperationalRefreshStatus,
+    OperationalRefreshTrigger,
+    OperationalStatusLevel,
+    OperationalStatusView,
+)
 from contracts.opinion import (
     AssetOpinionExtraction,
     OpinionCreate,
@@ -413,6 +422,13 @@ __all__ = [
     "OpinionTimelineEntry",
     "OpinionWriteResult",
     "ObservedAttentionCompleteness",
+    "OperationalFreshness",
+    "OperationalRefreshRunCreate",
+    "OperationalRefreshRunView",
+    "OperationalRefreshStatus",
+    "OperationalRefreshTrigger",
+    "OperationalStatusLevel",
+    "OperationalStatusView",
     "ObservedAttentionDirectionRelation",
     "ObservedAttentionEdge",
     "ObservedAttentionObservation",

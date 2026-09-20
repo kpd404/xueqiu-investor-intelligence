@@ -43,9 +43,10 @@ Priority/Feed projections, Product Views, frontend, and cross-navigation.
 Attention Momentum remains paused because historical completeness and temporal
 coverage are insufficient for absence-sensitive inference.
 
-The project is now in **Phase 3 — Operational MVP**. The UI exists, but the
-product is not yet operationally self-running. The current gap is a unified,
-incremental operational loop, not another Intelligence semantic layer.
+The project is now in **Phase 3 — Operational MVP**. The UI and scheduled
+refresh/status loop exist for the authenticated local CDP runtime, while
+always-on deployment and restart hosting remain deferred. The current gap is
+production hosting, not another Intelligence semantic layer.
 
 ## 1.4 Operational Architecture
 
@@ -108,6 +109,38 @@ explicitly.
   new Product View.
 - Historical completeness remains `UNKNOWN`; absence-sensitive inference is
   unsupported.
+
+## 1.5 Scheduled Operational Runtime
+
+Sprint 2 adds a lightweight scheduler around the existing
+`OperationalRefreshService`:
+
+```text
+Scheduled Trigger
+      ↓
+OperationalRefreshService
+      ↓
+OperationalRefreshRun metadata
+      ↓
+Operational Status API
+      ↓
+Frontend freshness / failure indicator
+```
+
+The scheduler is an in-process, configuration-driven loop. It does not
+duplicate refresh stages and does not introduce a workflow engine, queue,
+worker, or platform scheduler. It requires the operator-started authenticated
+Edge CDP endpoint and reports `CDP_UNAVAILABLE`, authentication, and source
+limitation failures explicitly.
+
+Manual and scheduled triggers call the same refresh service. A PostgreSQL
+advisory lock prevents concurrent refreshes; a local process lock is used for
+SQLite/test execution. A second trigger is recorded as
+`SKIPPED_ALREADY_RUNNING`.
+
+`OperationalRefreshRun` is execution metadata only. It stores trigger,
+status, timing, failure stage/code, and the structured refresh summary. It
+does not contain or calculate Intelligence semantics.
 
 ## 6.9 Sprint 2F.0 data reality check
 

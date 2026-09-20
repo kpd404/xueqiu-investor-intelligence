@@ -55,6 +55,9 @@ from contracts import (
     CollectionTransport,
     EventAnalysisStatus,
     FeedCollectionRequest,
+    OperationalRefreshRunCreate,
+    OperationalRefreshStatus,
+    OperationalRefreshTrigger,
 )
 from contracts.collection_provenance import utc_now
 from database.models import (
@@ -71,12 +74,17 @@ from database.models import (
     IntelligenceEventPriority,
     IntelligenceFeedItem,
     Investor,
+    OperationalRefreshRun,
     Opinion,
     RawEvent,
     Signal,
     ThesisChange,
 )
-from database.repositories import CollectionObservationRepository, CollectionRunRepository
+from database.repositories import (
+    CollectionObservationRepository,
+    CollectionRunRepository,
+    OperationalRefreshRunRepository,
+)
 from database.session import SessionFactory
 from database.unit_of_work import (
     SqlAlchemyAttentionUnitOfWork,
@@ -102,6 +110,7 @@ from intelligence.feed.lifecycle import FeedLifecycleService
 from intelligence.investor_product import InvestorIntelligenceProductService
 from intelligence.priority import IntelligencePriorityService
 from intelligence.product import AssetIntelligenceProductService
+from operations.locking import OperationalRefreshLock
 from pipeline import AnalysisBackfillRunner, AnalysisRecoveryCandidate, AnalysisRecoveryProgress
 from resolution import AssetRecoveryService
 from signal_engine import SignalGenerator
@@ -142,6 +151,13 @@ class CollectionStageResult:
 
 
 @dataclass
+class _OperationalExecution:
+    session: Any
+    lock: OperationalRefreshLock
+    run_id: UUID
+
+
+@dataclass
 class RefreshSummary:
     """JSON-safe operational result printed by the canonical command."""
 
@@ -174,6 +190,7 @@ _COUNT_MODELS = {
     "investors": Investor,
     "collection_runs": CollectionRun,
     "collection_observations": CollectionObservation,
+    "operational_refresh_runs": OperationalRefreshRun,
     "raw_events": RawEvent,
     "event_analyses": EventAnalysis,
     "opinions": Opinion,
@@ -224,7 +241,9 @@ def _collection_failure(error: Exception) -> tuple[str, bool]:
         return "COLLECTION_AUTH_REQUIRED", True
     if isinstance(error, (RateLimitedOrBlocked, ManualVerificationRequired)):
         return "COLLECTION_RISK_CONTROLLED", True
-    if isinstance(error, (NetworkUnavailable, CdpNotAvailable, NavigationFailed)):
+    if isinstance(error, CdpNotAvailable):
+        return "CDP_UNAVAILABLE", True
+    if isinstance(error, (NetworkUnavailable, NavigationFailed)):
         return "COLLECTION_NETWORK_FAILURE", True
     if isinstance(error, (ParseFailed, BrowserDependencyMissing)):
         return "COLLECTION_PARSER_FAILURE", True
@@ -261,10 +280,39 @@ class OperationalRefreshService:
         batch_size: int = 10,
         analysis_concurrency: int = 4,
         attention_concurrency: int = 4,
+        trigger: OperationalRefreshTrigger = OperationalRefreshTrigger.MANUAL,
+        require_cdp: bool = False,
     ) -> RefreshSummary:
+        normalized_trigger = OperationalRefreshTrigger(trigger)
+        execution = self._begin_execution(normalized_trigger)
         started_at = utc_now()
         summary = RefreshSummary(started_at=started_at)
-        summary.database_before = self._database_counts()
+        if execution is None:
+            summary.result = OperationalRefreshStatus.SKIPPED_ALREADY_RUNNING.value
+            summary.finished_at = started_at
+            summary.database_before = self._database_counts()
+            summary.database_after = summary.database_before
+            summary.warnings.append("Another refresh is already running.")
+            summary.counts["operational_run_status"] = (
+                OperationalRefreshStatus.SKIPPED_ALREADY_RUNNING.value
+            )
+            return summary
+
+        summary.counts["operational_run_id"] = str(execution.run_id)
+        if require_cdp and not cdp_endpoint:
+            summary.database_before = self._database_counts()
+            summary.errors.append(
+                {
+                    "stage": RefreshStage.COLLECTION.value,
+                    "code": "CDP_UNAVAILABLE",
+                    "message": "An authenticated CDP endpoint is required for scheduled refresh.",
+                }
+            )
+            summary.result = OperationalRefreshStatus.FAILED.value
+            summary.finished_at = utc_now()
+            summary.database_after = self._database_counts()
+            self._finish_execution(execution, summary)
+            return summary
         partial_failure = False
         collection: CollectionStageResult | None = None
         target_event_ids: tuple[UUID, ...] = ()
@@ -272,6 +320,7 @@ class OperationalRefreshService:
         affected_investors: set[UUID] = set()
 
         try:
+            summary.database_before = self._database_counts()
             collection = await self._execute_stage(
                 summary,
                 RefreshStage.COLLECTION,
@@ -403,7 +452,69 @@ class OperationalRefreshService:
                 str(value) for value in affected_investors
             )
             summary.counts["llm_requests"] = self._llm_request_counts()
+            self._finish_execution(execution, summary)
         return summary
+
+    def _begin_execution(
+        self,
+        trigger: OperationalRefreshTrigger,
+    ) -> _OperationalExecution | None:
+        session = self._session_factory()
+        lock = OperationalRefreshLock(session)
+        if not lock.try_acquire():
+            session.close()
+            with self._session_factory() as skipped_session:
+                OperationalRefreshRunRepository(skipped_session).create_skipped(
+                    trigger=trigger,
+                    started_at=utc_now(),
+                    summary_json={"reason": "SKIPPED_ALREADY_RUNNING"},
+                )
+                skipped_session.commit()
+            return None
+        try:
+            run = OperationalRefreshRunRepository(session).create_run(
+                OperationalRefreshRunCreate(
+                    trigger=trigger,
+                    started_at=utc_now(),
+                )
+            )
+            session.commit()
+            return _OperationalExecution(session=session, lock=lock, run_id=run.id)
+        except Exception:
+            lock.release()
+            session.close()
+            raise
+
+    def _finish_execution(
+        self,
+        execution: _OperationalExecution,
+        summary: RefreshSummary,
+    ) -> None:
+        status = OperationalRefreshStatus(summary.result)
+        failure_stage = None
+        failure_code = None
+        if summary.errors:
+            failure_stage = summary.errors[0].get("stage")
+            failure_code = summary.errors[0].get("code")
+        elif status is OperationalRefreshStatus.PARTIAL_FAILURE:
+            partial_stages = [
+                stage for stage, value in summary.stages.items() if value.get("status") == "PARTIAL"
+            ]
+            failure_stage = partial_stages[0] if partial_stages else None
+            failure_code = "PARTIAL_FAILURE"
+        try:
+            OperationalRefreshRunRepository(execution.session).finish_run(
+                execution.run_id,
+                finished_at=summary.finished_at or utc_now(),
+                status=status,
+                failure_stage=failure_stage,
+                failure_code=failure_code,
+                summary_json=summary.as_dict(),
+            )
+            execution.session.commit()
+        finally:
+            execution.lock.release()
+            execution.session.close()
 
     async def _execute_stage(
         self,

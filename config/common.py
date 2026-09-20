@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     feed_stale_window_days: int = Field(default=30, gt=0)
     context_window_days: int = Field(default=30, gt=0)
     pattern_multi_investor_threshold: int = Field(default=3, ge=2)
+    operational_refresh_interval_minutes: int = Field(default=60, gt=0, le=1440)
+    operational_refresh_stale_after_minutes: int = Field(default=90, gt=0, le=10080)
+    xueqiu_cdp_endpoint: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

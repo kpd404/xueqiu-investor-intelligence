@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -18,6 +19,12 @@ class NoOpRefresh(OperationalRefreshService):
 
     def _database_counts(self):
         return {}
+
+    def _begin_execution(self, trigger):
+        return SimpleNamespace(session=None, lock=None, run_id=uuid4())
+
+    def _finish_execution(self, execution, summary):
+        return None
 
     async def _collect(self, **kwargs):
         return CollectionStageResult(run_id=None, stop_reason="SOURCE_NO_OP")

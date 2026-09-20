@@ -57,6 +57,7 @@ def test_metadata_contains_mvp_tables_and_temporal_processing_tables() -> None:
         "thesis_changes",
         "collection_runs",
         "collection_observations",
+        "operational_refresh_runs",
     }
 
 

@@ -6,7 +6,8 @@ The project is now in **Phase 3 — Operational MVP**. The Intelligence
 semantic layer is frozen except for proven correctness bugs. The product is a
 **Browseable, manually refreshable Intelligence Product**. The verified live
 Source → Product loop uses an already authenticated Edge CDP session; the
-product is not always-on because Scheduler belongs to OMVP-2.
+product is not always-on because always-on deployment and hosting are deferred
+post-MVP.
 
 ## One-command refresh
 
@@ -60,6 +61,38 @@ Investor Product Views successfully.
 A second identical CDP refresh observed the same 16 source items as existing,
 created zero RawEvents, issued zero LLM requests, and produced no duplicate
 Opinion, Attention, Thesis, Signal, Event, Priority, or Feed artifacts.
+
+## Scheduled refresh
+
+Sprint 2 adds a lightweight scheduler that calls the same canonical refresh
+service:
+
+```powershell
+python -m operations.scheduler --cdp-endpoint http://127.0.0.1:9222
+```
+
+The default interval is 60 minutes and is configurable with
+`OPERATIONAL_REFRESH_INTERVAL_MINUTES`. Freshness becomes stale after
+`OPERATIONAL_REFRESH_STALE_AFTER_MINUTES` (default: 90 minutes).
+
+For one scheduled tick:
+
+```powershell
+python -m operations.scheduler --cdp-endpoint http://127.0.0.1:9222 --once
+```
+
+The local operator must keep the authenticated Edge CDP session running.
+The scheduler does not log in, start a browser farm, or bypass Xueqiu
+verification.
+
+Operational status is available at:
+
+```text
+GET /api/operations/status
+```
+
+The response supports user-facing states such as Healthy, Data stale, Xueqiu
+login required, Source temporarily limited, and Refresh failed.
 
 ## Advanced / Debugging
 
@@ -514,7 +547,8 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 - Multi-investor warming
 - Industry / Theme Trend
 - Research Signal / Research Candidate
-- Scheduler, freshness, and automatic failure visibility
+- Daily Intelligence Inbox and since-last-visit workflows
+- notifications and always-on deployment
 - always-on runtime and production deployment
 
 本项目不是 Xueqiu crawler product、stock recommendation system、auto trading system 或 price prediction system；

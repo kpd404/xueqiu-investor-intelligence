@@ -15,6 +15,7 @@ from collectors.xueqiu.browser import (
     is_exact_following_label,
 )
 from collectors.xueqiu.contracts import FollowingFeedBatch, XueqiuBrowserConfig
+from collectors.xueqiu.errors import CdpNotAvailable
 from contracts import FeedCollectionRequest, FeedPostItem, FeedPostKind
 
 OBSERVED_AT = datetime(2026, 8, 27, 8, 0, tzinfo=UTC)
@@ -397,6 +398,36 @@ def test_playwright_following_runtime_filters_late_hot_response_and_counts_batch
 
     assert [batch.items[0].source_event_id for batch in result] == ["current", "scroll"]
     assert page.mouse.wheel_calls == 1
+
+
+def test_following_cdp_attach_failure_is_explicitly_classified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import playwright.async_api as playwright_api
+
+    class FailingChromium:
+        async def connect_over_cdp(self, endpoint: str):
+            raise playwright_api.Error("connection refused")
+
+    class FailingPlaywright:
+        chromium = FailingChromium()
+
+    class FailingManager:
+        async def __aenter__(self):
+            return FailingPlaywright()
+
+        async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
+            return None
+
+    monkeypatch.setattr(playwright_api, "async_playwright", lambda: FailingManager())
+    config = XueqiuBrowserConfig(cdp_endpoint="http://127.0.0.1:9223")
+
+    with pytest.raises(CdpNotAvailable, match="could not connect"):
+        asyncio.run(
+            PlaywrightXueqiuBrowser(config).fetch_following_feed_batches(
+                FeedCollectionRequest(max_batches=1)
+            )
+        )
 
 
 def test_playwright_following_runtime_keeps_initial_batch_when_tab_is_already_active(

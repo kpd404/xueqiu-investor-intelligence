@@ -1025,12 +1025,34 @@ source run/provenance, and reuses the existing Analysis, Opinion, Attention,
 State, Thesis, Cross-Investor, Signal, Event, Priority, and Feed artifacts for
 downstream results.
 
-`RefreshRun`, `JobRun`, `Task`, or `Worker` persistence is deferred until
-OMVP-2 demonstrates a concrete freshness or failure-visibility requirement
-that cannot be met by the existing records and structured console summary.
+`JobRun`, `Task`, `Worker`, or queue persistence remains deferred. Sprint 2
+added only the minimal `OperationalRefreshRun` metadata required for full
+refresh status, freshness, failure visibility, and trigger identity.
 
 Data-model maturity is not operational maturity. The repository can have
 complete schemas and idempotent services while the product is still not
 self-running. Phase 3 therefore measures executable source-to-product
 refreshes, safe reruns, explicit stage failures, and Product readback rather
 than additional tables or semantic projections.
+
+## OperationalRefreshRun (Sprint 2)
+
+`CollectionRun` remains the source Collection fact and cannot reliably
+express the lifecycle of the full `Collect → Analyze → Product` execution.
+It cannot identify a full-refresh trigger, downstream failure stage, last
+successful full refresh, or a partial full-pipeline outcome.
+
+Sprint 2 therefore adds exactly one operational metadata table:
+`operational_refresh_runs`.
+
+It stores:
+
+- `started_at`, `finished_at`;
+- `status`: `RUNNING`, `SUCCESS`, `PARTIAL_FAILURE`, `FAILED`, or
+  `SKIPPED_ALREADY_RUNNING`;
+- `trigger`: `MANUAL` or `SCHEDULED`;
+- optional `failure_stage` and `failure_code`;
+- structured refresh summary JSON and `created_at`.
+
+This table is execution history only. It does not store RawEvent facts,
+Opinions, Signals, rankings, or any new Intelligence semantic.

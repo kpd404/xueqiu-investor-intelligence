@@ -19,6 +19,7 @@ from database.models.investor_action_claim import InvestorActionClaim
 from database.models.investor_action_consistency import InvestorActionConsistency
 from database.models.investor_asset_state import InvestorAssetState
 from database.models.investor_behavior_snapshot import InvestorBehaviorSnapshot
+from database.models.operational_refresh_run import OperationalRefreshRun
 from database.models.opinion import Opinion
 from database.models.portfolio import Portfolio
 from database.models.portfolio_action import PortfolioAction
@@ -51,6 +52,7 @@ __all__ = [
     "InvestorAssetState",
     "InvestorAssetStateChange",
     "Opinion",
+    "OperationalRefreshRun",
     "Portfolio",
     "PortfolioAction",
     "PortfolioSnapshotBatch",

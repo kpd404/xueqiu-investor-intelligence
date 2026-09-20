@@ -29,6 +29,7 @@ from database.repositories.investor_action_consistency import InvestorActionCons
 from database.repositories.investor_asset_states import InvestorAssetStateRepository
 from database.repositories.investor_behavior_snapshots import InvestorBehaviorSnapshotRepository
 from database.repositories.investors import InvestorRepository
+from database.repositories.operational_refresh_runs import OperationalRefreshRunRepository
 from database.repositories.opinions import OpinionRepository
 from database.repositories.portfolio import PortfolioRepository
 from database.repositories.portfolio_actions import PortfolioActionRepository
@@ -58,6 +59,7 @@ __all__ = [
     "InvestorBehaviorSnapshotRepository",
     "InvestorRepository",
     "OpinionRepository",
+    "OperationalRefreshRunRepository",
     "PortfolioActionRepository",
     "PortfolioRepository",
     "PositionSnapshotRepository",

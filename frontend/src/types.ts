@@ -591,3 +591,27 @@ export interface InvestorProductView {
   data_quality: InvestorProductDataQuality;
   traceability_summary: InvestorProductTraceabilitySummary;
 }
+
+export type OperationalStatusLevel =
+  | "HEALTHY"
+  | "ACTION_REQUIRED"
+  | "SOURCE_LIMITED"
+  | "STALE"
+  | "UNKNOWN";
+
+export type OperationalFreshness = "FRESH" | "STALE" | "UNKNOWN";
+
+export interface OperationalStatusResponse {
+  status: OperationalStatusLevel;
+  freshness: OperationalFreshness;
+  freshness_age_seconds: number | null;
+  last_refresh_started_at: string | null;
+  last_refresh_finished_at: string | null;
+  last_successful_refresh_at: string | null;
+  latest_status: "RUNNING" | "SUCCESS" | "PARTIAL_FAILURE" | "FAILED" | "SKIPPED_ALREADY_RUNNING" | null;
+  latest_trigger: "MANUAL" | "SCHEDULED" | null;
+  latest_failure_stage: string | null;
+  latest_failure_code: string | null;
+  next_expected_refresh_at: string | null;
+  cdp_requirement: string;
+}

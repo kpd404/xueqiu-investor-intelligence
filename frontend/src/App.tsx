@@ -5,7 +5,8 @@ import {
   getAssetIntelligenceView,
   getAssetList,
   getInvestorIntelligenceView,
-  getInvestorList
+  getInvestorList,
+  getOperationalStatus
 } from "./api";
 import { AssetProductViewPage } from "./AssetProductViewPage";
 import { DiscoveryPage } from "./DiscoveryPage";
@@ -21,6 +22,7 @@ import type {
   InvestorProductView,
   InvestorListItem,
   InvestorView,
+  OperationalStatusResponse,
   TimelineEvent,
   TimelineResponse
 } from "./types";
@@ -100,6 +102,8 @@ export default function App() {
   const [investorView, setInvestorView] = useState<InvestorProductView | null>(null);
   const [investorViewLoading, setInvestorViewLoading] = useState(false);
   const [investorViewError, setInvestorViewError] = useState<Error | null>(null);
+  const [operationalStatus, setOperationalStatus] = useState<OperationalStatusResponse | null>(null);
+  const [operationalStatusError, setOperationalStatusError] = useState<Error | null>(null);
   const assetId = route.assetId;
   const investorId = route.investorId;
 
@@ -107,6 +111,29 @@ export default function App() {
     const handlePopState = () => setRoute(readRouteState());
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadStatus = () => {
+      getOperationalStatus()
+        .then((value) => {
+          if (!active) return;
+          setOperationalStatus(value);
+          setOperationalStatusError(null);
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          setOperationalStatus(null);
+          setOperationalStatusError(error instanceof Error ? error : new Error("API unavailable"));
+        });
+    };
+    loadStatus();
+    const interval = window.setInterval(loadStatus, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -353,6 +380,10 @@ export default function App() {
             </span>
           </div>
           <div className="topbar-status">
+            <OperationalStatusIndicator
+              status={operationalStatus}
+              error={operationalStatusError}
+            />
             <span className="live-dot" />
             Observed evidence
             <span className="topbar-separator" />
@@ -460,6 +491,60 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+export function OperationalStatusIndicator({
+  status,
+  error
+}: {
+  status: OperationalStatusResponse | null;
+  error: Error | null;
+}) {
+  const label = operationalStatusLabel(status, error);
+  const detail = operationalStatusDetail(status, error);
+  return (
+    <div className={"operational-status-indicator " + (status?.status?.toLowerCase() ?? "unknown")} aria-label={label}>
+      <span className="operational-status-dot" />
+      <span>
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </span>
+    </div>
+  );
+}
+
+function operationalStatusLabel(
+  status: OperationalStatusResponse | null,
+  error: Error | null
+): string {
+  if (error || !status) return "Refresh status unavailable";
+  if (status.status === "HEALTHY") return "Healthy";
+  if (status.status === "STALE") return "Data stale";
+  if (status.status === "ACTION_REQUIRED") {
+    return status.latest_failure_code === "AUTH_REQUIRED" || status.latest_failure_code === "CDP_UNAVAILABLE"
+      ? "Xueqiu login required"
+      : "Refresh failed";
+  }
+  if (status.status === "SOURCE_LIMITED") return "Source temporarily limited";
+  return "Refresh status unknown";
+}
+
+function operationalStatusDetail(
+  status: OperationalStatusResponse | null,
+  error: Error | null
+): string {
+  if (error || !status) return "Operational status could not be loaded";
+  if (status.freshness_age_seconds === null) return "No successful refresh recorded";
+  return "Data refreshed " + formatAge(status.freshness_age_seconds) + " ago";
+}
+
+function formatAge(seconds: number): string {
+  const minutes = Math.max(0, Math.floor(seconds / 60));
+  if (minutes < 1) return "less than 1m";
+  if (minutes < 60) return minutes + "m";
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  return hours + "h" + (remaining ? " " + remaining + "m" : "");
 }
 
 function AssetPage({

@@ -850,6 +850,59 @@ code {
   font-weight: 600;
 }
 
+.operational-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 150px;
+  color: #48647d;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.operational-status-indicator > span:last-child {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.operational-status-indicator strong {
+  font-size: 9px;
+}
+
+.operational-status-indicator small {
+  color: #91a0b1;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.operational-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #a8b5c2;
+}
+
+.operational-status-indicator.healthy .operational-status-dot {
+  background: #55bdb0;
+  box-shadow: 0 0 0 4px rgba(85, 189, 176, 0.13);
+}
+
+.operational-status-indicator.stale .operational-status-dot,
+.operational-status-indicator.source_limited .operational-status-dot {
+  background: #d59a54;
+  box-shadow: 0 0 0 4px rgba(213, 154, 84, 0.13);
+}
+
+.operational-status-indicator.action_required .operational-status-dot {
+  background: #d87878;
+  box-shadow: 0 0 0 4px rgba(216, 120, 120, 0.13);
+}
+
 .topbar-separator {
   width: 1px;
   height: 13px;

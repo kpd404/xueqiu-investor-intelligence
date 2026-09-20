@@ -17,16 +17,17 @@ The project is in **Phase 3 — Operational MVP**.
   authenticated Edge CDP session.
 - OMVP-1.1 — Authenticated CDP Live Collection Recovery & Source-to-Product
   Proof is **COMPLETE**.
-- OMVP-2 Scheduler/Freshness work is planned but not started.
+- OMVP-2 — Scheduled Refresh + Freshness + Failure Visibility is
+  **COMPLETE**.
 - Attention Momentum remains paused because historical completeness and
   temporal coverage are `UNKNOWN` / insufficient for absence-sensitive
   inference.
 
 ## Product state
 
-The current product is a **Browseable, manually refreshable Intelligence
-Product**, not a **Self-Running Intelligence Product**. The verified live
-runtime requires an operator-started authenticated Edge CDP endpoint.
+The current product is a **Scheduled Operational Intelligence Product**, not
+Production Ready. The runtime requires an operator-started authenticated Edge
+CDP endpoint.
 
 Completed product-facing capability includes:
 
@@ -45,15 +46,14 @@ The verified critical path is:
 Collect → Analyze → Materialize → Product
 ```
 
-## Deliberately not started in Sprint 1.1
+## Deliberately not started in Sprint 2
 
-- scheduler and daily automatic processing;
-- freshness and run-status visibility;
-- automatic failure visibility;
-- always-on runtime and production deployment.
+- Daily Intelligence Inbox;
+- notifications and since-last-visit logic;
+- always-on production deployment and CI/CD.
 
-The one-command live path is complete for the authenticated CDP runtime.
-Scheduler and always-on operation remain OMVP-2 scope.
+Scheduled execution, freshness, failure visibility, and manual/scheduled
+consistency are complete. Always-on deployment remains deferred.
 
 ## Completed functionality
 
@@ -384,10 +384,11 @@ The latest migration chain is:
 | `20260904_0016` | CrossInvestorAssetSnapshot |
 | `20260905_0017` | CrossInvestorAssetAlignment |
 | `20260910_0018` | CrossInvestor Consensus/Divergence Evidence |
+| `20260920_0024` | OperationalRefreshRun execution metadata |
 
 Real PostgreSQL verification currently reports:
 
-- Alembic revision: `20260910_0018 (head)`.
+- Alembic revision: `20260920_0024 (head)`.
 - `alembic check`: no new upgrade operations.
 - Tables `cross_investor_asset_snapshots` and
   `cross_investor_asset_alignments` exist.
@@ -401,9 +402,9 @@ The latest read-only audit of the development `snowball` database reports:
 | Entity/metric | Count or value |
 | --- | ---: |
 | Investors | 42 |
-| RawEvents | 1609 |
-| EventAnalyses | 1973 |
-| Active Opinion Analysis rows | 1608 / 1609 |
+| RawEvents | 1615 |
+| EventAnalyses | 1979 |
+| Active Opinion Analysis rows | 1614 / 1615 |
 | Effective Opinions | 236 |
 | Effective AttentionOccurrences | 303 |
 | Effective ThesisChange | 222 |
@@ -413,8 +414,9 @@ The latest read-only audit of the development `snowball` database reports:
 | PositionSnapshot rows | 0 |
 | PortfolioAction rows | 0 |
 | InvestorActionConsistency rows | 0 |
-| CollectionRun rows | 15 |
-| CollectionObservation rows | 230 |
+| CollectionRun rows | 19 |
+| CollectionObservation rows | 262 |
+| OperationalRefreshRun rows | 4 |
 | CrossInvestorAssetSnapshot rows | 134 |
 | CrossInvestorAssetAlignment rows | 72 |
 | CrossInvestorConsensusEvidence rows | 75 |
@@ -427,15 +429,16 @@ The latest read-only audit of the development `snowball` database reports:
 The observed RawEvent range is 2026-08-11 through 2026-09-20, approximately
 40.29 days. Active Analysis statuses for the approved production identity are:
 
-- `NO_OPINION`: 1016
-- `PARTIALLY_RESOLVED`: 459
+- `NO_OPINION`: 1021
+- `PARTIALLY_RESOLVED`: 460
 - `SUCCESS`: 133
 - `FAILED`: 1
 
-The explicit authenticated CDP refresh added 16 real RawEvents and 16 current
-production Analyses. It created no Opinions because the source batch produced
-13 `NO_OPINION` and 3 `PARTIALLY_RESOLVED` results with unresolved Asset
-references. No Asset was fabricated and no historical backfill was performed.
+The explicit authenticated CDP and scheduled refreshes added six real
+RawEvents and six current production Analyses after the Sprint 1 checkpoint.
+They created no Opinions because the source batches contained unresolved or
+no-opinion references. No Asset was fabricated and no historical backfill was
+performed.
 
 The active evidence has 14 Assets observed by two or more Attention Investors,
 three Assets observed by three or more Attention Investors, 11 Assets
@@ -460,14 +463,18 @@ its v2 artifact is MIXED_WITH_NEUTRAL.
 
 The current repository verification is:
 
-- `pytest`: **613 passed**, with two non-failing environment warnings (FastAPI
+- `pytest`: **623 passed**, with two non-failing environment warnings (FastAPI
   test-client deprecation and `.pytest_cache` permission).
-- `ruff format --check .`: passed; 416 files formatted.
+- `ruff format --check .`: passed; 426 files formatted.
 - `ruff check .`: passed.
-- Alembic current/check against real PostgreSQL: `20260910_0018 (head)`, no drift.
+- Alembic current/check against real PostgreSQL: `20260920_0024 (head)`, no drift.
 - Frontend `npm run lint`: passed.
-- Frontend `npm run test`: **26 passed**.
+- Frontend `npm run test`: **34 passed**.
 - Frontend `npm run build`: passed.
+- Real scheduled `--once` execution: `SCHEDULED / SUCCESS`.
+- Real CDP-unavailable scheduled failure: `CDP_UNAVAILABLE`.
+- Real recovery scheduled execution: `SCHEDULED / SUCCESS`.
+- Operational Status API: `HEALTHY / FRESH` after recovery.
 - Explicit CDP smoke: one Following Feed batch, 16 items, `MAX_BATCHES`,
   no risk-control result.
 - Explicit CDP canonical refresh: `SUCCESS`, 16 new RawEvents, 16 LLM
@@ -481,11 +488,10 @@ The current repository verification is:
   `tests/integration/test_cross_investor_asset_alignment.py`; model metadata
   coverage is updated in `tests/test_models.py`.
 
-The pytest suite is offline and does not call real LLM providers or Xueqiu.
-The explicit CDP live run used the operator-started authenticated Edge session
-at `http://127.0.0.1:9222`. The collector observed one existing Xueqiu page
-in one context, fetched 16 Following Feed items, and completed the full
-canonical refresh. The second identical run reused all 16 RawEvents.
+The explicit CDP live and scheduled runs used the operator-started
+authenticated Edge session at `http://127.0.0.1:9222`. The scheduler called
+the same canonical refresh service, persisted `SCHEDULED` run metadata, and
+recovered from a real `CDP_UNAVAILABLE` failure on the next successful run.
 
 ## Unfinished work
 
@@ -502,8 +508,9 @@ canonical refresh. The second identical run reused all 16 RawEvents.
 - Portfolio Collector, real Portfolio snapshot ingestion, and broader Portfolio
   Intelligence are not implemented; the current database has no Portfolio facts.
 - Opinion × Action expansion, performance analysis, Research Signal/Candidate,
-  Scheduler, freshness/failure visibility, and always-on deployment remain
-  planned. Product API and frontend Product Views already exist.
+  Daily Intelligence Inbox, notifications, and always-on deployment remain
+  planned. Product API, Operational Status API, and frontend Product Views
+  already exist.
 - Bounded unresolved-asset recovery and safe expansion exist, but no large
   securities master or automated external identity source exists.
 - No additional LLM prompt or model routing work is part of the current state.
@@ -521,12 +528,12 @@ canonical refresh. The second identical run reused all 16 RawEvents.
 4. **Sparse overlap:** Thirteen Assets have two-Investor overlap and one has
    3+ Investors; the sample is still too small for production-level
    Consensus/Divergence validation.
-5. **Analysis quality:** Active Analysis coverage is 1608/1609; one existing
+5. **Analysis quality:** Active Analysis coverage is 1614/1615; one existing
    FAILED Analysis remains explicit, and many outputs remain
    PARTIALLY_RESOLVED because the Asset Master does not cover all references.
-6. **Runtime requirement:** The verified live command requires an
-   operator-started authenticated Edge CDP endpoint. The no-argument
-   storage-state path remains a separate unverified runtime path.
+6. **Runtime requirement:** The verified scheduled/manual live command requires
+   an operator-started authenticated Edge CDP endpoint. The scheduler does not
+   automate login.
 7. **Environment-specific database tooling:** This Windows development setup
    requires the established temporary psycopg client-cursor compatibility shim
    when invoking Alembic; no source migration drift was found.
@@ -536,27 +543,26 @@ canonical refresh. The second identical run reused all 16 RawEvents.
 
 ## Current blockers
 
-The Operational MVP Sprint 1.1 code and migration checks are clean. Remaining
+The Operational MVP Sprint 2 code and migration checks are clean. Remaining
 project limitations are runtime/data readiness:
 
 - Xueqiu browser-native pagination stops around the current history window;
   deeper historical coverage cannot be assumed or forced.
 - The verified live runtime depends on the operator-started authenticated CDP
-  session; Scheduler/always-on recovery is intentionally deferred to OMVP-2.
+  session; always-on deployment/restart hosting remains deferred.
 - Asset Master coverage limits the number of resolved Opinions and Attention
   facts.
 - No real Portfolio snapshot stream exists.
 - Only one Asset has 3+ Investor overlap; broader overlap is still needed.
 - Asset resolution is the primary current data bottleneck.
-- OMVP-1.1 is complete; do not start OMVP-2 in this task.
+- OMVP-1.1 and OMVP-2 are complete; do not start OMVP-3 in this task.
 
 These are data/product-readiness limits, not reasons to add fallback inference,
 scores, or provider-specific logic.
 
 ## Recommended next task
 
-Hold the project at the completed OMVP-1.1 boundary. OMVP-2 is the planned
-next phase for scheduled refresh, freshness, and failure visibility, but it
-must not be started as part of this task. Do not add new Intelligence
-semantics, ranking, scoring, recommendations, or portfolio analytics without
-real Portfolio facts.
+Hold the project at the completed OMVP-2 boundary. OMVP-3 is the planned
+Daily Intelligence Inbox phase, but it must not be started as part of this
+task. Do not add new Intelligence semantics, ranking, scoring,
+recommendations, or portfolio analytics without real Portfolio facts.

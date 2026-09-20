@@ -296,9 +296,16 @@ python -m operations.refresh --cdp-endpoint http://127.0.0.1:9222
 
 ### OMVP-2 — Scheduled Refresh + Freshness + Failure Visibility
 
-Deferred until OMVP-1 has passed real controlled end-to-end validation. This
-sprint will add scheduled execution, freshness/status visibility, and
-collection/auth/risk-control run visibility.
+Status: `COMPLETE`.
+
+The lightweight scheduled trigger calls the same canonical refresh service,
+persists full-refresh execution metadata, exposes freshness/failure status at
+`GET /api/operations/status`, and shows user-facing operational state in
+the frontend shell. The verified scheduled runtime uses an authenticated Edge
+CDP endpoint and configuration-driven interval/stale thresholds.
+
+No second pipeline, heavy orchestration framework, or Intelligence semantic
+was introduced.
 
 ### OMVP-3 — Daily Intelligence Inbox
 
