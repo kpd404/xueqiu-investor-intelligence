@@ -16,14 +16,19 @@ from contracts import (
 from database.models import (
     Asset,
     AssetAlias,
+    AttentionOccurrence,
     EventAnalysis,
+    IntelligenceEvent,
     Investor,
     InvestorAssetState,
     Opinion,
     RawEvent,
+    Signal,
+    ThesisChange,
 )
 from database.unit_of_work import SqlAlchemyOpinionUnitOfWork
 from resolution import AssetRecoveryService
+from scripts import recover_production_analysis
 
 RECOVERY_SPEC = AnalysisSpec(
     analysis_version="recovery-test-analysis",
@@ -235,6 +240,72 @@ def test_recovery_is_idempotent_and_reuses_existing_opinion(
     assert second.opinion_ids == first.opinion_ids
     with db_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Opinion)) == 1
+
+
+def test_resolution_only_boundary_materializes_cn_listings_without_llm_or_downstream(
+    db_session_factory: sessionmaker[Session],
+    monkeypatch,
+) -> None:
+    analysis_id, _, _, _ = seed_analysis(
+        db_session_factory,
+        (
+            ("中际旭创", "300308", "SZ"),
+            ("华能国际", "600011", "SH"),
+        ),
+        (),
+        opinion_entries=(
+            extracted("中际旭创", symbol="300308", market="CN"),
+            extracted("华能国际", symbol="SH600011", market="CN"),
+        ),
+    )
+    with db_session_factory() as session:
+        analysis_before = session.get(EventAnalysis, analysis_id)
+        assert analysis_before is not None
+        output_before = analysis_before.structured_output
+        calculated_before = analysis_before.calculated_at
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("LLM or full-refresh service construction is not allowed")
+
+    monkeypatch.setattr(recover_production_analysis, "_build_services", fail_if_called)
+    monkeypatch.setattr(
+        recover_production_analysis.OpenAIOpinionExtractor,
+        "from_settings",
+        fail_if_called,
+    )
+    monkeypatch.setattr(
+        recover_production_analysis.OpenAICompatibleThesisComparator,
+        "from_settings",
+        fail_if_called,
+    )
+
+    kwargs = {
+        "analysis_ids": (analysis_id,),
+        "allowed_market_symbols": (("SZ", "300308"), ("SH", "600011")),
+        "unit_of_work_factory": lambda: SqlAlchemyOpinionUnitOfWork(db_session_factory),
+    }
+    first = recover_production_analysis.run_resolution_materialization(**kwargs)
+    second = recover_production_analysis.run_resolution_materialization(**kwargs)
+
+    assert first["created"] == 2
+    assert first["reused"] == 0
+    assert first["llm_calls"] == {"analysis": 0, "thesis": 0, "other": 0}
+    assert first["downstream_stages_run"] == []
+    assert second["created"] == 0
+    assert second["reused"] == 2
+    assert second["llm_calls"] == {"analysis": 0, "thesis": 0, "other": 0}
+    assert second["downstream_stages_run"] == []
+
+    with db_session_factory() as session:
+        analysis_after = session.get(EventAnalysis, analysis_id)
+        assert analysis_after is not None
+        assert analysis_after.structured_output == output_before
+        assert analysis_after.calculated_at == calculated_before
+        assert session.scalar(select(func.count()).select_from(Opinion)) == 2
+        assert session.scalar(select(func.count()).select_from(AttentionOccurrence)) == 0
+        assert session.scalar(select(func.count()).select_from(ThesisChange)) == 0
+        assert session.scalar(select(func.count()).select_from(Signal)) == 0
+        assert session.scalar(select(func.count()).select_from(IntelligenceEvent)) == 0
 
 
 def test_recovery_can_select_analysis_by_event_and_version(

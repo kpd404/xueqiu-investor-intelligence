@@ -381,10 +381,22 @@ Real validation produced 52 Profile-only new RawEvents, with ORIGINAL and
 REPOST observability, complete downstream processing, and successful Product
 verification. No Asset Resolution semantic was changed.
 
-### IYR-2 — Asset Resolution Yield Recovery
+### IYR-2 — Safe Asset Resolution Yield Recovery ✅
 
-Deferred. No IYR-2 implementation is part of IYR-1.
+Deterministic `CN` symbol normalization now maps only supported explicit
+A-share prefixes to SH/SZ. Controlled Asset Master enrichment added
+`SZ:300308` and `SZ:300502` with listing-scoped symbol aliases; unsupported
+markets, indexes, themes, commodities, unknown prefixes, and ambiguous
+cross-listing names remain unresolved.
+
+The existing recovery maintenance runner has a bounded `--resolution-only`
+mode that stops after current Asset resolution and missing Opinion
+materialization. It cannot enter Analysis or Thesis LLM providers and does not
+run downstream Intelligence stages. First-time integration and production
+idempotency verification both recorded zero LLM calls; the production rerun
+created no duplicate Opinion and changed no downstream count. No migration or
+Intelligence semantic was added.
 
 ### IYR-3 — Yield Re-validation
 
-Deferred until IYR-2 decisions and additional direct-collection evidence exist.
+Not started. Begin only under an explicit IYR-3 task.

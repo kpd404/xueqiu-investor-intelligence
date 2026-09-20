@@ -16,6 +16,30 @@ from scripts.seed_assets import AliasSeed, AssetSeed, SeedSummary, seed_assets
 # evidence and name-only matching would be less conservative.
 SAFE_ASSET_RESOLUTION_SEEDS: tuple[AssetSeed, ...] = (
     AssetSeed(
+        name="中际旭创",
+        market="SZ",
+        symbol="300308",
+        aliases=(AliasSeed("SZ300308", "SYMBOL", "SZ"),),
+        evidence=(
+            "Current production Analysis unresolved evidence: "
+            "RawEvent event_id=0e60cae2-f944-4754-862b-86cb12d8eb03; "
+            "structured candidate 中际旭创 with market=CN and symbol=SZ300308; "
+            "CN venue normalization is deterministic to SZ."
+        ),
+    ),
+    AssetSeed(
+        name="新易盛",
+        market="SZ",
+        symbol="300502",
+        aliases=(AliasSeed("SZ300502", "SYMBOL", "SZ"),),
+        evidence=(
+            "Current production Analysis unresolved evidence: "
+            "RawEvent event_id=0e60cae2-f944-4754-862b-86cb12d8eb03; "
+            "structured candidate 新易盛 with market=CN and symbol=SZ300502; "
+            "CN venue normalization is deterministic to SZ."
+        ),
+    ),
+    AssetSeed(
         name="中远海能",
         market="HK",
         symbol="01138",

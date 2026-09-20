@@ -92,6 +92,8 @@ _MARKET_ALIASES = {
     "HKEX": "HK",
     "HONGKONG": "HK",
 }
+_CN_SH_PREFIXES = ("600", "601", "603", "605", "688")
+_CN_SZ_PREFIXES = ("000", "001", "002", "003", "300", "301")
 _PREFIX_PATTERN = re.compile(r"^(SHANGHAI|SHENZHEN|HONGKONG|HKEX|SZSE|SSE|SH|SZ|HK)(.+)$")
 _SUFFIX_PATTERN = re.compile(r"^(.+)\.(SHANGHAI|SHENZHEN|HONGKONG|HKEX|SZSE|SSE|SH|SZ|HK)$")
 
@@ -115,6 +117,18 @@ def normalize_symbol_hint(value: str | None) -> str | None:
     return normalized
 
 
+def normalize_cn_symbol_market(value: str | None) -> str | None:
+    """Infer only the Shenzhen/Shanghai venue from an explicit A-share code."""
+    normalized = normalize_symbol_hint(value)
+    if normalized is None or len(normalized) != 6 or not normalized.isdigit():
+        return None
+    if normalized.startswith(_CN_SH_PREFIXES):
+        return "SH"
+    if normalized.startswith(_CN_SZ_PREFIXES):
+        return "SZ"
+    return None
+
+
 def normalize_name_hint(value: str | None) -> str | None:
     if value is None:
         return None
@@ -123,8 +137,14 @@ def normalize_name_hint(value: str | None) -> str | None:
 
 
 def normalize_asset_reference(reference: AssetReference) -> NormalizedAssetReference:
-    """Normalize known aliases without inferring a market from symbol length."""
+    """Normalize listing hints without guessing from a bare symbol.
 
+    CN is accepted only as an explicit venue-normalization hint. It becomes
+    SH/SZ when the symbol carries a known exchange prefix or a known six-digit
+    A-share prefix; otherwise it remains unresolved.
+    """
+
+    raw_market = reference.market_hint.strip().upper() if reference.market_hint else None
     normalized_market = normalize_market_hint(reference.market_hint)
     normalized_symbol = normalize_symbol_hint(reference.symbol_hint)
 
@@ -135,7 +155,10 @@ def normalize_asset_reference(reference: AssetReference) -> NormalizedAssetRefer
             embedded_market = normalize_market_hint(match.group(1))
         elif match := _SUFFIX_PATTERN.fullmatch(symbol_text):
             embedded_market = normalize_market_hint(match.group(2))
-    if normalized_market is None:
+
+    if raw_market == "CN":
+        normalized_market = embedded_market or normalize_cn_symbol_market(normalized_symbol) or "CN"
+    elif raw_market is None and normalized_market is None:
         normalized_market = embedded_market
     elif embedded_market is not None and normalized_market != embedded_market:
         normalized_market = None

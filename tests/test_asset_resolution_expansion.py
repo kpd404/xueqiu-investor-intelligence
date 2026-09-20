@@ -11,7 +11,7 @@ def test_expansion_manifest_contains_only_supported_explicit_identities() -> Non
         for seed in SAFE_ASSET_RESOLUTION_SEEDS
     }
 
-    assert len(SAFE_ASSET_RESOLUTION_SEEDS) == 17
+    assert len(SAFE_ASSET_RESOLUTION_SEEDS) == 19
     assert len(identities) == len(SAFE_ASSET_RESOLUTION_SEEDS)
     assert all(market in {"HK", "SH", "SZ"} and symbol for market, symbol in identities)
 

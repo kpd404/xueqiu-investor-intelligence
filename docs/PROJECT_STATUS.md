@@ -600,7 +600,8 @@ Real validation on the authenticated CDP runtime:
 - Profile mix: 37 ORIGINAL, 68 REPOST, 3 other;
 - Profile-only new RawEvents: 52;
 - current database RawEvents: 1,707;
-- Opinion rows: 245; - effective production Opinions: 213;
+- Opinion rows: 245;
+- effective production Opinions: 213;
 - AttentionOccurrences: 313;
 - ThesisChanges: 233;
 - Signals: 366;
@@ -609,4 +610,32 @@ Real validation on the authenticated CDP runtime:
 
 The Feed remained a valid historical projection; IYR-1 does not promise that
 every source improvement creates a new FeedItem. Historical completeness
-remains UNKNOWN, and IYR-2 Asset Resolution Yield Recovery is deferred.
+remains UNKNOWN.
+
+### IYR-2 — Safe Asset Resolution Yield Recovery
+
+Status: **COMPLETE**.
+
+IYR-2 adds deterministic `CN` venue normalization only when an explicit
+six-digit symbol maps to a supported SH/SZ prefix. Controlled Asset Master
+enrichment added two listing identities and two market-scoped symbol aliases:
+
+- 中际旭创 — `SZ:300308`;
+- 新易盛 — `SZ:300502`.
+
+No fuzzy matching, name guessing, US expansion, Index model, migration, or
+Intelligence semantic change was introduced. Unsupported-market, index,
+sector/theme/product, commodity, private-company, historical, and ambiguous
+references remain unresolved.
+
+The existing production-analysis maintenance runner now exposes a narrow
+`--resolution-only` mode. Its execution boundary is:
+
+    AssetResolver → CurrentAnalysisResolution projection → Opinion materialization → STOP
+
+It does not construct Analysis/Thesis LLM providers or enter downstream
+Attention/Thesis/Signal/Event/Priority/Feed stages. Focused first-time
+integration proof used the real resolver and persistence UoW with zero LLM
+calls. The 45-event production rerun created zero Assets, Aliases, Opinions,
+or downstream artifacts; every audited database count remained unchanged.
+IYR-3 has not started.

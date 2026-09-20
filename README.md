@@ -555,7 +555,7 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 它是 Investor Behavior Intelligence System，关注谁在关注什么、为什么关注、观点如何变化、是否发生行为，以及多位投资者是否形成共识或分歧。
 产品核心原则是：**Change matters more than popularity.**
 
-## Phase 4 — Intelligence Yield Recovery / IYR-1
+## Phase 4 — Intelligence Yield Recovery / IYR-1–IYR-2
 
 IYR-1 adds bounded Monitored Investor Direct Recent Collection to the existing
 authenticated Xueqiu runtime. The canonical command remains:
@@ -578,5 +578,21 @@ The real IYR-1 validation increased RawEvents from 1,615 to 1,707. The
 successful bounded direct-profile run attempted eight Investors, succeeded for
 all eight, found 52 Profile-only new RawEvents, and produced 36 ORIGINAL,
 68 REPOST, and 3 other profile items. Existing Production Analysis and
-downstream Product verification completed successfully. IYR-2 Asset
-Resolution Yield Recovery is not started.
+downstream Product verification completed successfully.
+
+IYR-2 Safe Asset Resolution Yield Recovery is also complete. Asset references
+with `market=CN` are normalized to SH or SZ only when an explicit six-digit
+symbol has a supported deterministic exchange prefix. The controlled Asset
+Master adds only `SZ:300308` (中际旭创) and `SZ:300502` (新易盛), with
+market-scoped symbol aliases. US securities, indexes, themes, commodities,
+unknown prefixes, and ambiguous A/H names remain unresolved.
+
+Resolution maintenance uses the existing runner's narrow no-LLM mode:
+
+    python -m scripts.recover_production_analysis --resolution-only --event-id <UUID>
+
+This mode stops after AssetResolver, current-resolution projection, and
+Opinion materialization. It does not construct Analysis or Thesis LLM
+providers and does not run Attention, Thesis, Signal, Event, Priority, or
+Feed stages. Production idempotency verification processed 45 Analysis rows
+with zero LLM calls and zero database-count changes. IYR-3 is not started.

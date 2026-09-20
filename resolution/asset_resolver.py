@@ -167,8 +167,7 @@ class AssetResolver:
 
     @staticmethod
     def _invalid_reason(reference: AssetReference) -> str | None:
-        if reference.market_hint and normalize_market_hint(reference.market_hint) is None:
-            return "UNSUPPORTED_MARKET_HINT"
+        normalized = normalize_asset_reference(reference)
         if reference.symbol_hint and reference.market_hint:
             embedded = normalize_asset_reference(
                 AssetReference(symbol_hint=reference.symbol_hint)
@@ -176,6 +175,8 @@ class AssetResolver:
             explicit = normalize_market_hint(reference.market_hint)
             if embedded is not None and explicit is not None and embedded != explicit:
                 return "CONFLICTING_MARKET_HINTS"
+        if reference.market_hint and normalized.market not in {"HK", "SH", "SZ"}:
+            return "UNSUPPORTED_MARKET_HINT"
         return None
 
     @staticmethod

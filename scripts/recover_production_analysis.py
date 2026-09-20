@@ -50,6 +50,9 @@ from pipeline import (
     AnalysisRecoveryProgress,
 )
 from resolution import AssetRecoveryService
+from resolution.materialization import RecoveryUnitOfWorkFactory
+
+ListingIdentity = tuple[str, str]
 
 
 def _load_candidates(
@@ -203,6 +206,60 @@ def _build_services():
         snapshot_rebuilder,
         alignment_rebuilder,
     )
+
+
+def run_resolution_materialization(
+    *,
+    analysis_ids: tuple[UUID, ...] = (),
+    event_ids: tuple[UUID, ...] = (),
+    analysis_version: str | None = None,
+    allowed_market_symbols: tuple[ListingIdentity, ...] = (),
+    dry_run: bool = False,
+    unit_of_work_factory: RecoveryUnitOfWorkFactory | None = None,
+) -> dict[str, object]:
+    """Re-resolve and materialize Opinions without entering any LLM or downstream stage."""
+
+    if not analysis_ids and not event_ids:
+        raise ValueError("analysis_ids or event_ids is required")
+    selected_analysis_version = analysis_version
+    if event_ids and selected_analysis_version is None:
+        selected_analysis_version = get_production_analysis_policy().active_analysis_version
+
+    factory = unit_of_work_factory or (lambda: SqlAlchemyOpinionUnitOfWork(SessionFactory))
+    results = AssetRecoveryService(factory).materialize_many(
+        analysis_ids=analysis_ids,
+        event_ids=event_ids,
+        analysis_version=selected_analysis_version,
+        allowed_market_symbols=allowed_market_symbols or None,
+        dry_run=dry_run,
+    )
+    statuses = Counter(result.status.value for result in results)
+    unresolved_reasons: Counter[str] = Counter()
+    for result in results:
+        unresolved_reasons.update(item.reason for item in result.unresolved_assets)
+    return {
+        "mode": "RESOLUTION_MATERIALIZATION_ONLY",
+        "analysis_version": selected_analysis_version,
+        "analyses": len(results),
+        "created": sum(result.created_count for result in results),
+        "reused": sum(result.reused_count for result in results),
+        "resolved_asset_references": sum(len(result.resolved_asset_ids) for result in results),
+        "unresolved_entries": sum(len(result.unresolved_assets) for result in results),
+        "unresolved_reasons": dict(unresolved_reasons),
+        "status": dict(statuses),
+        "dry_run": dry_run,
+        "llm_calls": {"analysis": 0, "thesis": 0, "other": 0},
+        "downstream_stages_run": [],
+    }
+
+
+def _listing_identity(value: str) -> ListingIdentity:
+    market, separator, symbol = value.partition(":")
+    market = market.strip().upper()
+    symbol = symbol.strip().upper()
+    if not separator or market not in {"HK", "SH", "SZ"} or not symbol:
+        raise argparse.ArgumentTypeError("listing identity must be HK|SH|SZ:SYMBOL")
+    return market, symbol
 
 
 async def _rebuild_attention(
@@ -497,9 +554,38 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--investor-id", action="append", type=UUID, default=[])
     parser.add_argument("--batch-size", type=int, default=10)
+    parser.add_argument("--resolution-only", action="store_true")
+    parser.add_argument("--analysis-id", action="append", type=UUID, default=[])
+    parser.add_argument("--event-id", action="append", type=UUID, default=[])
+    parser.add_argument(
+        "--allowed-market-symbol",
+        action="append",
+        type=_listing_identity,
+        default=[],
+        metavar="MARKET:SYMBOL",
+    )
+    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--analysis-concurrency", type=int, default=6)
     parser.add_argument("--attention-concurrency", type=int, default=6)
     args = parser.parse_args()
+    if args.resolution_only:
+        if not args.analysis_id and not args.event_id:
+            parser.error("--resolution-only requires --analysis-id or --event-id")
+        if args.investor_id:
+            parser.error("--investor-id cannot be combined with --resolution-only")
+        result = run_resolution_materialization(
+            analysis_ids=tuple(args.analysis_id),
+            event_ids=tuple(args.event_id),
+            allowed_market_symbols=tuple(args.allowed_market_symbol),
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    if args.analysis_id or args.event_id or args.allowed_market_symbol or args.dry_run:
+        parser.error(
+            "--analysis-id, --event-id, --allowed-market-symbol, and --dry-run "
+            "require --resolution-only"
+        )
     result = asyncio.run(
         run(
             tuple(args.investor_id),
@@ -508,6 +594,7 @@ def main() -> None:
             attention_concurrency=args.attention_concurrency,
         )
     )
+
     print(json.dumps(result, ensure_ascii=False, indent=2))
     failures = result["failures"]
     raise SystemExit(1 if any(failures.values()) else 0)

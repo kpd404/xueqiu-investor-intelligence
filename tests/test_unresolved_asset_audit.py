@@ -39,13 +39,23 @@ def test_supported_explicit_market_symbol_is_safe_when_asset_is_missing() -> Non
     assert item.safe_to_seed is True
 
 
-def test_unsupported_market_is_not_safe_even_when_symbol_is_explicit() -> None:
+def test_unknown_cn_symbol_prefix_is_not_safe_even_when_symbol_is_explicit() -> None:
     item = build_unresolved_inventory(
-        [reference(name="Example Holdings", symbol="SH600001", market="CN")]
+        [reference(name="Example Holdings", symbol="ABC123", market="CN")]
     )[0]
 
     assert item.blocker is UnresolvedReferenceBlocker.UNSUPPORTED_MARKET_HINT
     assert item.safe_to_seed is False
+
+
+def test_cn_prefixed_listing_is_safe_when_asset_is_missing() -> None:
+    item = build_unresolved_inventory(
+        [reference(name="Example Holdings", symbol="SZ300308", market="CN")]
+    )[0]
+
+    assert item.category is UnresolvedReferenceCategory.EXPLICIT_MARKET_SYMBOL
+    assert item.blocker is UnresolvedReferenceBlocker.SAFE_ASSET_MASTER_MISSING
+    assert item.safe_to_seed is True
 
 
 def test_existing_name_with_multiple_identities_is_cross_listing_review() -> None:

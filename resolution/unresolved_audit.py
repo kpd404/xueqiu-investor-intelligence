@@ -9,7 +9,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from contracts import AssetReference, normalize_asset_reference, normalize_market_hint
+from contracts import AssetReference, normalize_asset_reference
 
 
 class UnresolvedReferenceCategory(StrEnum):
@@ -293,7 +293,7 @@ def _blocker(
             market_hint=reference.market,
         )
     )
-    if reference.market and normalize_market_hint(reference.market) is None:
+    if reference.market and normalized.market not in _SUPPORTED_MARKETS:
         return UnresolvedReferenceBlocker.UNSUPPORTED_MARKET_HINT
     if category is UnresolvedReferenceCategory.CROSS_LISTING_AMBIGUITY:
         if normalized.market in _SUPPORTED_MARKETS and normalized.symbol:
@@ -322,11 +322,10 @@ def _blocker(
 
 
 def _identity(market: str | None, symbol: str | None) -> tuple[str, str] | None:
-    normalized_market = normalize_market_hint(market)
     normalized = normalize_asset_reference(AssetReference(symbol_hint=symbol, market_hint=market))
-    if normalized_market is None or normalized.symbol is None:
+    if normalized.market not in _SUPPORTED_MARKETS or normalized.symbol is None:
         return None
-    return normalized_market, normalized.symbol
+    return normalized.market, normalized.symbol
 
 
 def _name_key(value: str | None) -> str:

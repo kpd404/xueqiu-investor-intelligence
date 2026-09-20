@@ -12,6 +12,7 @@ from contracts import (
     OpinionExtractionResult,
     UnresolvedAsset,
     normalize_asset_reference,
+    normalize_cn_symbol_market,
     normalize_market_hint,
     normalize_symbol_hint,
 )
@@ -118,6 +119,31 @@ def test_symbol_normalization_strips_known_market_wrappers(
     value: str | None, expected: str | None
 ) -> None:
     assert normalize_symbol_hint(value) == expected
+
+
+def test_cn_market_hint_normalizes_only_deterministic_a_share_venues() -> None:
+    assert normalize_cn_symbol_market("300308") == "SZ"
+    assert normalize_cn_symbol_market("600011") == "SH"
+    assert (
+        normalize_asset_reference(AssetReference(symbol_hint="SZ300308", market_hint="CN")).market
+        == "SZ"
+    )
+    assert (
+        normalize_asset_reference(AssetReference(symbol_hint="300502", market_hint="CN")).market
+        == "SZ"
+    )
+    assert (
+        normalize_asset_reference(AssetReference(symbol_hint="SH600011", market_hint="CN")).market
+        == "SH"
+    )
+    assert (
+        normalize_asset_reference(AssetReference(symbol_hint="ABC123", market_hint="CN")).market
+        == "CN"
+    )
+    assert (
+        normalize_asset_reference(AssetReference(symbol_hint="SZ300308", market_hint="中国")).market
+        is None
+    )
 
 
 def test_normalization_does_not_guess_market_from_bare_symbol_length() -> None:

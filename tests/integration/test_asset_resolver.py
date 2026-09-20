@@ -170,6 +170,45 @@ def test_conflicting_market_wrappers_are_invalid(db_session: Session) -> None:
     assert result.reason == "CONFLICTING_MARKET_HINTS"
 
 
+def test_cn_market_hint_resolves_only_deterministic_supported_listing(
+    db_session: Session,
+) -> None:
+    asset = add_asset(session=db_session, name="中际旭创", symbol="300308", market="SZ")
+
+    result = resolver(db_session).resolve(
+        AssetReference(name_hint="中际旭创", symbol_hint="300308", market_hint="CN")
+    )
+
+    assert result.status is AssetResolutionStatus.RESOLVED
+    assert result.asset_id == asset.id
+    assert result.normalized_market == "SZ"
+    assert result.normalized_symbol == "300308"
+
+
+def test_unsupported_and_non_security_hints_remain_unresolved(db_session: Session) -> None:
+    unsupported = resolver(db_session).resolve(
+        AssetReference(name_hint="微软", symbol_hint="MSFT", market_hint="US")
+    )
+    unknown_cn = resolver(db_session).resolve(
+        AssetReference(name_hint="Unknown", symbol_hint="ABC123", market_hint="CN")
+    )
+    unknown_market = resolver(db_session).resolve(
+        AssetReference(name_hint="Unknown", symbol_hint="SZ300308", market_hint="中国")
+    )
+    non_securities = tuple(
+        resolver(db_session).resolve(AssetReference(name_hint=name))
+        for name in ("标普500", "美国芯片股", "MLCC", "液冷", "铜铝")
+    )
+
+    assert unsupported.status is AssetResolutionStatus.INVALID
+    assert unsupported.reason == "UNSUPPORTED_MARKET_HINT"
+    assert unknown_cn.status is AssetResolutionStatus.INVALID
+    assert unknown_cn.reason == "UNSUPPORTED_MARKET_HINT"
+    assert unknown_market.status is AssetResolutionStatus.INVALID
+    assert unknown_market.reason == "UNSUPPORTED_MARKET_HINT"
+    assert all(item.status is AssetResolutionStatus.UNRESOLVED for item in non_securities)
+
+
 def test_symbol_alias_resolves_after_canonical_miss(db_session: Session) -> None:
     asset = add_asset(session=db_session, name="Alias Asset", symbol="CANONICAL", market="SH")
     add_alias(
@@ -340,7 +379,7 @@ def test_ambiguous_reference_preserves_semantics_and_candidates(
     spec = AnalysisSpec(
         analysis_version="resolver-ambiguous-analysis",
         model_version="resolver-test-model",
-        prompt_version="resolver-test-prompt",
+        prompt_version="resolVer-test-prompt",
         schema_version="resolver-test-schema",
     )
     service = OpinionProcessingService(

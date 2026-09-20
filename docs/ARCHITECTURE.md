@@ -510,7 +510,7 @@ AI 不负责：
 - 数学评分
 - 业务规则
 
-## 6.4 Asset Resolution Boundary (Sprint 2D.1–2D.2)
+## 6.4 Asset Resolution Boundary (Sprint 2D.1–2D.2, IYR-2)
 
 Asset identity is resolved after language extraction and before Opinion
 persistence by the source-neutral deterministic `AssetResolver`:
@@ -534,6 +534,26 @@ market from symbol length, use external model knowledge, or create an Asset.
 Multiple matches produce `AMBIGUOUS`, while missing matches produce
 `UNRESOLVED` and retain the complete extracted opinion semantics for later
 reprocessing.
+
+IYR-2 adds one deliberately narrow venue-normalization rule: `market=CN` may
+become SH or SZ only when an explicit six-digit symbol has a configured,
+deterministic A-share prefix. Unknown prefixes stay unsupported. The rule
+normalizes listing venue only; it never derives a symbol from a name.
+
+Current resolution remains a query-time projection over immutable
+EventAnalysis output. The existing production-analysis maintenance runner's
+`--resolution-only` mode provides the bounded recovery path:
+
+```text
+Asset Master / Alias availability
+        → AssetResolver
+        → CurrentAnalysisResolution projection
+        → missing Opinion materialization
+        → STOP
+```
+
+This path does not instantiate an Analysis extractor or Thesis comparator and
+does not enter any downstream Intelligence stage.
 
 ## 6.5 Behavior Evidence Boundary (Sprint 2E.0)
 
@@ -1598,5 +1618,16 @@ therefore converge before Analysis and share all existing semantic stages.
 
 IYR-1 does not modify Analysis, Opinion, Attention, Thesis, Cross-Investor,
 Signal, Event, Priority, Feed, Product View, Asset Resolution, or historical
-completeness semantics. IYR-2 Asset Resolution Yield Recovery remains
-deferred.
+completeness semantics.
+
+IYR-2 changes only deterministic Asset venue normalization and controlled
+Asset Master coverage. `CN` references with supported explicit A-share symbols
+can resolve to SH/SZ listings; unknown prefixes, US listings, indexes, themes,
+commodities, private companies, and ambiguous A/H names remain unresolved.
+
+Resolution recovery reuses `OpinionMaterializationService` through the
+existing maintenance runner's `--resolution-only` mode. The mode is
+structurally separated from OperationalRefreshService domain/downstream
+stages, so it cannot invoke Analysis or Thesis LLM providers. It writes only
+missing Opinion rows for an explicit Analysis/Event scope and remains
+idempotent under the existing `(event_id, asset_id, analysis_id)` identity.
