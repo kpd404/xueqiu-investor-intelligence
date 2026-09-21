@@ -1631,3 +1631,41 @@ structurally separated from OperationalRefreshService domain/downstream
 stages, so it cannot invoke Analysis or Thesis LLM providers. It writes only
 missing Opinion rows for an explicit Analysis/Event scope and remains
 idempotent under the existing `(event_id, asset_id, analysis_id)` identity.
+
+## 1.7 Phase 5 Local Runtime Architecture
+
+P5-1 adds only local runtime durability around the existing Phase 3
+Operational Refresh path:
+
+    PostgreSQL
+        |-- Backend API (uvicorn, 127.0.0.1:8000)
+        |-- Application Scheduler (operations.scheduler)
+        |       |-- authenticated Edge CDP (127.0.0.1:9222)
+        |-- Frontend (Vite, 127.0.0.1:5173)
+
+The application Scheduler owns refresh cadence only. Windows process startup
+and restart are handled by the canonical PowerShell entry points and the
+optional interactive-user Task Scheduler entry. The repository does not add a
+runtime manager, workflow engine, queue, or internal subprocess restart loop.
+
+Canonical commands are:
+
+    pwsh -NoProfile -File .\scripts\start-runtime.ps1 -StartEdge
+    pwsh -NoProfile -File .\scripts\stop-runtime.ps1
+    pwsh -NoProfile -File .\scripts\runtime-status.ps1
+
+The optional Task Scheduler setup runs at interactive user logon because the
+authenticated Edge profile may require a desktop session. It contains no
+secrets and does not log in to Xueqiu. If Edge is already running without CDP,
+startup reports ACTION_REQUIRED and does not launch a duplicate browser.
+
+Backend /health reports process/database health. /api/operations/status
+reads persisted OperationalRefreshRun state and exposes freshness, latest
+failure stage/code, and the authenticated-CDP requirement. Frontend state is
+read from these APIs and is not stored in localStorage.
+
+A missed schedule is not replayed as a catch-up storm. After restart, the
+scheduler performs its next normal tick; database-driven incremental selection,
+RawEvent hashing, and existing artifact identities preserve idempotency.
+Runtime logs are written under .local/runtime/logs with bounded rotation.
+P5-1 Closure was verified after Windows restart with authenticated Edge CDP, a successful SCHEDULED refresh, and HEALTHY / FRESH status. It remains local-runtime work and does not claim cloud or Production Ready deployment.

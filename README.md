@@ -626,3 +626,51 @@ monitored cohort remains intentionally bounded at eight Investors.
 
 The next primary mainline is **Always-On Hosting / Restart Recovery**. Cohort
 expansion remains a later bounded-coverage option; it is not part of IYR-3.
+
+## Phase 5 - Always-On Product Runtime
+
+### P5-1 - Durable Local Runtime & Restart Recovery
+
+Status: **COMPLETE**.
+
+The local runtime now has canonical, idempotent Windows entry points:
+
+    pwsh -NoProfile -File .\scripts\start-runtime.ps1 -StartEdge
+    pwsh -NoProfile -File .\scripts\stop-runtime.ps1
+    pwsh -NoProfile -File .\scripts\runtime-status.ps1
+
+Optional interactive-login setup:
+
+    pwsh -NoProfile -File .\scripts\install-runtime-task.ps1
+
+The runtime topology is:
+
+    PostgreSQL
+        |-- Backend: uvicorn backend.app.main:app :8000
+        |-- Scheduler: python -m operations.scheduler : no listener
+        |       |-- authenticated Edge CDP :9222
+        |-- Frontend: Vite :5173 -> Backend API
+
+The scripts are process-scoped, use bounded rotating logs under
+.local/runtime/logs, preserve the authenticated-CDP boundary, and never embed
+credentials, cookies, tokens, or API keys. The application scheduler remains
+the refresh cadence loop; Windows startup/task execution is separate OS-level
+process orchestration. PostgreSQL remains the source of truth for refresh
+status, freshness, failure stage, and failure code. The existing PostgreSQL
+advisory lock remains the refresh-level single-instance protection.
+
+The runtime procedure was exercised with real local processes. Backend,
+scheduler, and frontend started; a second start reused existing processes;
+scheduler crash recovery and backend crash recovery restarted through the
+canonical entry point; full stop-all/start-all recovery restored the API,
+Inbox, Asset Product View, and Investor Product View. A real CDP-unavailable
+refresh recorded CDP_UNAVAILABLE and the Product status exposed
+ACTION_REQUIRED. The rolling Inbox remained readable after backend restart.
+
+P5-1 Closure was verified after Windows restart: canonical Edge CDP on
+127.0.0.1:9222 used the existing authenticated interactive profile, the
+bounded smoke observed one Following Feed batch with 16 valid items, and a
+SCHEDULED refresh completed successfully. The final runtime status was
+HEALTHY / FRESH. Historical CDP_UNAVAILABLE remains visible in Operational
+Status history. This is durable local runtime work, not Cloud Production Ready
+deployment.

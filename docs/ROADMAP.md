@@ -419,3 +419,30 @@ SZ:300308 and SZ:300502 remained resolvable.
 Phase 4 is complete. The next primary mainline is **Always-On Hosting /
 Restart Recovery**. The monitored cohort remains bounded at eight Investors;
 expansion is deferred and is not part of IYR-3.
+
+## Phase 5 - Always-On Product Runtime
+
+Phase 5 makes the useful-but-bounded local intelligence product durable
+across ordinary Windows process and machine restarts. It does not add
+Intelligence semantics, cloud deployment, portfolio analytics, ranking, or
+cohort expansion.
+
+### P5-1 - Durable Local Runtime & Restart Recovery
+
+Status: **COMPLETE**.
+
+The repository now provides canonical local runtime startup, shutdown, status,
+bounded log rotation, explicit CDP ACTION_REQUIRED reporting, and optional
+interactive-login Task Scheduler setup. PostgreSQL OperationalRefreshRun
+records remain the source of truth, and the existing advisory lock protects
+concurrent refreshes.
+
+Backend, scheduler, frontend, scheduler crash recovery, backend recovery,
+full stop/start recovery, Product View recovery, Inbox recovery, and
+CDP-unavailable failure visibility have been tested.
+
+P5-1 Closure was verified after Windows restart: Edge CDP was restored on
+127.0.0.1:9222 with the existing authenticated profile, bounded smoke
+succeeded, and the allowed SCHEDULED refresh completed with SUCCESS. The final
+Operational Status was HEALTHY / FRESH. This completes durable local runtime
+work; cloud Production Ready deployment remains out of scope.

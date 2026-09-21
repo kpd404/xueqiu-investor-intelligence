@@ -681,3 +681,46 @@ Phase 4 is therefore **COMPLETE**. The system has moved from technically
 working but structurally starved to a useful but bounded intelligence producer.
 The next primary mainline is **Always-On Hosting / Restart Recovery**. No
 cohort expansion or hosting work was implemented in IYR-3.
+
+## Phase 5 - Always-On Product Runtime
+
+### P5-1 - Durable Local Runtime & Restart Recovery
+
+Status: **COMPLETE**.
+
+Implemented local runtime capabilities:
+
+- canonical start-runtime.ps1, stop-runtime.ps1, and runtime-status.ps1;
+- optional interactive-user Task Scheduler registration;
+- backend, scheduler, and frontend process checks with PID ownership;
+- bounded runtime log rotation;
+- explicit ACTION_REQUIRED CDP state;
+- no embedded secrets or authentication automation;
+- PostgreSQL-backed Operational Status persistence;
+- existing PostgreSQL advisory lock retained.
+
+The tested process topology is PostgreSQL -> Backend -> Scheduler/Frontend,
+with Scheduler -> authenticated Edge CDP as the external collection
+dependency. The scheduler itself remains an application cadence loop and does
+not supervise OS processes.
+
+Real local recovery tests passed for:
+
+- backend startup and /health;
+- persisted /api/operations/status;
+- frontend availability;
+- second-start idempotency;
+- scheduler stop/start recovery;
+- backend stop/start recovery;
+- full stop-all/start-all recovery;
+- Feed, Asset Product View, and Investor Product View reads after restart;
+- advisory-lock exclusivity;
+- CDP-unavailable refresh with persisted CDP_UNAVAILABLE and
+  ACTION_REQUIRED.
+
+P5-1 Closure completed after Windows restart. Edge CDP was restored on
+127.0.0.1:9222 using the existing authenticated interactive profile. The
+read-only smoke observed one Following Feed batch with 16 valid items, then
+the allowed SCHEDULED refresh completed successfully. Operational Status is
+HEALTHY / FRESH; the historical CDP_UNAVAILABLE failure remains preserved.
+The local runtime is durable, but this is not a cloud Production Ready claim.
