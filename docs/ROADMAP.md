@@ -397,6 +397,25 @@ idempotency verification both recorded zero LLM calls; the production rerun
 created no duplicate Opinion and changed no downstream count. No migration or
 Intelligence semantic was added.
 
-### IYR-3 — Yield Re-validation
+### IYR-3 — Yield Re-validation & Phase 4 Exit Gate ✅
 
-Not started. Begin only under an explicit IYR-3 task.
+Status: **COMPLETE**.
+
+The real 2026-09-21 canonical refresh validated the full
+Collect -> Analyze -> Materialize -> Product path with the bounded default
+cohort. It produced 46 new RawEvents, including 30 profile-only events, with
+8/8 direct Investor probes successful. The new cohort contained 32.6%
+ORIGINAL content and a 34.8% Opinion-bearing Analysis rate, producing 6
+Opinions, 7 AttentionOccurrences, 6 ThesisChanges, and 13 Signals.
+
+The rolling 24-hour Inbox contained 11 FeedItems across 7 Assets and 9
+Investors. Event identities, Priorities, and FeedItems were correctly reused
+where their existing identity/policy required aggregation; 13 new Event
+evidence links were added. Effective-policy correctness checks passed, and
+remaining unresolved references were primarily UNKNOWN or legitimate
+unsupported/index/concept/commodity categories. The safe IYR-2 identities
+SZ:300308 and SZ:300502 remained resolvable.
+
+Phase 4 is complete. The next primary mainline is **Always-On Hosting /
+Restart Recovery**. The monitored cohort remains bounded at eight Investors;
+expansion is deferred and is not part of IYR-3.

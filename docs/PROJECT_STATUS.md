@@ -638,4 +638,46 @@ Attention/Thesis/Signal/Event/Priority/Feed stages. Focused first-time
 integration proof used the real resolver and persistence UoW with zero LLM
 calls. The 45-event production rerun created zero Assets, Aliases, Opinions,
 or downstream artifacts; every audited database count remained unchanged.
-IYR-3 has not started.
+
+
+### IYR-3 — Yield Re-validation & Phase 4 Exit Gate
+
+Status: **COMPLETE**.
+
+One real canonical refresh was executed on 2026-09-21 through the authenticated
+CDP endpoint with the default bounded cohort. Collection produced 46 new
+RawEvents from 16 Following Feed items and 63 direct-profile items. Direct
+collection attempted eight Investors and succeeded for all eight; 30 of the
+new RawEvents were profile-only, with no Feed/profile event overlap.
+
+The current new-event cohort contained 15 ORIGINAL, 29 REPOST, and 2 other
+events. Analysis yielded 6 SUCCESS, 10 PARTIALLY_RESOLVED, 30 NO_OPINION,
+and 0 FAILED rows. It produced 6 effective Opinions, 7 AttentionOccurrences,
+6 ThesisChanges, and 13 new Signals. Five of the six ThesisChanges were
+material under the existing policy.
+
+The strict pre-IYR 24-hour window contained 22 RawEvents from four Investors,
+0 ORIGINAL and 22 REPOST, with an 18.2% Opinion-bearing Analysis rate. The
+current new cohort reached a 34.8% Opinion-bearing rate and 32.6% ORIGINAL
+content. The strict pre-window had zero Attention and Thesis artifacts at the
+boundary; the current cohort produced both continuously.
+
+The downstream audit found 0 new Event identities, 13 new Event evidence
+links, 0 new Priorities, and 0 new FeedItems in this refresh. This is expected
+aggregation/idempotency behavior under the existing policies, not a surfacing
+failure: all 249 effective ThesisChanges had a Signal, the 26 Signals without
+Event evidence were non-eligible single-investor NEW_ATTENTION signals, all
+Priorities had FeedItems, and the rolling 24-hour Inbox contained 11 items
+across 7 Assets and 9 Investors.
+
+The active unresolved inventory contains 814 occurrences. The current
+post-IYR source cohort is mainly UNKNOWN or legitimate deferred categories;
+the deterministic safe-resolution queue is not the dominant current blocker.
+SZ:300308 and SZ:300502 remain present as unique Asset Master identities with
+persisted Opinion evidence. Asset and Investor Product Views returned recent
+traceable evidence for the affected verification cohort.
+
+Phase 4 is therefore **COMPLETE**. The system has moved from technically
+working but structurally starved to a useful but bounded intelligence producer.
+The next primary mainline is **Always-On Hosting / Restart Recovery**. No
+cohort expansion or hosting work was implemented in IYR-3.

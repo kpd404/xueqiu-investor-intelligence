@@ -555,7 +555,7 @@ Momentum 的架构与 Behavior Evidence Foundation 已具备，但真实样本�
 它是 Investor Behavior Intelligence System，关注谁在关注什么、为什么关注、观点如何变化、是否发生行为，以及多位投资者是否形成共识或分歧。
 产品核心原则是：**Change matters more than popularity.**
 
-## Phase 4 — Intelligence Yield Recovery / IYR-1–IYR-2
+## Phase 4 — Intelligence Yield Recovery / IYR-1–IYR-3 ✅
 
 IYR-1 adds bounded Monitored Investor Direct Recent Collection to the existing
 authenticated Xueqiu runtime. The canonical command remains:
@@ -595,4 +595,34 @@ This mode stops after AssetResolver, current-resolution projection, and
 Opinion materialization. It does not construct Analysis or Thesis LLM
 providers and does not run Attention, Thesis, Signal, Event, Priority, or
 Feed stages. Production idempotency verification processed 45 Analysis rows
-with zero LLM calls and zero database-count changes. IYR-3 is not started.
+with zero LLM calls and zero database-count changes.
+
+### IYR-3 — Yield Re-validation & Phase 4 Exit Gate ✅
+
+Status: **COMPLETE**. A real authenticated canonical refresh was executed on
+2026-09-21 using the bounded default profile cohort. The current refresh saw
+79 source items and created 46 new RawEvents: 16 Following Feed events and 30
+profile-only events. The eight direct probes succeeded 8/8. The new-event
+cohort contained 15 ORIGINAL, 29 REPOST, and 2 other events, with 16
+opinion-bearing Analyses, 6 effective Opinions, 7 AttentionOccurrences, and 6
+ThesisChanges (5 material), plus 13 new Signals.
+
+The strict pre-IYR 24-hour collection window contained 22 RawEvents from four
+Investors, all REPOSTs, with 18 NO_OPINION and 4 PARTIALLY_RESOLVED
+Analyses. The post-refresh new cohort therefore materially improved source
+coverage, ORIGINAL content mix, Opinion-bearing yield, and downstream
+Attention/Thesis/Signal production. Asset resolution safely retains
+SZ:300308 and SZ:300502; recent unresolved references are predominantly
+UNKNOWN or legitimate unsupported/index/concept/commodity categories.
+
+The refresh completed all stages successfully. Event identity did not grow in
+this run because the existing (event_type, asset_id) aggregates were reused;
+13 new Signal-to-Event evidence links were added. Priority and Feed identities
+were also reused under the existing policy. The rolling 24-hour Inbox was
+non-empty with 11 FeedItems across 7 Assets and 9 Investors. Product View
+verification succeeded for affected Assets and Investors. No correctness
+blocker was found. Phase 4 is no longer structurally starved, although the
+monitored cohort remains intentionally bounded at eight Investors.
+
+The next primary mainline is **Always-On Hosting / Restart Recovery**. Cohort
+expansion remains a later bounded-coverage option; it is not part of IYR-3.
