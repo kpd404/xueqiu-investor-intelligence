@@ -38,9 +38,34 @@ class IntelligenceEventRepository:
         self,
         command: IntelligenceEventCreate,
     ) -> tuple[IntelligenceEventView, bool]:
-        existing = self.get_by_identity(command.event_type.value, command.asset_id)
-        if existing is not None:
-            return existing, False
+        existing_entity = self._session.scalar(
+            select(IntelligenceEvent).where(
+                IntelligenceEvent.event_type == command.event_type.value,
+                IntelligenceEvent.asset_id == command.asset_id,
+            )
+        )
+        if existing_entity is not None:
+            changed = False
+            first_observed_at = min(
+                self._as_utc(existing_entity.first_observed_at),
+                command.first_observed_at,
+            )
+            last_observed_at = max(
+                self._as_utc(existing_entity.last_observed_at),
+                command.last_observed_at,
+            )
+            if self._as_utc(existing_entity.first_observed_at) != first_observed_at:
+                existing_entity.first_observed_at = first_observed_at
+                changed = True
+            if self._as_utc(existing_entity.last_observed_at) != last_observed_at:
+                existing_entity.last_observed_at = last_observed_at
+                changed = True
+            if existing_entity.metadata_json != command.metadata:
+                existing_entity.metadata_json = command.metadata
+                changed = True
+            if changed:
+                self._session.flush()
+            return self._to_view(existing_entity), False
         entity = IntelligenceEvent(
             asset_id=command.asset_id,
             event_type=command.event_type.value,

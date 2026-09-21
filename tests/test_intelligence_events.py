@@ -251,3 +251,40 @@ def test_event_and_evidence_repositories_preserve_unique_links(db_session) -> No
     assert second_created is False
     assert first_link.id == second_link.id
     assert len(evidence_repository.list_by_event(event.id)) == 1
+
+
+def test_event_repository_refreshes_reused_aggregate_projection(db_session) -> None:
+    asset = Asset(name="Updated Event Asset", market="SH", symbol="600100")
+    db_session.add(asset)
+    db_session.flush()
+    repository = IntelligenceEventRepository(db_session)
+    first_signal_id = uuid4()
+    first_command = IntelligenceEventCreate(
+        asset_id=asset.id,
+        event_type=IntelligenceEventType.INVESTOR_VIEW_CHANGE,
+        first_observed_at=NOW,
+        last_observed_at=NOW + timedelta(hours=1),
+        metadata={"signal_count": 1, "signal_ids": [str(first_signal_id)]},
+    )
+    first, created = repository.add_if_absent(first_command)
+    later_signal_id = uuid4()
+    refreshed, reused = repository.add_if_absent(
+        first_command.model_copy(
+            update={
+                "last_observed_at": NOW + timedelta(hours=3),
+                "metadata": {
+                    "signal_count": 2,
+                    "signal_ids": [str(first_signal_id), str(later_signal_id)],
+                },
+            }
+        )
+    )
+    db_session.commit()
+
+    assert created is True
+    assert reused is False
+    assert refreshed.id == first.id
+    assert refreshed.first_observed_at == NOW
+    assert refreshed.last_observed_at == NOW + timedelta(hours=3)
+    assert refreshed.metadata["signal_count"] == 2
+    assert len(repository.list_by_asset(asset.id)) == 1

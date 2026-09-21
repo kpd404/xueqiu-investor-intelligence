@@ -28,9 +28,28 @@ class IntelligenceFeedItemRepository:
         return self._to_view(entity) if entity is not None else None
 
     def add_if_absent(self, command: FeedItemCreate) -> tuple[FeedItem, bool]:
-        existing = self.get_by_priority(command.priority_id)
-        if existing is not None:
-            return existing, False
+        existing_entity = self._session.scalar(
+            select(IntelligenceFeedItem).where(
+                IntelligenceFeedItem.priority_id == command.priority_id
+            )
+        )
+        if existing_entity is not None:
+            changed = False
+            projection_updates = {
+                "asset_id": command.asset_id,
+                "event_type": command.event_type.value,
+                "title": command.title,
+                "context": command.context,
+                "reason": command.reason.value,
+                "observed_at": command.observed_at,
+            }
+            for field, value in projection_updates.items():
+                if getattr(existing_entity, field) != value:
+                    setattr(existing_entity, field, value)
+                    changed = True
+            if changed:
+                self._session.flush()
+            return self._to_view(existing_entity), False
         entity = IntelligenceFeedItem(
             priority_id=command.priority_id,
             asset_id=command.asset_id,

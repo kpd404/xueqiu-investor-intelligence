@@ -261,3 +261,49 @@ def test_feed_repository_is_unique_by_priority(db_session) -> None:
     assert reused is False
     assert first.id == second.id
     assert len(repository.list()) == 1
+
+
+def test_feed_repository_refreshes_projection_and_preserves_lifecycle_state(db_session) -> None:
+    asset = Asset(name="Updated Feed Asset", market="SH", symbol="600101")
+    db_session.add(asset)
+    db_session.flush()
+    event, _ = IntelligenceEventRepository(db_session).add_if_absent(
+        _event(IntelligenceEventType.CROSS_INVESTOR_DISCOVERY).model_copy(
+            update={"asset_id": asset.id}
+        )
+    )
+    priority, _ = IntelligenceEventPriorityRepository(db_session).add_if_absent(_priority(event))
+    from database.repositories.intelligence_feed_items import IntelligenceFeedItemRepository
+
+    repository = IntelligenceFeedItemRepository(db_session)
+    first_command = FeedItemCreate(
+        priority_id=priority.id,
+        asset_id=asset.id,
+        event_type=event.event_type,
+        title="Cross-investor attention was observed",
+        context={"signal_count": 1, "source_count": 1},
+        reason=IntelligencePriorityReason.CROSS_INVESTOR_DISCOVERY,
+        observed_at=NOW,
+        created_at=NOW,
+    )
+    first, created = repository.add_if_absent(first_command)
+    active = repository.update_state(first.id, FeedState.ACTIVE)
+    refreshed, reused = repository.add_if_absent(
+        first_command.model_copy(
+            update={
+                "context": {"signal_count": 3, "source_count": 3},
+                "observed_at": NOW + timedelta(hours=4),
+            }
+        )
+    )
+    db_session.commit()
+
+    assert created is True
+    assert reused is False
+    assert refreshed.id == first.id
+    assert refreshed.state is FeedState.ACTIVE
+    assert refreshed.state is active.state
+    assert refreshed.created_at == first.created_at
+    assert refreshed.observed_at == NOW + timedelta(hours=4)
+    assert refreshed.context == {"signal_count": 3, "source_count": 3}
+    assert len(repository.list()) == 1
