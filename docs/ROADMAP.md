@@ -446,3 +446,20 @@ P5-1 Closure was verified after Windows restart: Edge CDP was restored on
 succeeded, and the allowed SCHEDULED refresh completed with SUCCESS. The final
 Operational Status was HEALTHY / FRESH. This completes durable local runtime
 work; cloud Production Ready deployment remains out of scope.
+
+### P5-2 - Backup / Restore & Secrets Safety
+
+Status: **COMPLETE**.
+
+The local runtime now has a bounded PostgreSQL backup/restore path with a
+non-secret snapshot manifest, isolated target naming, no-overwrite/no-drop
+restore behavior, and post-restore schema, count, integrity, identity,
+Product View, Inbox, and Operational Status verification. A real restored
+`SCHEDULED` continuation succeeded without duplicate business artifacts or
+LLM calls, and the live runtime was returned to HEALTHY / FRESH.
+
+The backup boundary deliberately excludes `.env`, credentials, cookies,
+tokens, API keys, and the authenticated Edge profile. Backup retention,
+encryption at rest, off-host copies, secret management, and production
+backup/restore automation remain future production gaps. This phase does not
+claim Production Ready deployment.

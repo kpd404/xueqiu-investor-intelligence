@@ -2,7 +2,7 @@
 
 ## System Architecture Specification
 
-Version: 1.6
+Version: 1.7
 
 ---
 
@@ -43,10 +43,11 @@ Priority/Feed projections, Product Views, frontend, and cross-navigation.
 Attention Momentum remains paused because historical completeness and temporal
 coverage are insufficient for absence-sensitive inference.
 
-The project is now in **Phase 3 — Operational MVP**. The UI and scheduled
-refresh/status loop exist for the authenticated local CDP runtime, while
-always-on deployment and restart hosting remain deferred. The current gap is
-production hosting, not another Intelligence semantic layer.
+The project is now in **Phase 5 — Always-On Product Runtime**. Phase 3 and
+Phase 4 are complete; P5-1 local runtime durability and P5-2 local backup /
+restore safety are complete. The current gap is production deployment, off-host
+backup, and centralized secrets management, not another Intelligence semantic
+layer.
 
 ## 1.4 Operational Architecture
 
@@ -1669,3 +1670,23 @@ scheduler performs its next normal tick; database-driven incremental selection,
 RawEvent hashing, and existing artifact identities preserve idempotency.
 Runtime logs are written under .local/runtime/logs with bounded rotation.
 P5-1 Closure was verified after Windows restart with authenticated Edge CDP, a successful SCHEDULED refresh, and HEALTHY / FRESH status. It remains local-runtime work and does not claim cloud or Production Ready deployment.
+
+### P5-2 - Backup / Restore & Secrets Safety
+
+Backup and restore remain operator workflows around PostgreSQL; they do not
+become another application orchestration layer. The backup script invokes
+`pg_dump --format=custom` and writes a database-only artifact plus a manifest
+of non-secret schema and critical-row metadata under ignored `.local/backups`.
+The restore script accepts only a new `snowball_restore_verify_*` target,
+checks target existence before creation, refuses unsafe targets, and never
+calls `dropdb`. A Python verifier then checks migration/schema parity, critical
+counts, selected foreign-key relationships, identity uniqueness, Product View
+reads, Inbox readability, and persisted Operational Status.
+
+The authenticated Edge CDP profile is an external runtime dependency, not
+backup content. `.env` and runtime environment variables remain the only
+credential inputs; scripts do not print or embed passwords, cookies, tokens,
+or API keys. Local backup files are ignored by Git, but this phase does not
+provide encryption, off-host retention, a secret manager, or a cloud database.
+The real restore and continuation drill passed without Intelligence semantic
+or data-model changes.

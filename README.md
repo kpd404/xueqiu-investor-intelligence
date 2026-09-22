@@ -2,12 +2,13 @@
 
 ## Current phase
 
-The project has completed **Phase 3 — Operational MVP**. The Intelligence
-semantic layer is frozen except for proven correctness bugs. The product is a
-**Browseable, manually refreshable Intelligence Product**. The verified live
-Source → Product loop uses an already authenticated Edge CDP session; the
-product is not Production Ready because always-on deployment and hosting are
-deferred post-MVP.
+Phase 3 — Operational MVP and Phase 4 — Intelligence Yield Recovery are
+complete. The current implementation is **Phase 5 — Always-On Product Runtime**;
+P5-1 and P5-2 are complete. The Intelligence semantic layer is frozen except
+for proven correctness bugs. The product is a **Browseable, manually refreshable
+Intelligence Product** with durable local runtime and database recovery. It is
+not Production Ready because cloud deployment, off-host backup, and centralized
+secrets management remain deferred.
 
 ## One-command refresh
 
@@ -674,3 +675,37 @@ SCHEDULED refresh completed successfully. The final runtime status was
 HEALTHY / FRESH. Historical CDP_UNAVAILABLE remains visible in Operational
 Status history. This is durable local runtime work, not Cloud Production Ready
 deployment.
+
+### P5-2 - Backup / Restore & Secrets Safety
+
+Status: **COMPLETE**.
+
+The local PostgreSQL recovery boundary now has canonical operator scripts:
+
+    pwsh -NoProfile -File .\scripts\backup-database.ps1
+    pwsh -NoProfile -File .\scripts\restore-database.ps1 `
+      -BackupPath .\.local\backups\<backup>.dump `
+      -TargetDatabase snowball_restore_verify_<run-id>
+
+Backups are PostgreSQL custom-format database artifacts plus a non-secret
+manifest containing schema metadata, migration head, critical row counts, and
+SHA-256. Restore requires a new `snowball_restore_verify_*` database, refuses
+an existing target, never drops or overwrites a database, and runs Alembic,
+integrity/identity, Product View, Inbox, and Operational Status verification.
+The database remains the source of truth; browser profiles, cookies, tokens,
+API keys, and `.env` values are not included in the backup.
+
+The real drill restored `snowball-20260922-010401.dump` (2,949,289 bytes;
+SHA-256 `7f2c9fb3c789531955f3ab3c954ca025fb1fda822961d6a320af08d6e5d95230`)
+to `snowball_restore_verify_20260922_0104`. It matched 29 public tables, 172
+indexes, 406 constraints, migration `20260920_0024`, all critical row counts,
+zero checked integrity violations, zero checked identity collisions, Product
+Views, a 70-item Inbox, and HEALTHY / FRESH status. A subsequent
+`SCHEDULED` continuation succeeded with zero new business artifacts and zero
+LLM calls, proving restart/restore idempotency. The live runtime was then
+started canonically and completed a live `SCHEDULED` SUCCESS with HEALTHY /
+FRESH status.
+
+This is durable local backup/restore, not encrypted off-host backup,
+centralized secret management, or a Production Ready deployment. See
+`docs/RECOVERY_RUNBOOK.md` for operator procedure and boundaries.

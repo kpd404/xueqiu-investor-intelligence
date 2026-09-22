@@ -8,7 +8,9 @@ implemented; the current engineering priority is operational execution.
 
 ## Current phase and sprint
 
-**Phase 3 — Operational MVP is COMPLETE.**
+**Phase 5 — Always-On Product Runtime is current; P5-1 and P5-2 are COMPLETE.**
+
+Phase 3 — Operational MVP and Phase 4 — Intelligence Yield Recovery are complete.
 
 - Phase 0 Foundation is complete.
 - Phase 1 Data / Intelligence Foundation is complete.
@@ -724,3 +726,32 @@ read-only smoke observed one Following Feed batch with 16 valid items, then
 the allowed SCHEDULED refresh completed successfully. Operational Status is
 HEALTHY / FRESH; the historical CDP_UNAVAILABLE failure remains preserved.
 The local runtime is durable, but this is not a cloud Production Ready claim.
+
+### P5-2 - Backup / Restore & Secrets Safety
+
+Status: **COMPLETE**.
+
+P5-2 added only local recovery safety around the existing PostgreSQL source
+of truth. `scripts/backup-database.ps1` creates a PostgreSQL custom-format dump
+and a non-secret manifest; `scripts/restore-database.ps1` restores only into
+a new `snowball_restore_verify_*` database and refuses existing targets. The
+restore verifier checks migration/schema metadata, critical row counts,
+referential integrity, identity uniqueness, Asset and Investor Product Views,
+Recent Intelligence Inbox, and persisted Operational Status.
+
+The real drill used a 2,949,289-byte dump with SHA-256
+`7f2c9fb3c789531955f3ab3c954ca025fb1fda822961d6a320af08d6e5d95230` and
+restored it to `snowball_restore_verify_20260922_0104`.
+The manifest matched 29 public tables, 172 indexes, 406 constraints, head
+`20260920_0024`, all critical row counts, and the verifier returned `ok=true`.
+The target Product Views were readable, Inbox total was 70, and restored
+Operational Status was HEALTHY / FRESH.
+
+After the CDP page was available, one restored-database `SCHEDULED` run
+completed SUCCESS with 81 collected items, 8/8 direct profiles, zero new
+RawEvents, zero Analysis/LLM work, and all downstream identities reused. The
+live runtime was restored afterward and completed a live scheduled SUCCESS.
+`.env`, credentials, browser profile data, cookies, tokens, and API keys remain
+outside the database backup boundary. This remains local recovery work and is
+not a Production Ready or off-host encrypted backup claim. See
+`docs/RECOVERY_RUNBOOK.md`.
