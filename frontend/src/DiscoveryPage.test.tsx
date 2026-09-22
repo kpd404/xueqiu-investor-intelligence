@@ -133,78 +133,78 @@ afterEach(() => {
   cleanup();
 });
 
-describe("Asset Discovery V0", () => {
+describe("标的发现 V0", () => {
   it("renders observed Assets and keeps the default order name-based", () => {
     renderHarness();
 
-    expect(screen.getByRole("heading", { name: "Asset Discovery" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "标的发现" })).toBeInTheDocument();
     expect(document.querySelector(".discovery-result-bar")).toHaveTextContent("6");
     expect(document.querySelector(".discovery-result-bar > div:first-child span")).toHaveTextContent(
-      "observed Assets"
+      "共 6 个已观察标的"
     );
     expect(screen.getByRole("heading", { name: "招商轮船" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open 招商轮船 SH:601872" })).toBeInTheDocument();
-    expect(screen.getByText("Historical completeness: UNKNOWN")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开 招商轮船 SH:601872" })).toBeInTheDocument();
+    expect(screen.getByText("历史完整性：未知")).toBeInTheDocument();
   });
 
   it("searches by name and symbol while keeping A/H listings separate", () => {
     renderHarness();
-    const search = screen.getByRole("searchbox", { name: "Search observed Assets" });
+    const search = screen.getByRole("searchbox", { name: "搜索已观察标的" });
 
     fireEvent.change(search, { target: { value: "山东黄金" } });
     expect(screen.getAllByRole("heading", { name: "山东黄金" })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Open 山东黄金 HK:01787" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open 山东黄金 SH:600547" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开 山东黄金 HK:01787" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开 山东黄金 SH:600547" })).toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: "600547" } });
-    expect(screen.getByRole("button", { name: "Open 山东黄金 SH:600547" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open 山东黄金 HK:01787" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开 山东黄金 SH:600547" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开 山东黄金 HK:01787" })).not.toBeInTheDocument();
   });
 
   it("supports market, breadth, disagreement, gap, and thesis filters", () => {
     renderHarness();
 
-    fireEvent.change(screen.getByLabelText("Market"), { target: { value: "HK" } });
-    expect(screen.queryByRole("button", { name: "Open 招商轮船 SH:601872" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open 龙源电力 HK:00916" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("市场"), { target: { value: "HK" } });
+    expect(screen.queryByRole("button", { name: "打开 招商轮船 SH:601872" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开 龙源电力 HK:00916" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-    fireEvent.change(screen.getByLabelText("Attention breadth"), { target: { value: "3" } });
-    expect(screen.getByRole("button", { name: "Open 龙源电力 HK:00916" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open 山东黄金 SH:600547" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全部" }));
+    fireEvent.change(screen.getByLabelText("关注动态覆盖"), { target: { value: "3" } });
+    expect(screen.getByRole("button", { name: "打开 龙源电力 HK:00916" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开 山东黄金 SH:600547" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Direction Disagreement" }));
-    expect(screen.getByText("DIVERGENT")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "方向分歧" }));
+    expect(screen.getAllByText("观点分化").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-    fireEvent.click(screen.getByRole("button", { name: "Attention > Opinion" }));
-    expect(screen.getByRole("button", { name: "Open 山东黄金 SH:600547" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全部" }));
+    fireEvent.click(screen.getByRole("button", { name: "关注动态 > 观点" }));
+    expect(screen.getByRole("button", { name: "打开 山东黄金 SH:600547" })).toBeInTheDocument();
     expect(screen.getByText("贵州茅台")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-    fireEvent.click(screen.getByRole("button", { name: "Repeated Thesis" }));
-    expect(screen.getAllByText("REPEATED THESIS").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "全部" }));
+    fireEvent.click(screen.getByRole("button", { name: "重复投资逻辑" }));
+    expect(screen.getAllByText("重复投资逻辑").length).toBeGreaterThan(0);
   });
 
   it("sorts by a selected observed fact and navigates to detail", () => {
     const onOpenAsset = renderHarness();
-    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "attention" } });
+    fireEvent.change(screen.getByLabelText("排序"), { target: { value: "attention" } });
 
     const headings = screen.getAllByRole("heading", { level: 2 });
     expect(headings[0]).toHaveTextContent("招商轮船");
 
-    fireEvent.click(screen.getByRole("button", { name: "Open 龙源电力 HK:00916" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开 龙源电力 HK:00916" }));
     expect(onOpenAsset).toHaveBeenCalledWith("asset-hk-00916");
   });
 
-  it("shows zero results, invalid URL values, loading, and API error states", () => {
+  it("shows zero results, 无效 URL values, loading, and API error states", () => {
     renderHarness("?market=NOPE&page=bad");
-    expect(screen.getByRole("status")).toHaveTextContent("invalid");
+    expect(screen.getByRole("status")).toHaveTextContent("无效");
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search observed Assets" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索已观察标的" }), {
       target: { value: "not-an-asset" }
     });
-    expect(screen.getByText("No assets match these evidence filters.")).toBeInTheDocument();
+    expect(screen.getByText("没有符合这些证据筛选条件的标的。")).toBeInTheDocument();
 
     const { unmount } = render(
       <DiscoveryPage
@@ -216,7 +216,7 @@ describe("Asset Discovery V0", () => {
         onQueryChange={vi.fn()}
       />
     );
-    expect(screen.getByLabelText("Loading Asset Discovery")).toBeInTheDocument();
+    expect(screen.getByLabelText("正在加载标的发现")).toBeInTheDocument();
     unmount();
 
     render(
@@ -229,6 +229,6 @@ describe("Asset Discovery V0", () => {
         onQueryChange={vi.fn()}
       />
     );
-    expect(screen.getByText("API unavailable")).toBeInTheDocument();
+    expect(screen.getByText("API 暂不可用")).toBeInTheDocument();
   });
 });

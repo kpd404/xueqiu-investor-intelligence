@@ -28,7 +28,7 @@ async function request<T>(path: string): Promise<T> {
     headers: { Accept: "application/json" }
   });
   if (!response.ok) {
-    let message = "The intelligence API is unavailable.";
+    let message = "情报 API 暂不可用。";
     try {
       const payload = (await response.json()) as { detail?: string };
       if (payload.detail) message = payload.detail;

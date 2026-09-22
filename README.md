@@ -108,6 +108,10 @@ Attention Momentum remains paused pending natural multi-week coverage.
 
 面向投资者行为变化的、数据源无关的 Investor Behavior Intelligence System。本仓库已完成 Sprint 2E.0 Behavior Evidence Foundation、Sprint 2E.2-A Opinion Attribution & Identity Hardening、Sprint 2E.2-B Production Analysis Policy & Projection Provenance、Sprint 2E.2 Thesis Change V0 和 Sprint 2E.3-A–F Portfolio / Behavior foundations。Attention Momentum 当前进入数据校准暂停阶段。
 
+## Frontend language
+
+Chinese UI is the default presentation language for the React frontend. API contracts, internal enum values, and backend intelligence semantics remain unchanged.
+
 ## Local setup
 
 ```powershell

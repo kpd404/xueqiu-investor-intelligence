@@ -508,13 +508,13 @@ describe("Asset Intelligence Product View V0", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "招商轮船" })).toBeInTheDocument();
-    expect(screen.getByText("REVIEW PRIORITY")).toBeInTheDocument();
-    expect(screen.getByText("Immediate review")).toBeInTheDocument();
-    expect(screen.getByText("Directional Alignment")).toBeInTheDocument();
-    expect(screen.getByText("MIXED DIRECTION")).toBeInTheDocument();
-    expect(screen.getByText("Consensus Evidence")).toBeInTheDocument();
-    expect(screen.getByText("Recent Evolution")).toBeInTheDocument();
-    expect(screen.getByText("Investor observed · Investor One")).toBeInTheDocument();
+    expect(screen.getByText("研究复核优先级")).toBeInTheDocument();
+    expect(screen.getByText("优先复核")).toBeInTheDocument();
+    expect(screen.getByText("方向一致性")).toBeInTheDocument();
+    expect(screen.getByText("方向分歧")).toBeInTheDocument();
+    expect(screen.getByText("共识证据")).toBeInTheDocument();
+    expect(screen.getByText("近期演变")).toBeInTheDocument();
+    expect(screen.getByText("投资者已观察 · Investor One")).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/view"))
     ).toHaveLength(1);
@@ -530,12 +530,12 @@ describe("Asset Intelligence Product View V0", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Asset Discovery" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "标的发现" })).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/view"))).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open 招商轮船 SH:601872" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开 招商轮船 SH:601872" }));
     expect(window.location.pathname).toBe("/assets/" + assetId);
-    expect(await screen.findByText("REVIEW PRIORITY")).toBeInTheDocument();
+    expect(await screen.findByText("研究复核优先级")).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/view"))).toHaveLength(1);
   });
 
@@ -546,9 +546,9 @@ describe("Asset Intelligence Product View V0", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "贵州茅台" })).toBeInTheDocument();
-    expect(screen.getByText("MIXED DIRECTION")).toBeInTheDocument();
-    expect(screen.getByText("INSUFFICIENT EVIDENCE")).toBeInTheDocument();
-    expect(screen.queryByText("DIVERGENT")).not.toBeInTheDocument();
+    expect(screen.getByText("方向分歧")).toBeInTheDocument();
+    expect(screen.getByText("证据不足")).toBeInTheDocument();
+    expect(screen.queryByText("观点分化")).not.toBeInTheDocument();
   });
 
   it("shows historical Intelligence without Discovery for 中国海洋石油", async () => {
@@ -559,12 +559,12 @@ describe("Asset Intelligence Product View V0", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "中国海洋石油" })).toBeInTheDocument();
-    expect(screen.getByText("Background monitoring")).toBeInTheDocument();
-    expect(screen.getByText("Historical Intelligence is available.")).toBeInTheDocument();
-    expect(screen.getByText("Feed lifecycle")).toBeInTheDocument();
-    expect(screen.getByText("Event lifecycle")).toBeInTheDocument();
-    expect(screen.getByText("ACTIVE · 1")).toBeInTheDocument();
-    expect(screen.getByText("ACTIVE here describes lifecycle/presentation state only. It does not mean investors are discussing this Asset now.")).toBeInTheDocument();
+    expect(screen.getByText("背景观察")).toBeInTheDocument();
+    expect(screen.getByText("已有历史情报。")).toBeInTheDocument();
+    expect(screen.getByText("情报流生命周期")).toBeInTheDocument();
+    expect(screen.getByText("事件生命周期")).toBeInTheDocument();
+    expect(screen.getByText("1 个进行中")).toBeInTheDocument();
+    expect(screen.getByText("这里的“进行中”仅描述生命周期或展示状态，不代表投资者当前正在讨论该标的。")).toBeInTheDocument();
     expect(screen.queryByText("No Intelligence")).not.toBeInTheDocument();
   });
 
@@ -575,9 +575,9 @@ describe("Asset Intelligence Product View V0", () => {
     });
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
     render(<App />);
-    expect(screen.getByText("Syncing evidence…")).toBeInTheDocument();
+    expect(screen.getByText("正在同步证据…")).toBeInTheDocument();
     rejectRequest?.(new Error("backend unavailable"));
-    await waitFor(() => expect(screen.getByText("API unavailable")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("API 暂不可用")).toBeInTheDocument());
 
     cleanup();
     window.history.replaceState({}, "", "/assets/" + assetId);
@@ -595,7 +595,7 @@ describe("Asset Intelligence Product View V0", () => {
       })
     );
     render(<App />);
-    expect(await screen.findByText("No Asset Intelligence evidence")).toBeInTheDocument();
+    expect(await screen.findByText("暂无标的情报证据")).toBeInTheDocument();
   });
 
   it("preserves listing identity in the Asset Detail route", async () => {
@@ -617,10 +617,10 @@ describe("Asset Intelligence Product View V0", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "纳履而去" })).toBeInTheDocument();
-    expect(screen.getByText("Observed Attention is distinct from persisted Opinion.")).toBeInTheDocument();
-    expect(screen.getByText("Attention-only assets")).toBeInTheDocument();
-    expect(screen.getByText("BULLISH")).toBeInTheDocument();
-    expect(screen.getAllByText("CHANGED").length).toBeGreaterThan(0);
+    expect(screen.getByText("观察到的关注动态与已持久化观点是两类不同证据。")).toBeInTheDocument();
+    expect(screen.getAllByText("仅关注动态标的").length).toBeGreaterThan(0);
+    expect(screen.getByText("看好")).toBeInTheDocument();
+    expect(screen.getAllByText("投资逻辑变化").length).toBeGreaterThan(0);
     expect(
       fetchMock.mock.calls.filter(([input]) => String(input) === "/api/intelligence/investors/investor-life/view")
     ).toHaveLength(1);
@@ -664,7 +664,7 @@ describe("Asset Intelligence Product View V0", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("No observed Investor evidence")).toBeInTheDocument();
+    expect(await screen.findByText("暂无已观察的投资者证据")).toBeInTheDocument();
     expect(screen.queryByText("No Intelligence")).not.toBeInTheDocument();
   });
 
@@ -675,7 +675,7 @@ describe("Asset Intelligence Product View V0", () => {
     render(<App />);
 
     const investorLink = await screen.findByRole("link", {
-      name: "Open Investor Investor One"
+      name: "打开投资者 Investor One"
     });
     expect(investorLink).toHaveAttribute("href", "/investors/investor-1");
     act(() => fireEvent.click(investorLink));
@@ -698,7 +698,7 @@ describe("Asset Intelligence Product View V0", () => {
     render(<App />);
 
     const assetLinks = await screen.findAllByRole("link", {
-      name: "Open Asset 紫金矿业 SH:601899"
+      name: "打开标的 紫金矿业 SH:601899"
     });
     expect(assetLinks[0]).toHaveAttribute("href", "/assets/asset-zijin-sh");
     act(() => fireEvent.click(assetLinks[0]));
@@ -726,10 +726,10 @@ describe("Asset Intelligence Product View V0", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Forever" })).toBeInTheDocument();
-    expect(screen.getByText("No intelligence evidence is available for this Investor in the currently collected records.")).toBeInTheDocument();
-    expect(screen.getByText("Historical completeness is UNKNOWN; this state does not establish historical absence.")).toBeInTheDocument();
+    expect(screen.getByText("当前采集记录中暂无情报证据。")).toBeInTheDocument();
+    expect(screen.getByText("历史完整性未知；此状态不代表历史上不存在。")).toBeInTheDocument();
     expect(screen.queryByText("No investor")).not.toBeInTheDocument();
-    expect(screen.queryByText("API unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("API 暂不可用")).not.toBeInTheDocument();
   });
 
   it("falls back to a short Investor ID when the catalog cannot resolve a name", async () => {
@@ -752,7 +752,7 @@ describe("Asset Intelligence Product View V0", () => {
 
     render(<App />);
 
-    const fallbackLinks = await screen.findAllByRole("link", { name: /Open Investor Investor ID investor/ });
+    const fallbackLinks = await screen.findAllByRole("link", { name: /打开投资者 投资者编号 investor/ });
     expect(fallbackLinks.some((link) => link.getAttribute("href") === "/investors/investor-1")).toBe(true);
   });
 });

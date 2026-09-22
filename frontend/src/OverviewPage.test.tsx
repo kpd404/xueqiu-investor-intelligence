@@ -149,7 +149,7 @@ const healthyStatus: OperationalStatusResponse = {
 
 afterEach(cleanup);
 
-describe("Observed Intelligence Overview V0", () => {
+describe("已观察情报概览 V0", () => {
   it("loads universe facts, patterns, latest observed ordering, and data boundary", () => {
     render(
       <OverviewPage
@@ -161,14 +161,14 @@ describe("Observed Intelligence Overview V0", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Observed Intelligence Overview" })).toBeInTheDocument();
-    expect(screen.getByText("Historical completeness: UNKNOWN")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "已观察情报概览" })).toBeInTheDocument();
+    expect(screen.getByText("历史完整性：未知")).toBeInTheDocument();
     expect(document.querySelector(".overview-summary")).toHaveTextContent("6");
-    expect(screen.getAllByText("More monitored Investors have Attention evidence than structured Opinion evidence.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("关注动态覆盖的受监测投资者多于形成结构化观点的投资者。").length).toBeGreaterThan(0);
     expect(screen.queryByText("presence/order evidence supported", { exact: false })).not.toBeInTheDocument();
     const latestRows = Array.from(document.querySelectorAll(".latest-rows .overview-asset-row"));
     expect(latestRows[0]).toHaveTextContent("龙源电力");
-    expect(screen.getAllByRole("button", { name: "Open 龙源电力 HK:00916" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "打开 龙源电力 HK:00916" }).length).toBeGreaterThan(0);
   });
 
   it("links evidence patterns to Discovery and Assets to detail", () => {
@@ -184,22 +184,22 @@ describe("Observed Intelligence Overview V0", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Explore Shared Attention" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看 共同关注" }));
     expect(onOpenDiscovery).toHaveBeenCalledWith("attention=2");
-    fireEvent.click(screen.getByRole("button", { name: "Explore Direction Disagreement" }));
+    fireEvent.click(screen.getByRole("button", { name: "前往标的发现 →" }));
     expect(onOpenDiscovery).toHaveBeenCalledWith("cross=disagreement");
-    fireEvent.click(screen.getByRole("button", { name: "Explore Attention > Opinion" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看全部关注动态 > 观点 →" }));
     expect(onOpenDiscovery).toHaveBeenCalledWith("gap=attention_gt_opinion");
-    fireEvent.click(screen.getByRole("button", { name: "Explore Repeated Thesis" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看重复投资逻辑 →" }));
     expect(onOpenDiscovery).toHaveBeenCalledWith("thesis=repeated");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Open 龙源电力 HK:00916" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "打开 龙源电力 HK:00916" })[0]);
     expect(onOpenAsset).toHaveBeenCalledWith("asset-dragon");
     fireEvent.click(screen.getAllByRole("button", { name: /大唐发电.*HK:00991/ })[0]);
     expect(onOpenAsset).toHaveBeenCalledWith("asset-datang");
   });
 
-  it("keeps DIVERGENT, Attention > Opinion, and missing comparison facts explicit", () => {
+  it("keeps 观点分化, 关注动态 > 观点, and missing comparison facts explicit", () => {
     render(
       <OverviewPage
         assets={assets}
@@ -210,9 +210,9 @@ describe("Observed Intelligence Overview V0", () => {
       />
     );
 
-    expect(screen.getAllByText("DIVERGENT").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("ATTENTION > OPINION").length).toBeGreaterThan(0);
-    expect(screen.getByText("Missing Thesis Comparison · 1")).toBeInTheDocument();
+    expect(screen.getAllByText("观点分化").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("关注动态 > 观点").length).toBeGreaterThan(0);
+    expect(screen.getByText("缺少投资逻辑对比 · 1")).toBeInTheDocument();
     const body = document.body.textContent?.toLowerCase() ?? "";
     for (const prohibited of ["trending", "hot", "rising", "cooling", "momentum", "most important", "best idea", "opportunity", "recommended"]) {
       expect(body).not.toContain(prohibited);
@@ -229,7 +229,7 @@ describe("Observed Intelligence Overview V0", () => {
         onOpenDiscovery={vi.fn()}
       />
     );
-    expect(screen.getByLabelText("Loading Observed Intelligence Overview")).toBeInTheDocument();
+    expect(screen.getByLabelText("正在加载已观察情报概览")).toBeInTheDocument();
 
     cleanup();
     render(
@@ -241,7 +241,7 @@ describe("Observed Intelligence Overview V0", () => {
         onOpenDiscovery={vi.fn()}
       />
     );
-    expect(screen.getByText("API unavailable")).toBeInTheDocument();
+    expect(screen.getByText("API 暂不可用")).toBeInTheDocument();
     expect(screen.queryByText("No interest")).not.toBeInTheDocument();
   });
 
@@ -263,11 +263,11 @@ describe("Observed Intelligence Overview V0", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "Recent Intelligence" })).toBeInTheDocument();
-    expect(screen.getByText("Multiple investors surfaced this Asset")).toBeInTheDocument();
-    expect(screen.getByText("HIGH review priority")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "近期投资情报" })).toBeInTheDocument();
+    expect(screen.getByText("多位投资者关注了该标的")).toBeInTheDocument();
+    expect(screen.getByText("高级复核优先级")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Recent Intelligence" })).queryByText(
+      within(screen.getByRole("region", { name: "近期投资情报" })).queryByText(
         /investment rating|score|buy/i
       )
     ).not.toBeInTheDocument();
@@ -294,7 +294,7 @@ describe("Observed Intelligence Overview V0", () => {
     );
 
     expect(
-      screen.getByText("No intelligence items were surfaced in the current recent window.")
+      screen.getByText("近期窗口暂无已呈现的投资情报。")
     ).toBeInTheDocument();
     expect(screen.queryByText(/No investor activity|Nothing happened today/i)).not.toBeInTheDocument();
   });
@@ -314,8 +314,8 @@ describe("Observed Intelligence Overview V0", () => {
       />
     );
 
-    expect(screen.getByText("Data may be stale; showing the latest available intelligence.")).toBeInTheDocument();
-    expect(screen.getByText("Multiple investors surfaced this Asset")).toBeInTheDocument();
+    expect(screen.getByText("数据可能较旧；当前展示最近可用情报。")).toBeInTheDocument();
+    expect(screen.getByText("多位投资者关注了该标的")).toBeInTheDocument();
   });
 
   it("separates Feed API failure from refresh failure", () => {
@@ -333,7 +333,7 @@ describe("Observed Intelligence Overview V0", () => {
       />
     );
 
-    expect(screen.getByText("Recent intelligence is unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("近期投资情报暂不可用。")).toBeInTheDocument();
     expect(screen.queryByText("feed unavailable")).not.toBeInTheDocument();
   });
 });

@@ -25,8 +25,8 @@ function status(overrides: Partial<OperationalStatusResponse>): OperationalStatu
 describe("OperationalStatusIndicator", () => {
   it("shows healthy freshness in user language", () => {
     render(<OperationalStatusIndicator status={status({})} error={null} />);
-    expect(screen.getByText("Healthy")).toBeInTheDocument();
-    expect(screen.getByText("Data refreshed 12m ago")).toBeInTheDocument();
+    expect(screen.getByText("运行正常")).toBeInTheDocument();
+    expect(screen.getByText("数据刷新于 12分钟前")).toBeInTheDocument();
   });
 
   it("shows stale freshness without exposing implementation details", () => {
@@ -36,8 +36,8 @@ describe("OperationalStatusIndicator", () => {
         error={null}
       />
     );
-    expect(screen.getByText("Data stale")).toBeInTheDocument();
-    expect(screen.getByText("Data refreshed 2h ago")).toBeInTheDocument();
+    expect(screen.getByText("数据较旧")).toBeInTheDocument();
+    expect(screen.getByText("数据刷新于 2小时前")).toBeInTheDocument();
     expect(screen.queryByText(/CollectionRun|stage|Postgres/i)).not.toBeInTheDocument();
   });
 
@@ -52,7 +52,7 @@ describe("OperationalStatusIndicator", () => {
         error={null}
       />
     );
-    expect(screen.getByText("Xueqiu login required")).toBeInTheDocument();
+    expect(screen.getByText("需要重新登录雪球")).toBeInTheDocument();
   });
 
   it("translates CDP unavailability as an action", () => {
@@ -66,7 +66,7 @@ describe("OperationalStatusIndicator", () => {
         error={null}
       />
     );
-    expect(screen.getByText("Xueqiu login required")).toBeInTheDocument();
+    expect(screen.getByText("需要重新登录雪球")).toBeInTheDocument();
   });
 
   it("translates risk control", () => {
@@ -80,7 +80,7 @@ describe("OperationalStatusIndicator", () => {
         error={null}
       />
     );
-    expect(screen.getByText("Source temporarily limited")).toBeInTheDocument();
+    expect(screen.getByText("数据源暂时受限")).toBeInTheDocument();
   });
 
   it("translates generic refresh failure", () => {
@@ -94,7 +94,7 @@ describe("OperationalStatusIndicator", () => {
         error={null}
       />
     );
-    expect(screen.getByText("Refresh failed")).toBeInTheDocument();
+    expect(screen.getByText("刷新失败")).toBeInTheDocument();
   });
 
   it("shows unknown when no run exists", () => {
@@ -111,13 +111,13 @@ describe("OperationalStatusIndicator", () => {
         error={null}
       />
     );
-    expect(screen.getByText("Refresh status unknown")).toBeInTheDocument();
-    expect(screen.getByText("No successful refresh recorded")).toBeInTheDocument();
+    expect(screen.getByText("刷新状态未知")).toBeInTheDocument();
+    expect(screen.getByText("暂无成功刷新记录")).toBeInTheDocument();
   });
 
   it("shows a safe unavailable state when the status API fails", () => {
     render(<OperationalStatusIndicator status={null} error={new Error("network")} />);
-    expect(screen.getByText("Refresh status unavailable")).toBeInTheDocument();
+    expect(screen.getByText("刷新状态不可用")).toBeInTheDocument();
     expect(screen.queryByText("network")).not.toBeInTheDocument();
   });
 });

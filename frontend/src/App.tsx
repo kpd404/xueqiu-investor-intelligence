@@ -34,6 +34,7 @@ import {
   evidenceLabel,
   eventLabel,
   filterAssets,
+  formatEnum,
   formatLag,
   formatTime,
   limitationLabel,
@@ -133,7 +134,7 @@ export default function App() {
           if (!active) return;
           setRecentIntelligence([]);
           setRecentIntelligenceError(
-            error instanceof Error ? error : new Error("Recent intelligence unavailable")
+            error instanceof Error ? error : new Error("近期投资情报暂不可用")
           );
         })
         .finally(() => {
@@ -160,7 +161,7 @@ export default function App() {
         .catch((error: unknown) => {
           if (!active) return;
           setOperationalStatus(null);
-          setOperationalStatusError(error instanceof Error ? error : new Error("API unavailable"));
+          setOperationalStatusError(error instanceof Error ? error : new Error("API 暂不可用"));
         });
     };
     loadStatus();
@@ -183,7 +184,7 @@ export default function App() {
       .catch((error: unknown) => {
         if (active) {
           setInvestorCatalogError(
-            error instanceof Error ? error : new Error("API unavailable")
+            error instanceof Error ? error : new Error("API 暂不可用")
           );
         }
       })
@@ -205,7 +206,7 @@ export default function App() {
         setCatalogError(null);
       })
       .catch((error: unknown) => {
-        if (active) setCatalogError(error instanceof Error ? error : new Error("API unavailable"));
+        if (active) setCatalogError(error instanceof Error ? error : new Error("API 暂不可用"));
       })
       .finally(() => {
         if (active) setCatalogLoading(false);
@@ -234,7 +235,7 @@ export default function App() {
       .catch((error: unknown) => {
         if (!active) return;
         setView(null);
-        setViewError(error instanceof Error ? error : new Error("API unavailable"));
+        setViewError(error instanceof Error ? error : new Error("API 暂不可用"));
       })
       .finally(() => {
         if (active) setViewLoading(false);
@@ -262,7 +263,7 @@ export default function App() {
       .catch((error: unknown) => {
         if (!active) return;
         setInvestorView(null);
-        setInvestorViewError(error instanceof Error ? error : new Error("API unavailable"));
+        setInvestorViewError(error instanceof Error ? error : new Error("API 暂不可用"));
       })
       .finally(() => {
         if (active) setInvestorViewLoading(false);
@@ -300,19 +301,19 @@ export default function App() {
           </div>
           <div>
             <strong>SNOWBALL</strong>
-            <small>INTELLIGENCE</small>
+            <small>投资情报</small>
           </div>
         </div>
 
         <div className="sidebar-divider" />
-        <div className="sidebar-kicker">WORKSPACE</div>
+        <div className="sidebar-kicker">工作区</div>
         <button
           type="button"
           className={"sidebar-nav-item" + (route.overview ? " active" : "")}
           onClick={navigateToOverview}
         >
           <span className="nav-dot" />
-          Overview
+          概览
         </button>
         <button
           type="button"
@@ -320,7 +321,7 @@ export default function App() {
           onClick={() => navigateToDiscovery()}
         >
           <span className="nav-dot" />
-          Asset Discovery
+          标的发现
         </button>
         <button
           type="button"
@@ -329,7 +330,7 @@ export default function App() {
           onClick={() => navigateToAsset(assetId ?? assets[0]?.asset_id ?? "")}
         >
           <span className="nav-dot" />
-          Asset Intelligence
+          标的情报
         </button>
         <button
           type="button"
@@ -337,16 +338,16 @@ export default function App() {
           onClick={() => navigateToInvestors()}
         >
           <span className="nav-dot" />
-          Investor Intelligence
+          投资者洞察
         </button>
 
         <div className="asset-selector">
-          <label htmlFor="asset-select">Jump to Asset</label>
+          <label htmlFor="asset-select">跳转到标的</label>
           <input
             id="asset-search"
-            aria-label="Search assets"
+            aria-label="搜索标的"
             type="search"
-            placeholder="Search name, market, symbol"
+            placeholder="搜索名称、市场或代码"
             value={assetQuery}
             onChange={(event) => setAssetQuery(event.target.value)}
           />
@@ -357,7 +358,7 @@ export default function App() {
             disabled={catalogLoading || assets.length === 0}
           >
             <option value="" disabled>
-              {catalogLoading ? "Loading assets…" : "Select an asset"}
+              {catalogLoading ? "正在加载标的…" : "选择标的"}
             </option>
             {visibleAssets.map((asset) => (
               <option key={asset.asset_id} value={asset.asset_id}>
@@ -367,15 +368,15 @@ export default function App() {
           </select>
           <span className="selector-count">
             {catalogLoading
-              ? "Syncing evidence…"
+              ? "正在同步证据…"
               : visibleAssets.length === assets.length
-                ? assets.length + " evidence-bearing assets"
-                : visibleAssets.length + " of " + assets.length + " assets"}
+                ? assets.length + " 个有证据标的"
+                : visibleAssets.length + " / " + assets.length + " 个标的"}
           </span>
         </div>
 
         <div className="quick-list">
-          <div className="sidebar-kicker">QUICK ACCESS</div>
+          <div className="sidebar-kicker">快速访问</div>
           {visibleAssets.slice(0, 7).map((asset) => (
             <button
               className={"quick-item" + (asset.asset_id === assetId ? " selected" : "")}
@@ -393,8 +394,8 @@ export default function App() {
         <div className="sidebar-footer">
           <div className="status-light" />
           <div>
-            <strong>Read-only evidence layer</strong>
-            <span>Production API · V0</span>
+            <strong>只读证据层</strong>
+            <span>生产 API · V0</span>
           </div>
         </div>
       </aside>
@@ -402,16 +403,16 @@ export default function App() {
       <main className="main-content">
         <div className="topbar">
           <div className="breadcrumb">
-            <span>INTELLIGENCE</span>
+            <span>投资情报</span>
             <b>/</b>
             <span className="muted">
               {route.overview
-                ? "OVERVIEW"
+                ? "概览"
                 : route.discovery
-                  ? "ASSET DISCOVERY"
+                  ? "标的发现"
                   : route.investors
-                    ? "INVESTOR INTELLIGENCE"
-                    : "ASSET VIEW"}
+                    ? "投资者洞察"
+                    : "标的视图"}
             </span>
           </div>
           <div className="topbar-status">
@@ -420,7 +421,7 @@ export default function App() {
               error={operationalStatusError}
             />
             <span className="live-dot" />
-            Observed evidence
+            已观察证据
             <span className="topbar-separator" />
             PostgreSQL
           </div>
@@ -469,13 +470,13 @@ export default function App() {
               }
               title={
                 investorViewError instanceof ApiError && investorViewError.status === 404
-                  ? "No observed Investor evidence"
-                  : "API unavailable"
+                  ? "暂无已观察的投资者证据"
+                  : "API 暂不可用"
               }
               description={
                 investorViewError instanceof ApiError && investorViewError.status === 404
-                  ? "This page only presents effective observed Attention or Opinion evidence."
-                  : "The read-only Investor API returned an unexpected response. No conclusion was inferred."
+                  ? "此页面仅展示当前有效的关注动态或观点证据。"
+                  : "只读投资者 API 返回了异常响应，系统未推断结论。"
               }
             />
           ) : investorView ? (
@@ -483,15 +484,15 @@ export default function App() {
           ) : (
             <PageState
               kind="empty"
-              title="No observed Investor evidence"
-              description="There is no effective observed evidence for this Investor in the current window."
+              title="暂无已观察的投资者证据"
+              description="当前窗口中没有该投资者的有效已观察证据。"
             />
           )
         ) : catalogError && !assetId ? (
           <PageState
             kind="error"
-            title="API unavailable"
-            description="The Asset Intelligence API could not be reached. Try again when the local backend is running."
+            title="API 暂不可用"
+            description="标的情报 API 无法访问，请确认本地后端运行后重试。"
           />
         ) : viewLoading ? (
           <LoadingState />
@@ -500,13 +501,13 @@ export default function App() {
             kind={viewError instanceof ApiError && viewError.status === 404 ? "empty" : "error"}
             title={
               viewError instanceof ApiError && viewError.status === 404
-                ? "No Asset Intelligence evidence"
-                : "API unavailable"
+                ? "暂无标的情报证据"
+                : "API 暂不可用"
             }
             description={
               viewError instanceof ApiError && viewError.status === 404
-                ? "This Asset has no Product View in the current observed database window."
-                : "The read-only API returned an unexpected response. No intelligence has been inferred."
+                ? "当前数据库窗口中没有该标的的产品视图。"
+                : "只读 API 返回了异常响应，系统未推断任何情报。"
             }
           />
         ) : view ? (
@@ -518,14 +519,14 @@ export default function App() {
         ) : selectedAsset ? (
           <PageState
             kind="empty"
-            title="No evidence in selected window"
-            description="There is no effective Attention or Opinion evidence for this Asset in the selected window."
+            title="当前窗口暂无证据"
+            description="所选窗口中没有该标的的有效关注动态或观点证据。"
           />
         ) : (
           <PageState
             kind="empty"
-            title="Choose an Asset"
-            description="Select an evidence-bearing Asset from the left to inspect its observed intelligence."
+            title="选择一个标的"
+            description="从左侧选择有证据记录的标的，查看已观察情报。"
           />
         )}
       </main>
@@ -557,34 +558,34 @@ function operationalStatusLabel(
   status: OperationalStatusResponse | null,
   error: Error | null
 ): string {
-  if (error || !status) return "Refresh status unavailable";
-  if (status.status === "HEALTHY") return "Healthy";
-  if (status.status === "STALE") return "Data stale";
+  if (error || !status) return "刷新状态不可用";
+  if (status.status === "HEALTHY") return "运行正常";
+  if (status.status === "STALE") return "数据较旧";
   if (status.status === "ACTION_REQUIRED") {
     return status.latest_failure_code === "AUTH_REQUIRED" || status.latest_failure_code === "CDP_UNAVAILABLE"
-      ? "Xueqiu login required"
-      : "Refresh failed";
+      ? "需要重新登录雪球"
+      : "刷新失败";
   }
-  if (status.status === "SOURCE_LIMITED") return "Source temporarily limited";
-  return "Refresh status unknown";
+  if (status.status === "SOURCE_LIMITED") return "数据源暂时受限";
+  return "刷新状态未知";
 }
 
 function operationalStatusDetail(
   status: OperationalStatusResponse | null,
   error: Error | null
 ): string {
-  if (error || !status) return "Operational status could not be loaded";
-  if (status.freshness_age_seconds === null) return "No successful refresh recorded";
-  return "Data refreshed " + formatAge(status.freshness_age_seconds) + " ago";
+  if (error || !status) return "无法加载运行状态";
+  if (status.freshness_age_seconds === null || !Number.isFinite(status.freshness_age_seconds)) return "暂无成功刷新记录";
+  return "数据刷新于 " + formatAge(status.freshness_age_seconds) + "前";
 }
 
 function formatAge(seconds: number): string {
   const minutes = Math.max(0, Math.floor(seconds / 60));
-  if (minutes < 1) return "less than 1m";
-  if (minutes < 60) return minutes + "m";
+  if (minutes < 1) return "不到 1 分钟";
+  if (minutes < 60) return minutes + "分钟";
   const hours = Math.floor(minutes / 60);
   const remaining = minutes % 60;
-  return hours + "h" + (remaining ? " " + remaining + "m" : "");
+  return hours + "小时" + (remaining ? " " + remaining + "分钟" : "");
 }
 
 function AssetPage({
@@ -608,7 +609,7 @@ function AssetPage({
         <div>
           <div className="eyebrow">
             <span className="eyebrow-line" />
-            ASSET INTELLIGENCE / OBSERVED EVIDENCE
+            标的情报 / 已观察证据
           </div>
           <div className="asset-title-row">
             <h1>{view.asset_name}</h1>
@@ -617,26 +618,26 @@ function AssetPage({
             </span>
           </div>
           <p className="asset-subtitle">
-            A monitored-sample view of attention, opinions, and thesis evidence over time.
+            展示监测样本中关注动态、观点与投资逻辑证据的时间变化。
           </p>
         </div>
         <div className="boundary-card">
-          <span className="boundary-label">HISTORICAL COMPLETENESS</span>
-          <strong>UNKNOWN</strong>
-          <span className="boundary-note">Observed sequence only</span>
+          <span className="boundary-label">历史完整性</span>
+          <strong>未知</strong>
+          <span className="boundary-note">仅展示观察顺序</span>
         </div>
       </header>
 
       <div className="metric-strip">
-        <Metric label="Attention Investors" value={view.attention_summary.attention_investor_count} note="Observed breadth" />
-        <Metric label="Opinion Investors" value={opinionInvestorCount} note="Structured viewpoints" />
-        <Metric label="Attention Occurrences" value={view.attention_summary.attention_occurrence_count} note="Effective evidence" />
-        <Metric label="Opinion Rows" value={opinionCount} note="Production-effective" />
-        <Metric label="Temporal Edges" value={view.attention_summary.temporal_edges.length} note="Observed order" />
+        <Metric label="关注动态投资者" value={view.attention_summary.attention_investor_count} note="已观察覆盖" />
+        <Metric label="观点投资者" value={opinionInvestorCount} note="结构化观点" />
+        <Metric label="关注动态发生次数" value={view.attention_summary.attention_occurrence_count} note="有效证据" />
+        <Metric label="观点记录" value={opinionCount} note="生产有效" />
+        <Metric label="时间关系" value={view.attention_summary.temporal_edges.length} note="观察顺序" />
         <Metric
-          label="Missing Comparison"
+          label="缺少对比"
           value={missingComparisons}
-          note={missingComparisons ? "Needs review" : "No known gap"}
+          note={missingComparisons ? "需要复核" : "暂无已知缺口"}
           accent={missingComparisons ? "amber" : undefined}
         />
       </div>
@@ -644,8 +645,8 @@ function AssetPage({
       <section className="panel attention-panel">
         <SectionHeading
           number="01"
-          title="Observed Attention"
-          subtitle="First observed in monitored sample"
+          title="已观察关注动态"
+          subtitle="在监测样本中首次观察到"
           action={
             <span className="panel-window">
               {formatTime(view.window_start)} — {formatTime(view.window_end)}
@@ -656,19 +657,19 @@ function AssetPage({
           <>
             <div className="sequence-summary">
               <div>
-                <span className="summary-label">OBSERVED ORDER</span>
-                <strong>{sequence.investor_count} Investors</strong>
+                <span className="summary-label">观察顺序</span>
+                <strong>{sequence.investor_count} 位投资者</strong>
               </div>
               <div>
-                <span className="summary-label">TEMPORAL SPAN</span>
+                <span className="summary-label">时间跨度</span>
                 <strong>
                   {view.attention_summary.observed_span_days !== null
-                    ? view.attention_summary.observed_span_days.toFixed(2) + "d"
+                    ? view.attention_summary.observed_span_days.toFixed(2) + "天"
                     : "—"}
                 </strong>
               </div>
               <div className="sequence-note">
-                Presence and timing only. Equal timestamps are displayed as simultaneous, not causal.
+                仅展示是否出现及时间顺序。相同时间戳显示为同时观察，不代表因果关系。
               </div>
             </div>
             <div className="sequence-track">
@@ -681,7 +682,7 @@ function AssetPage({
                       </span>
                       <span>
                         {observation.lag_days === 0
-                          ? "Observed at same time"
+                          ? "同时观察到"
                           : formatLag(observation.lag_days)}
                       </span>
                     </div>
@@ -695,16 +696,16 @@ function AssetPage({
             </div>
           </>
         ) : (
-          <EmptyInline text="No multi-investor observed sequence is available for this Asset." />
+          <EmptyInline text="该标的暂无多投资者观察顺序。" />
         )}
       </section>
 
       <section className="panel investor-panel">
         <SectionHeading
           number="02"
-          title="Investor Views"
-          subtitle="Independent evidence by Investor"
-          action={<span className="section-count">{view.investor_views.length} PARTICIPANTS</span>}
+          title="投资者观点"
+          subtitle="按投资者拆分的独立证据"
+          action={<span className="section-count">{view.investor_views.length} 位参与者</span>}
         />
         {view.investor_views.length ? (
           <div className="investor-grid">
@@ -713,17 +714,17 @@ function AssetPage({
             ))}
           </div>
         ) : (
-          <EmptyInline text="No Investor evidence is available for this Asset." />
+          <EmptyInline text="该标的暂无投资者证据。" />
         )}
       </section>
 
       <section className="context-grid">
         <div className="panel context-panel">
-          <SectionHeading number="03" title="Cross-Investor Context" subtitle="Existing evidence, no new scoring" />
+          <SectionHeading number="03" title="跨投资者背景" subtitle="已有证据，不新增评分" />
           <div className="context-cards">
             <ContextCard
-              label="DIRECTIONAL ALIGNMENT"
-              value={view.alignment?.directional_alignment_state ?? "UNAVAILABLE"}
+              label="方向一致性"
+              value={view.alignment?.directional_alignment_state ?? "不可用"}
               tone={
                 view.alignment?.directional_alignment_state === "MIXED_DIRECTION"
                   ? "split"
@@ -735,8 +736,8 @@ function AssetPage({
               )}
             />
             <ContextCard
-              label="CONSENSUS V2"
-              value={view.consensus?.consensus_state ?? "UNAVAILABLE"}
+              label="共识 V2"
+              value={view.consensus?.consensus_state ?? "不可用"}
               tone={view.consensus?.consensus_state === "DIVERGENT" ? "split" : "teal"}
               description={contextDescription(view.consensus?.consensus_state, "consensus")}
             />
@@ -744,10 +745,10 @@ function AssetPage({
           <div className="coverage-callout">
             <div className="coverage-icon">◎</div>
             <div>
-              <strong>Attention breadth ≠ Opinion breadth</strong>
+              <strong>关注覆盖 ≠ 观点覆盖</strong>
               <span>
-                {view.attention_summary.attention_investor_count} Investors observed attention;{" "}
-                {opinionInvestorCount} have effective Opinions.
+                {view.attention_summary.attention_investor_count} 位投资者出现关注动态；{" "}
+                {opinionInvestorCount} 位投资者有有效观点。
               </span>
             </div>
           </div>
@@ -759,16 +760,16 @@ function AssetPage({
       <section className="panel timeline-panel">
         <SectionHeading
           number="04"
-          title="Unified Timeline"
-          subtitle="Evidence events ordered by published time"
-          action={<span className="timeline-legend">Serialization order ≠ causal order</span>}
+          title="统一时间线"
+          subtitle="按发布时间排序的证据事件"
+          action={<span className="timeline-legend">序列化顺序 ≠ 因果顺序</span>}
         />
         <UnifiedTimeline timeline={timeline} />
       </section>
 
       <footer className="page-footer">
-        <span>Snowball Intelligence · read-only evidence view</span>
-        <span>Latest direction means latest observed Opinion only.</span>
+        <span>雪球情报 · 只读证据视图</span>
+        <span>最近方向仅表示最近观察到的观点。</span>
       </footer>
     </div>
   );
@@ -835,7 +836,7 @@ function AttentionNode({
       <div className="node-body">
         <div className="node-topline">
           <span className="node-state">
-            {first ? "FIRST OBSERVED" : simultaneous ? "OBSERVED AT SAME TIME" : "OBSERVED LATER"}
+            {first ? "首次观察" : simultaneous ? "同时观察" : "之后观察"}
           </span>
           {observation.first_opinion_direction && (
             <DirectionPill direction={observation.first_opinion_direction} />
@@ -876,7 +877,7 @@ function InvestorCard({ investor, index }: { investor: InvestorView; index: numb
           <span>{relationLabel(investor.attention_opinion_relation)}</span>
         </div>
         <div className="investor-latest">
-          <span className="latest-label">LATEST OBSERVED OPINION</span>
+          <span className="latest-label">最近观察到的观点</span>
           <DirectionPill direction={investor.latest_observed_direction} />
           <small className="latest-time">{formatTime(investor.latest_opinion_time)}</small>
         </div>
@@ -886,89 +887,89 @@ function InvestorCard({ investor, index }: { investor: InvestorView; index: numb
       <div className="investor-quick-summary">
         <div>
           <strong>{investor.attention_occurrence_count}</strong>
-          <span>Attention</span>
+          <span>关注动态</span>
         </div>
         <div>
           <strong>{investor.opinion_count}</strong>
-          <span>Opinions</span>
+          <span>观点</span>
         </div>
         <div>
           <strong>{investor.thesis_change_count}</strong>
-          <span>Thesis changes</span>
+          <span>投资逻辑变化</span>
         </div>
         <div>
           <strong>{formatTime(investor.first_attention_time)}</strong>
-          <span>First observed</span>
+          <span>首次观察</span>
         </div>
       </div>
 
       <div id={detailId} className="investor-card-body">
         <div className="investor-stat-grid">
-          <Stat label="Attention" value={String(investor.attention_occurrence_count)} />
-          <Stat label="Opinions" value={String(investor.opinion_count)} />
-          <Stat label="Thesis changes" value={String(investor.thesis_change_count)} />
-          <Stat label="Reversals" value={String(investor.reversal_count)} accent={investor.reversal_count ? "coral" : undefined} />
+          <Stat label="关注动态" value={String(investor.attention_occurrence_count)} />
+          <Stat label="观点" value={String(investor.opinion_count)} />
+          <Stat label="投资逻辑变化" value={String(investor.thesis_change_count)} />
+          <Stat label="反转" value={String(investor.reversal_count)} accent={investor.reversal_count ? "coral" : undefined} />
         </div>
 
         <div className="evidence-block">
-          <div className="block-label">ATTENTION</div>
+          <div className="block-label">关注动态</div>
           <div className="attention-detail-row">
-            <span>First observed</span>
+            <span>首次观察</span>
             <strong>{formatTime(investor.first_attention_time)}</strong>
           </div>
           <div className="attention-detail-row">
-            <span>Evidence</span>
+            <span>证据来源</span>
             <span className="chip-row compact">
               {investor.attention_evidence_types.length
                 ? investor.attention_evidence_types.map((evidence) => (
                     <EvidenceChip evidence={evidence} key={evidence} />
                   ))
-                : "No Attention"}
+                : "暂无关注动态"}
             </span>
           </div>
         </div>
 
         <div className="evidence-block">
-          <div className="block-label">OPINION</div>
+          <div className="block-label">观点</div>
           <div className="attention-detail-row">
-            <span>First → latest</span>
+            <span>首次 → 最近</span>
             <strong>
               {formatTime(investor.first_opinion_time)} <i>→</i> {formatTime(investor.latest_opinion_time)}
             </strong>
           </div>
           <div className="attention-detail-row">
-            <span>Latest observed direction</span>
+            <span>最近观察到的方向</span>
             <DirectionPill direction={investor.latest_observed_direction} />
           </div>
         </div>
 
         <div className="evidence-block thesis-block">
-          <div className="block-label">THESIS</div>
+          <div className="block-label">投资逻辑</div>
           <div className="thesis-summary-row">
             <div>
-              <span>Changed</span>
+              <span>已变化</span>
               <strong>{investor.changed_count}</strong>
             </div>
             <div>
-              <span>Extended</span>
+              <span>已扩展</span>
               <strong>{investor.extended_count}</strong>
             </div>
             <div>
-              <span>Latest semantic</span>
+              <span>最近语义</span>
               <strong>{thesisLabel(investor.latest_thesis_change_type)}</strong>
             </div>
           </div>
           {investor.missing_thesis_comparison_count > 0 && (
             <div className="comparison-note">
               <span className="note-icon">!</span>
-              <span>{investor.missing_thesis_comparison_count} comparison unavailable</span>
+              <span>{investor.missing_thesis_comparison_count} 次对比不可用</span>
             </div>
           )}
         </div>
 
         {timeline && (
           <div className="thesis-timeline">
-            <div className="block-label">THESIS EVOLUTION TIMELINE</div>
+            <div className="block-label">投资逻辑演变时间线</div>
             <div className="mini-timeline">
               {timeline.entries.map((entry) => (
                 <div className="mini-timeline-row" key={entry.opinion_id}>
@@ -983,16 +984,16 @@ function InvestorCard({ investor, index }: { investor: InvestorView; index: numb
                     </div>
                     <div className="mini-meta">
                       {entry.thesis_comparison_status === "MISSING_THESIS_COMPARISON" ? (
-                        <span className="comparison-unavailable">Comparison unavailable</span>
+                        <span className="comparison-unavailable">无法进行对比</span>
                       ) : (
-                        <span>{entry.direction_transition.replaceAll("_", " ")}</span>
+                        <span>{formatEnum(entry.direction_transition)}</span>
                       )}
                     </div>
                     {(entry.thesis.length > 0 || entry.catalysts.length > 0 || entry.risks.length > 0) && (
                       <div className="thesis-text">
-                        {entry.thesis.length > 0 && <span><b>Thesis</b> {entry.thesis.join(" · ")}</span>}
-                        {entry.catalysts.length > 0 && <span><b>Catalyst</b> {entry.catalysts.join(" · ")}</span>}
-                        {entry.risks.length > 0 && <span><b>Risk</b> {entry.risks.join(" · ")}</span>}
+                        {entry.thesis.length > 0 && <span><b>投资逻辑</b> {entry.thesis.join(" · ")}</span>}
+                        {entry.catalysts.length > 0 && <span><b>催化因素</b> {entry.catalysts.join(" · ")}</span>}
+                        {entry.risks.length > 0 && <span><b>风险</b> {entry.risks.join(" · ")}</span>}
                       </div>
                     )}
                   </div>
@@ -1045,7 +1046,7 @@ function ContextCard({
         <span>{label}</span>
         <i className="context-symbol">{tone === "split" ? "◐" : "◌"}</i>
       </div>
-      <strong>{value.replaceAll("_", " ")}</strong>
+      <strong>{formatEnum(value)}</strong>
       <p>{description}</p>
     </div>
   );
@@ -1076,16 +1077,16 @@ function DataQualityPanel({ view }: { view: CombinedAssetView }) {
   }
   return (
     <div className="panel quality-panel">
-      <SectionHeading number="Q" title="Data Quality" subtitle="Limitations stay visible" />
+      <SectionHeading number="Q" title="数据质量" subtitle="明确展示数据边界" />
       <div className="quality-status">
         <span className="quality-icon">◈</span>
         <div>
-          <strong>Observed evidence boundary</strong>
-          <span>Historical completeness: UNKNOWN</span>
+          <strong>已观察证据边界</strong>
+          <span>历史完整性：未知</span>
         </div>
       </div>
-      <QualityGroup title="PERSISTENT LIMITATIONS" flags={persistentFlags} />
-      <QualityGroup title="ASSET-SPECIFIC GAPS" flags={assetFlags} />
+      <QualityGroup title="持续性限制" flags={persistentFlags} />
+      <QualityGroup title="标的特定缺口" flags={assetFlags} />
     </div>
   );
 }
@@ -1104,7 +1105,7 @@ function QualityGroup({ title, flags }: { title: string; flags: string[] }) {
           ))}
         </div>
       ) : (
-        <div className="quality-none">None observed</div>
+        <div className="quality-none">暂无观察记录</div>
       )}
     </div>
   );
@@ -1113,19 +1114,19 @@ function QualityGroup({ title, flags }: { title: string; flags: string[] }) {
 function contextDescription(value: string | undefined, kind: "alignment" | "consensus"): string {
   if (!value) {
     return kind === "alignment"
-      ? "No active cross-investor lineage for this window."
-      : "No active Consensus lineage for this window.";
+      ? "当前窗口暂无活跃的跨投资者谱系。"
+      : "当前窗口暂无活跃的共识谱系。";
   }
-  if (value === "MIXED_DIRECTION") return "Observed Opinions span multiple direction sides.";
+  if (value === "MIXED_DIRECTION") return "已观察观点横跨多个方向。";
   if (value === "DIVERGENT") {
-    return "Observed latest Opinions include both bullish-side and bearish-side directions.";
+    return "最近观察到的观点同时包含积极与谨慎方向。";
   }
   if (value === "INSUFFICIENT_EVIDENCE") {
-    return "Current Opinion coverage does not meet the active consensus evidence requirement.";
+    return "当前观点覆盖未达到共识证据要求。";
   }
   return kind === "alignment"
-    ? "Existing Alignment evidence for this observed window."
-    : "Existing Consensus evidence for this observed window.";
+    ? "当前已观察窗口已有方向一致性证据。"
+    : "当前已观察窗口已有共识证据。";
 }
 
 type TimelineFilter = "ALL" | "ATTENTION" | "OPINION" | "THESIS";
@@ -1141,16 +1142,16 @@ function UnifiedTimeline({ timeline }: { timeline: TimelineResponse }) {
   });
   const visibleEvents = showAll ? filteredEvents : filteredEvents.slice(0, 12);
   const filters: Array<[TimelineFilter, string]> = [
-    ["ALL", "All"],
-    ["ATTENTION", "Attention"],
-    ["OPINION", "Opinion"],
-    ["THESIS", "Thesis"]
+    ["ALL", "全部"],
+    ["ATTENTION", "关注动态"],
+    ["OPINION", "观点"],
+    ["THESIS", "投资逻辑"]
   ];
 
   return (
     <>
       <div className="timeline-controls">
-        <div className="timeline-filters" role="group" aria-label="Timeline event filters">
+        <div className="timeline-filters" role="group" aria-label="时间线事件筛选">
           {filters.map(([value, label]) => (
             <button
               type="button"
@@ -1168,7 +1169,7 @@ function UnifiedTimeline({ timeline }: { timeline: TimelineResponse }) {
         </div>
         <div className="timeline-control-meta">
           <span>
-            Showing {visibleEvents.length} of {filteredEvents.length}
+            正在显示 {visibleEvents.length} / {filteredEvents.length}
           </span>
           {filteredEvents.length > 12 && (
             <button
@@ -1176,7 +1177,7 @@ function UnifiedTimeline({ timeline }: { timeline: TimelineResponse }) {
               className="show-all-button"
               onClick={() => setShowAll((value) => !value)}
             >
-              {showAll ? "Show first 12" : "Show all"}
+              {showAll ? "显示前 12 条" : "显示全部"}
             </button>
           )}
         </div>
@@ -1188,7 +1189,7 @@ function UnifiedTimeline({ timeline }: { timeline: TimelineResponse }) {
           ))}
         </div>
       ) : (
-        <EmptyInline text="No timeline events match this filter." />
+        <EmptyInline text="没有符合当前筛选的时间线事件。" />
       )}
     </>
   );
@@ -1216,17 +1217,17 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
           ))}
         </div>
         <details className="provenance-details">
-          <summary>Evidence details</summary>
+          <summary>证据详情</summary>
           <div className="provenance-grid">
-            {event.raw_event_id && <Provenance label="RawEvent" value={event.raw_event_id} />}
-            {event.opinion_id && <Provenance label="Opinion" value={event.opinion_id} />}
-            {event.event_analysis_id && <Provenance label="Analysis" value={event.event_analysis_id} />}
+            {event.raw_event_id && <Provenance label="采集事件" value={event.raw_event_id} />}
+            {event.opinion_id && <Provenance label="观点" value={event.opinion_id} />}
+            {event.event_analysis_id && <Provenance label="分析结果" value={event.event_analysis_id} />}
             {event.attention_occurrence_id && (
-              <Provenance label="Attention" value={event.attention_occurrence_id} />
+              <Provenance label="关注动态" value={event.attention_occurrence_id} />
             )}
-            {event.thesis_change_id && <Provenance label="ThesisChange" value={event.thesis_change_id} />}
+            {event.thesis_change_id && <Provenance label="投资逻辑变化" value={event.thesis_change_id} />}
             {event.predecessor_opinion_id && (
-              <Provenance label="Predecessor" value={event.predecessor_opinion_id} />
+              <Provenance label="前置观点" value={event.predecessor_opinion_id} />
             )}
           </div>
         </details>
@@ -1260,7 +1261,7 @@ function PageState({
   return (
     <div className="page-state">
       <div className={"state-symbol " + kind}>{kind === "error" ? "!" : "○"}</div>
-      <span className="eyebrow">{kind === "error" ? "SYSTEM MESSAGE" : "NO OBSERVED EVIDENCE"}</span>
+      <span className="eyebrow">{kind === "error" ? "系统提示" : "暂无已观察证据"}</span>
       <h1>{title}</h1>
       <p>{description}</p>
     </div>
@@ -1290,11 +1291,11 @@ function LoadingState() {
 
 function relationLabel(relation: InvestorView["attention_opinion_relation"]): string {
   const labels: Record<InvestorView["attention_opinion_relation"], string> = {
-    OPINION_AT_FIRST_ATTENTION: "Opinion at first Attention",
-    OPINION_AFTER_ATTENTION: "Opinion after Attention",
-    ATTENTION_WITHOUT_OPINION: "Attention without Opinion",
-    OPINION_WITHOUT_PRIOR_ATTENTION: "Opinion without prior Attention",
-    SIMULTANEOUS: "Observed simultaneously"
+    OPINION_AT_FIRST_ATTENTION: "首次关注时已有观点",
+    OPINION_AFTER_ATTENTION: "关注后形成观点",
+    ATTENTION_WITHOUT_OPINION: "有关注、暂无观点",
+    OPINION_WITHOUT_PRIOR_ATTENTION: "有观点、无先前关注",
+    SIMULTANEOUS: "同时观察到"
   };
   return labels[relation];
 }

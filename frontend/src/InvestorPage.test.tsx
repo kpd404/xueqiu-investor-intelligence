@@ -231,17 +231,17 @@ function renderInvestorDetailHarness(initialQuery = "") {
   return { onAsset, onInvestor, onQuery };
 }
 
-describe("Investor Intelligence V0", () => {
+describe("投资者洞察 V0", () => {
   it("loads the selector, searches Investors, and opens the selected view", () => {
     const { onOpen, onQuery } = renderInvestorDiscoveryHarness();
 
-    expect(screen.getByRole("heading", { name: "Investor Intelligence" })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search Investor name" }), {
+    expect(screen.getByRole("heading", { name: "投资者洞察" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索投资者名称" }), {
       target: { value: "爱投资" }
     });
-    expect(screen.getByRole("button", { name: "Open Investor 爱投资的小人书" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open Investor 人生是历练" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open Investor 爱投资的小人书" }));
+    expect(screen.getByRole("button", { name: "打开投资者 爱投资的小人书" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开投资者 人生是历练" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "打开投资者 爱投资的小人书" }));
     expect(onOpen).toHaveBeenCalledWith("investor-love");
     expect(onQuery).toHaveBeenCalledWith("q=%E7%88%B1%E6%8A%95%E8%B5%84");
   });
@@ -259,42 +259,42 @@ describe("Investor Intelligence V0", () => {
     );
 
     expect(screen.getByRole("heading", { name: "人生是历练" })).toBeInTheDocument();
-    expect(screen.getAllByText("Historical completeness: UNKNOWN").length).toBeGreaterThan(0);
-    expect(document.querySelector(".investor-breadth-content")).toHaveTextContent("4 Assets");
-    expect(document.querySelector(".investor-breadth-content")).toHaveTextContent("3 Assets");
-    expect(screen.getByRole("button", { name: "Open Asset 山东黄金 HK:01787" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Asset 山东黄金 SH:600547" })).toBeInTheDocument();
-    expect(screen.getByText("1 comparison unavailable")).toBeInTheDocument();
-    expect(screen.getAllByText("BULLISH").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("历史完整性：未知").length).toBeGreaterThan(0);
+    expect(document.querySelector(".investor-breadth-content")).toHaveTextContent("4 个标的");
+    expect(document.querySelector(".investor-breadth-content")).toHaveTextContent("3 个标的");
+    expect(screen.getByRole("button", { name: "打开标的 山东黄金 HK:01787" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开标的 山东黄金 SH:600547" })).toBeInTheDocument();
+    expect(screen.getByText("1 次对比不可用")).toBeInTheDocument();
+    expect(screen.getAllByText("看好").length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain("Current belief");
-    fireEvent.click(screen.getByRole("button", { name: "Open Asset 山东黄金 HK:01787" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开标的 山东黄金 HK:01787" }));
     expect(onAsset).toHaveBeenCalledWith("asset-gold-hk");
   });
 
   it("supports Asset filters, sorting, overlap sorting, and URL state", () => {
     const { onQuery } = renderInvestorDetailHarness();
 
-    fireEvent.change(screen.getByLabelText("Filter"), { target: { value: "opinion" } });
-    expect(screen.queryByRole("button", { name: "Open Asset 山东黄金 SH:600547" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("筛选"), { target: { value: "opinion" } });
+    expect(screen.queryByRole("button", { name: "打开标的 山东黄金 SH:600547" })).not.toBeInTheDocument();
     expect(onQuery).toHaveBeenCalledWith("filter=opinion");
-    fireEvent.change(screen.getByLabelText("Filter"), { target: { value: "attention" } });
-    expect(screen.getByRole("button", { name: "Open Asset 山东黄金 SH:600547" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter"), { target: { value: "repeated" } });
-    expect(screen.getByRole("button", { name: "Open Asset 大唐发电 HK:00991" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter"), { target: { value: "changed" } });
-    expect(screen.getByRole("button", { name: "Open Asset 大唐发电 HK:00991" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter"), { target: { value: "shared_attention" } });
-    expect(screen.getByRole("button", { name: "Open Asset 山东黄金 SH:600547" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter"), { target: { value: "reversal" } });
-    expect(screen.getByRole("button", { name: "Open Asset 山东黄金 HK:01787" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "opinion" } });
+    fireEvent.change(screen.getByLabelText("筛选"), { target: { value: "attention" } });
+    expect(screen.getByRole("button", { name: "打开标的 山东黄金 SH:600547" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("筛选"), { target: { value: "repeated" } });
+    expect(screen.getByRole("button", { name: "打开标的 大唐发电 HK:00991" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("筛选"), { target: { value: "changed" } });
+    expect(screen.getByRole("button", { name: "打开标的 大唐发电 HK:00991" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("筛选"), { target: { value: "shared_attention" } });
+    expect(screen.getByRole("button", { name: "打开标的 山东黄金 SH:600547" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("筛选"), { target: { value: "reversal" } });
+    expect(screen.getByRole("button", { name: "打开标的 山东黄金 HK:01787" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("排序"), { target: { value: "opinion" } });
     expect(onQuery).toHaveBeenCalledWith("filter=reversal&sort=opinion");
-    fireEvent.change(screen.getByLabelText("Filter"), { target: { value: "shared_opinion" } });
-    expect(screen.getByRole("button", { name: "Open Asset 山东黄金 HK:01787" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "latest" } });
-    fireEvent.change(screen.getByLabelText("Overlap sort"), { target: { value: "attention" } });
+    fireEvent.change(screen.getByLabelText("筛选"), { target: { value: "shared_opinion" } });
+    expect(screen.getByRole("button", { name: "打开标的 山东黄金 HK:01787" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("排序"), { target: { value: "latest" } });
+    fireEvent.change(screen.getByLabelText("重叠排序"), { target: { value: "attention" } });
     expect(onQuery).toHaveBeenCalledWith("filter=shared_opinion&overlap_sort=attention");
-    expect(screen.getByRole("button", { name: "Open Investor 沈阳城" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开投资者 沈阳城" })).toBeInTheDocument();
   });
 
   it("renders loading, 404/error states, and never invents current holdings", () => {
@@ -308,7 +308,7 @@ describe("Investor Intelligence V0", () => {
         onQueryChange={vi.fn()}
       />
     );
-    expect(screen.getByLabelText("Loading Investor Intelligence")).toBeInTheDocument();
+    expect(screen.getByLabelText("正在加载投资者洞察")).toBeInTheDocument();
 
     cleanup();
     render(
@@ -321,7 +321,7 @@ describe("Investor Intelligence V0", () => {
         onQueryChange={vi.fn()}
       />
     );
-    expect(screen.getByText("API unavailable")).toBeInTheDocument();
+    expect(screen.getByText("API 暂不可用")).toBeInTheDocument();
     expect(screen.queryByText("Current holdings")).not.toBeInTheDocument();
   });
 });

@@ -26,6 +26,10 @@ Phase 3 — Operational MVP and Phase 4 — Intelligence Yield Recovery are comp
   temporal coverage are `UNKNOWN` / insufficient for absence-sensitive
   inference.
 
+## Frontend localization
+
+Frontend localization completed. The user-facing React UI is Chinese for daily investment-intelligence reading; API contracts, internal enum values, and backend intelligence semantics remain unchanged.
+
 ## Product state
 
 The current product is a **Scheduled Operational Intelligence Product with a

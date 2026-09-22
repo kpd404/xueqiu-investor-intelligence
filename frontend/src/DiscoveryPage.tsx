@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import type { AssetListItem } from "./types";
-import { filterAssets, formatTime } from "./presentation";
+import { filterAssets, formatEnum, formatTime } from "./presentation";
 
 const PAGE_SIZE = 12;
 
@@ -58,20 +58,20 @@ const presets: Array<{
   label: string;
   changes: Partial<Record<keyof Omit<DiscoveryQuery, "invalid">, string | number | null>>;
 }> = [
-  { key: "all", label: "All", changes: { ...defaultQuery } },
-  { key: "shared-attention", label: "Shared Attention", changes: { attention: "2", page: 1 } },
-  { key: "multi-opinion", label: "Multi-Opinion", changes: { opinion: "2", page: 1 } },
+  { key: "all", label: "全部", changes: { ...defaultQuery } },
+  { key: "shared-attention", label: "共同关注", changes: { attention: "2", page: 1 } },
+  { key: "multi-opinion", label: "多投资者观点", changes: { opinion: "2", page: 1 } },
   {
     key: "direction-disagreement",
-    label: "Direction Disagreement",
+    label: "方向分歧",
     changes: { cross: "disagreement", page: 1 }
   },
   {
     key: "attention-gap",
-    label: "Attention > Opinion",
+    label: "关注动态 > 观点",
     changes: { gap: "attention_gt_opinion", page: 1 }
   },
-  { key: "repeated-thesis", label: "Repeated Thesis", changes: { thesis: "repeated", page: 1 } }
+  { key: "repeated-thesis", label: "重复投资逻辑", changes: { thesis: "repeated", page: 1 } }
 ];
 
 export function parseDiscoveryQuery(search: string): DiscoveryQuery {
@@ -193,7 +193,7 @@ function compareAssets(left: AssetListItem, right: AssetListItem, sort: SortKey)
 }
 
 function labelFromEnum(value: string | null): string {
-  return value ? value.replaceAll("_", " ") : "—";
+  return value ? formatEnum(value) : "—";
 }
 
 function activePreset(query: DiscoveryQuery): string {
@@ -241,9 +241,9 @@ export function DiscoveryPage({
     return (
       <div className="discovery-state error-state">
         <div className="state-symbol error">!</div>
-        <div className="eyebrow">ASSET DISCOVERY / READ-ONLY</div>
-        <h1>API unavailable</h1>
-        <p>The evidence catalog could not be reached. No discovery conclusion was inferred.</p>
+        <div className="eyebrow">标的发现 / 只读</div>
+        <h1>API 暂不可用</h1>
+        <p>无法访问证据目录，系统未推断发现结论。</p>
       </div>
     );
   }
@@ -263,39 +263,39 @@ export function DiscoveryPage({
         <div>
           <div className="eyebrow">
             <span className="eyebrow-line" />
-            ASSET DISCOVERY / OBSERVED EVIDENCE
+            标的发现 / 已观察证据
           </div>
-          <h1>Asset Discovery</h1>
-          <p>Browse Assets with observed Attention, Opinion, Thesis, and cross-Investor evidence.</p>
+          <h1>标的发现</h1>
+          <p>浏览包含已观察关注动态、观点、投资逻辑和跨投资者证据的标的。</p>
         </div>
         <div className="discovery-boundary" role="note">
-          <span>DATA BOUNDARY</span>
-          <strong>Historical completeness: UNKNOWN</strong>
-          <small>Presence and ordering only</small>
+          <span>数据边界</span>
+          <strong>历史完整性：未知</strong>
+          <small>仅表示存在与顺序</small>
         </div>
       </header>
 
       {query.invalid && (
         <div className="query-note" role="status">
-          Some URL filter values were invalid and were ignored.
+          部分 URL 筛选值无效，已忽略。
         </div>
       )}
 
-      <section className="discovery-toolbar" aria-label="Asset discovery controls">
+      <section className="discovery-toolbar" aria-label="标的发现控制">
         <div className="discovery-search-row">
           <label className="discovery-search-label" htmlFor="discovery-search">
-            Search observed Assets
+            搜索已观察标的
           </label>
           <input
             id="discovery-search"
             type="search"
             value={query.search}
-            placeholder="Name, market, or symbol"
+            placeholder="名称、市场或代码"
             onChange={(event) => updateQuery({ search: event.target.value, page: 1 })}
           />
-          <span className="discovery-search-hint">Names and listings remain separate.</span>
+          <span className="discovery-search-hint">名称与上市标的保持区分。</span>
         </div>
-        <div className="preset-tabs" role="group" aria-label="Discovery presets">
+        <div className="preset-tabs" role="group" aria-label="发现预设">
           {presets.map((preset) => (
             <button
               key={preset.key}
@@ -310,57 +310,57 @@ export function DiscoveryPage({
         </div>
         <div className="filter-grid">
           <FilterSelect
-            label="Market"
+            label="市场"
             value={query.market}
             onChange={(value) => updateQuery({ market: value, page: 1 })}
             options={[
-              ["ALL", "All"],
+              ["ALL", "全部"],
               ["SH", "SH"],
               ["SZ", "SZ"],
               ["HK", "HK"]
             ]}
           />
           <FilterSelect
-            label="Attention breadth"
+            label="关注动态覆盖"
             value={query.attention}
             onChange={(value) => updateQuery({ attention: value, page: 1 })}
-            options={[["any", "Any"], ["2", "2+ Investors"], ["3", "3+ Investors"]]}
+            options={[["any", "不限"], ["2", "至少 2 位投资者"], ["3", "至少 3 位投资者"]]}
           />
           <FilterSelect
-            label="Opinion breadth"
+            label="观点覆盖"
             value={query.opinion}
             onChange={(value) => updateQuery({ opinion: value, page: 1 })}
-            options={[["any", "Any"], ["2", "2+ Investors"], ["3", "3+ Investors"]]}
+            options={[["any", "不限"], ["2", "至少 2 位投资者"], ["3", "至少 3 位投资者"]]}
           />
           <FilterSelect
-            label="Cross-Investor"
+            label="跨投资者"
             value={query.cross}
             onChange={(value) => updateQuery({ cross: value, page: 1 })}
             options={[
-              ["any", "Any"],
-              ["mixed", "Mixed Direction"],
-              ["divergent", "Divergent"],
-              ["aligned_bullish", "Aligned Bullish"],
-              ["aligned_bearish", "Aligned Bearish"],
-              ["insufficient", "Insufficient Evidence"]
+              ["any", "不限"],
+              ["mixed", "方向混杂"],
+              ["divergent", "观点分化"],
+              ["aligned_bullish", "方向一致（积极）"],
+              ["aligned_bearish", "方向一致（谨慎）"],
+              ["insufficient", "证据不足"]
             ]}
           />
           <FilterSelect
-            label="Thesis"
+            label="投资逻辑"
             value={query.thesis}
             onChange={(value) => updateQuery({ thesis: value, page: 1 })}
             options={[
-              ["any", "Any"],
-              ["repeated", "Repeated Thesis"],
-              ["changed", "Thesis Changed"],
-              ["reversal", "Direction Reversal"]
+              ["any", "不限"],
+              ["repeated", "重复投资逻辑"],
+              ["changed", "投资逻辑已变化"],
+              ["reversal", "方向反转"]
             ]}
           />
           <FilterSelect
-            label="Evidence gap"
+            label="证据缺口"
             value={query.gap}
             onChange={(value) => updateQuery({ gap: value, page: 1 })}
-            options={[["any", "Any"], ["attention_gt_opinion", "Attention > Opinion"]]}
+            options={[["any", "不限"], ["attention_gt_opinion", "关注动态 > 观点"]]}
           />
         </div>
       </section>
@@ -368,21 +368,21 @@ export function DiscoveryPage({
       <div className="discovery-result-bar">
         <div>
           <strong>{filteredAssets.length}</strong>
-          <span>{filteredAssets.length === 1 ? "observed Asset" : "observed Assets"} match</span>
-          {query.search && <small>Search: “{query.search}”</small>}
+          <span>共 {filteredAssets.length} 个已观察标的</span>
+          {query.search && <small>搜索：“{query.search}”</small>}
         </div>
         <div className="sort-control">
-          <label htmlFor="discovery-sort">Sort by</label>
+          <label htmlFor="discovery-sort">排序</label>
           <select
             id="discovery-sort"
             value={query.sort}
             onChange={(event) => updateQuery({ sort: event.target.value, page: 1 })}
           >
-            <option value="name">Asset name</option>
-            <option value="latest">Latest observed evidence</option>
-            <option value="attention">Attention Investors</option>
-            <option value="opinion">Opinion Investors</option>
-            <option value="span">Temporal span</option>
+            <option value="name">标的名称</option>
+            <option value="latest">最近观察证据</option>
+            <option value="attention">关注动态投资者</option>
+            <option value="opinion">观点投资者</option>
+            <option value="span">时间跨度</option>
           </select>
         </div>
       </div>
@@ -396,38 +396,38 @@ export function DiscoveryPage({
       ) : (
         <div className="discovery-empty">
           <div className="empty-mark">⌕</div>
-          <h2>No assets match these evidence filters.</h2>
-          <p>Try clearing a filter or searching another name, market, or symbol.</p>
+          <h2>没有符合这些证据筛选条件的标的。</h2>
+          <p>请清除筛选条件，或搜索其他名称、市场或代码。</p>
           <button type="button" onClick={() => updateQuery({ ...defaultQuery })}>
-            Clear filters
+            清除筛选
           </button>
         </div>
       )}
 
       <div className="discovery-pagination">
         <span>
-          Showing {pageItems.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
-          {(currentPage - 1) * PAGE_SIZE + pageItems.length} of {filteredAssets.length}
+          显示 {pageItems.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
+          {(currentPage - 1) * PAGE_SIZE + pageItems.length} / {filteredAssets.length}
         </span>
         <div>
           <button
             type="button"
-            aria-label="Previous page"
+            aria-label="上一页"
             disabled={currentPage <= 1}
             onClick={() => updateQuery({ page: currentPage - 1 })}
           >
-            Previous
+            上一页
           </button>
           <strong>
             {currentPage} / {totalPages}
           </strong>
           <button
             type="button"
-            aria-label="Next page"
+            aria-label="下一页"
             disabled={currentPage >= totalPages}
             onClick={() => updateQuery({ page: currentPage + 1 })}
           >
-            Next
+            下一页
           </button>
         </div>
       </div>
@@ -479,10 +479,10 @@ function DiscoveryCard({
         type="button"
         className="discovery-card-header"
         onClick={() => onOpenAsset(asset.asset_id)}
-        aria-label={"Open " + asset.asset_name + " " + asset.market + ":" + asset.symbol}
+        aria-label={"打开 " + asset.asset_name + " " + asset.market + ":" + asset.symbol}
       >
         <div>
-          <span className="discovery-card-kicker">OBSERVED ASSET</span>
+          <span className="discovery-card-kicker">已观察标的</span>
           <h2>{asset.asset_name}</h2>
         </div>
         <span className="listing-badge">
@@ -492,12 +492,12 @@ function DiscoveryCard({
       </button>
       <div className="discovery-card-body">
         <div className="discovery-breadth">
-          <DiscoveryStat label="Attention" value={String(asset.attention_investor_count) + " Investors"} />
-          <DiscoveryStat label="Opinion" value={String(asset.opinion_investor_count) + " Investors"} />
-          <DiscoveryStat label="Latest observed" value={formatTime(asset.latest_evidence_time)} />
+          <DiscoveryStat label="关注动态" value={String(asset.attention_investor_count) + " 位投资者"} />
+          <DiscoveryStat label="观点" value={String(asset.opinion_investor_count) + " 位投资者"} />
+          <DiscoveryStat label="最近观察" value={formatTime(asset.latest_evidence_time)} />
           <DiscoveryStat
-            label="Temporal span"
-            value={asset.temporal_span_days === null ? "—" : asset.temporal_span_days.toFixed(1) + "d"}
+            label="时间跨度"
+            value={asset.temporal_span_days === null ? "—" : asset.temporal_span_days.toFixed(1) + "天"}
           />
         </div>
         <div className="discovery-card-footer">
@@ -506,7 +506,7 @@ function DiscoveryCard({
               <EvidenceBadge
                 value={
                   duplicateInsufficientCoverage
-                    ? "ALIGNMENT · " + labelFromEnum(asset.latest_alignment)
+                    ? "方向一致性 · " + labelFromEnum(asset.latest_alignment)
                     : labelFromEnum(asset.latest_alignment)
                 }
                 tone="alignment"
@@ -516,19 +516,19 @@ function DiscoveryCard({
               <EvidenceBadge
                 value={
                   duplicateInsufficientCoverage
-                    ? "CONSENSUS · " + labelFromEnum(asset.latest_consensus)
+                    ? "共识 · " + labelFromEnum(asset.latest_consensus)
                     : labelFromEnum(asset.latest_consensus)
                 }
                 tone="consensus"
               />
             )}
-            {asset.attention_opinion_gap && <EvidenceBadge value="ATTENTION > OPINION" tone="gap" />}
-            {asset.has_repeated_thesis && <EvidenceBadge value="REPEATED THESIS" tone="thesis" />}
-            {asset.has_direction_reversal && <EvidenceBadge value="DIRECTION REVERSAL" tone="reversal" />}
-            {hasDataGap && <EvidenceBadge value="DATA GAP" tone="gap" />}
+            {asset.attention_opinion_gap && <EvidenceBadge value="关注动态 > 观点" tone="gap" />}
+            {asset.has_repeated_thesis && <EvidenceBadge value="重复投资逻辑" tone="thesis" />}
+            {asset.has_direction_reversal && <EvidenceBadge value="方向反转" tone="reversal" />}
+            {hasDataGap && <EvidenceBadge value="数据缺口" tone="gap" />}
           </div>
           <button type="button" className="open-detail" onClick={() => onOpenAsset(asset.asset_id)}>
-            Open Asset <span>→</span>
+            打开标的 <span>→</span>
           </button>
         </div>
       </div>
@@ -551,7 +551,7 @@ function EvidenceBadge({ value, tone }: { value: string; tone: "alignment" | "co
 
 function DiscoveryLoading() {
   return (
-    <div className="discovery-container discovery-loading" aria-label="Loading Asset Discovery">
+    <div className="discovery-container discovery-loading" aria-label="正在加载标的发现">
       <div className="skeleton loading-discovery-title" />
       <div className="skeleton loading-discovery-toolbar" />
       <div className="loading-discovery-grid">
