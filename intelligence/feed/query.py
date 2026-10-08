@@ -19,6 +19,8 @@ from contracts import (
     IntelligencePriorityLevel,
     IntelligencePriorityReason,
 )
+from contracts.intelligence_feed import feed_display_context
+from intelligence.events.evidence import group_effective_thesis_evidence
 from intelligence.feed.service import IntelligenceFeedService
 from intelligence.schemas.feed import (
     FeedAssetIdentity,
@@ -130,7 +132,8 @@ class IntelligenceFeedQueryService:
             }
             events = {item.id: item for item in unit_of_work.intelligence_events.list()}
             links_by_event: dict[UUID, list[IntelligenceEventEvidenceView]] = defaultdict(list)
-            for link in unit_of_work.intelligence_event_evidence.list():
+            links = unit_of_work.intelligence_event_evidence.list()
+            for link in links:
                 links_by_event[link.event_id].append(link)
             signals = {signal.id: signal for signal in unit_of_work.signals.list()}
             effective_thesis_signals = {}
@@ -143,6 +146,9 @@ class IntelligenceFeedQueryService:
                 effective_thesis_signals = {
                     signal.id: signal for signal in unit_of_work.effective_thesis_signals.list()
                 }
+            effective_thesis_by_event = group_effective_thesis_evidence(
+                events.values(), links, effective_thesis_signals.values()
+            )
             projected = []
             for item in feed_items:
                 priority = priorities.get(item.priority_id)
@@ -173,12 +179,7 @@ class IntelligenceFeedQueryService:
                 if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
                     if item.event_type is not event.event_type or item.asset_id != event.asset_id:
                         continue
-                    source_signals = [
-                        effective_thesis_signals[link.signal_id]
-                        for link in links_by_event.get(event.id, [])
-                        if link.signal_id in effective_thesis_signals
-                        and effective_thesis_signals[link.signal_id].asset_id == event.asset_id
-                    ]
+                    source_signals = list(effective_thesis_by_event.get(event.id, ()))
                     if not source_signals:
                         continue
                     observed_at = max(signal.observed_at for signal in source_signals)
@@ -226,7 +227,7 @@ class IntelligenceFeedQueryService:
                         priority_level=priority.priority_level,
                         reason=reason,
                         title=title,
-                        context=context,
+                        context=feed_display_context(context),
                         investors=linked_investors,
                         state=item.state,
                         observed_at=observed_at,

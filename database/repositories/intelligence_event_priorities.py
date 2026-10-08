@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 from contracts import (
     IntelligenceEventPriorityCreate,
     IntelligenceEventPriorityView,
+    IntelligenceEventState,
+    IntelligenceEventType,
+    IntelligencePriorityLevel,
+    IntelligencePriorityReason,
 )
+from database.models.intelligence_event import IntelligenceEvent
 from database.models.intelligence_event_priority import IntelligenceEventPriority
 
 
@@ -68,6 +73,41 @@ class IntelligenceEventPriorityRepository:
                 self._session.flush()
             return self._to_view(existing), False
         return self._to_view(entity), True
+
+    def add_or_refresh_thesis_change(
+        self,
+        command: IntelligenceEventPriorityCreate,
+    ) -> tuple[IntelligenceEventPriorityView, bool]:
+        """Correct only this derived classification; keep identity and creation time."""
+
+        event = self._session.get(IntelligenceEvent, command.event_id)
+        if (
+            event is None
+            or event.event_type != IntelligenceEventType.INVESTOR_VIEW_CHANGE.value
+            or event.state != IntelligenceEventState.ACTIVE.value
+        ):
+            raise ValueError("Thesis refresh requires an ACTIVE INVESTOR_VIEW_CHANGE Event")
+        if (
+            command.reason is not IntelligencePriorityReason.THESIS_CHANGE_OBSERVED
+            or command.priority_level is not IntelligencePriorityLevel.MEDIUM
+        ):
+            raise ValueError("Thesis refresh requires MEDIUM / THESIS_CHANGE_OBSERVED")
+        priority, created = self.add_if_absent(command)
+        if created:
+            return priority, True
+        entity = self._session.get(IntelligenceEventPriority, priority.id)
+        changed = False
+        for field, value in (
+            ("reason", command.reason.value),
+            ("priority_level", command.priority_level.value),
+            ("evidence_count", command.evidence_count),
+        ):
+            if getattr(entity, field) != value:
+                setattr(entity, field, value)
+                changed = True
+        if changed:
+            self._session.flush()
+        return self._to_view(entity), False
 
     def list(self) -> tuple[IntelligenceEventPriorityView, ...]:
         statement = select(IntelligenceEventPriority).order_by(

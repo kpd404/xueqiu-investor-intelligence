@@ -15,10 +15,6 @@ from config import (
     get_production_thesis_comparison_policy,
 )
 from contracts import (
-    CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION,
-    CROSS_INVESTOR_CONSENSUS_POLICY_VERSION,
-    ConsensusEvidenceState,
-    DirectionalAlignmentState,
     EventAnalysisStatus,
     SignalCreate,
     SignalSeverity,
@@ -26,10 +22,9 @@ from contracts import (
     ThesisChangeType,
 )
 from database.models.attention_occurrence import AttentionOccurrence
-from database.models.cross_investor_asset_alignment import CrossInvestorAssetAlignment
-from database.models.cross_investor_consensus_evidence import CrossInvestorConsensusEvidence
 from database.models.event_analysis import EventAnalysis
 from database.repositories.thesis_changes import ThesisChangeRepository
+from signal_engine.cross_investor_sources import CrossInvestorReferencedEvidenceReader
 
 
 class SignalSourceReader(Protocol):
@@ -57,14 +52,30 @@ class SqlAlchemySignalSourceReader:
     ) -> tuple[SignalCreate, ...]:
         selected = signal_types if signal_types is not None else frozenset(SignalType)
         candidates: list[SignalCreate] = []
+        cross_sources = ((), (), {})
+        if event_ids is None and selected & {
+            SignalType.CROSS_INVESTOR_ALIGNMENT,
+            SignalType.CONSENSUS_CHANGE,
+        }:
+            cross_sources = CrossInvestorReferencedEvidenceReader(
+                self._session
+            ).list_with_fact_times(asset_ids=asset_ids)
         if SignalType.NEW_ATTENTION in selected:
             candidates.extend(self._new_attention(asset_ids=asset_ids, event_ids=event_ids))
         if SignalType.THESIS_CHANGE in selected:
             candidates.extend(self._thesis_changes(asset_ids=asset_ids, event_ids=event_ids))
         if SignalType.CROSS_INVESTOR_ALIGNMENT in selected and event_ids is None:
-            candidates.extend(self._alignments(asset_ids=asset_ids))
+            candidates.extend(
+                self._alignments(
+                    asset_ids=asset_ids, sources=cross_sources[0], fact_times=cross_sources[2]
+                )
+            )
         if SignalType.CONSENSUS_CHANGE in selected and event_ids is None:
-            candidates.extend(self._consensus(asset_ids=asset_ids))
+            candidates.extend(
+                self._consensus(
+                    asset_ids=asset_ids, sources=cross_sources[1], fact_times=cross_sources[2]
+                )
+            )
 
         candidates.sort(
             key=lambda value: (
@@ -176,15 +187,9 @@ class SqlAlchemySignalSourceReader:
             and (event_ids is None or change.current_event_id in event_ids)
         ]
 
-    def _alignments(self, *, asset_ids: frozenset[UUID] | None) -> list[SignalCreate]:
-        statement = select(CrossInvestorAssetAlignment).where(
-            CrossInvestorAssetAlignment.alignment_policy_version
-            == CROSS_INVESTOR_ALIGNMENT_POLICY_VERSION,
-            CrossInvestorAssetAlignment.directional_alignment_state
-            != DirectionalAlignmentState.INSUFFICIENT_EVIDENCE.value,
-        )
-        if asset_ids is not None:
-            statement = statement.where(CrossInvestorAssetAlignment.asset_id.in_(asset_ids))
+    def _alignments(
+        self, *, asset_ids: frozenset[UUID] | None, sources, fact_times
+    ) -> list[SignalCreate]:
         return [
             SignalCreate(
                 asset_id=alignment.asset_id,
@@ -192,29 +197,18 @@ class SqlAlchemySignalSourceReader:
                 source_type="CrossInvestorAssetAlignment",
                 source_id=alignment.id,
                 created_at=datetime.now(UTC),
-                observed_at=self._as_utc(alignment.calculated_at),
+                observed_at=fact_times[(SignalType.CROSS_INVESTOR_ALIGNMENT, alignment.id)],
                 metadata={
                     "alignment_state": alignment.directional_alignment_state,
                     "alignment_policy_version": alignment.alignment_policy_version,
                 },
             )
-            for alignment in self._session.scalars(statement)
+            for alignment in sources
         ]
 
-    def _consensus(self, *, asset_ids: frozenset[UUID] | None) -> list[SignalCreate]:
-        qualifying_states = {
-            ConsensusEvidenceState.DIVERGENT.value,
-            ConsensusEvidenceState.CONSENSUS_BULLISH.value,
-            ConsensusEvidenceState.CONSENSUS_BEARISH.value,
-            ConsensusEvidenceState.CONSENSUS_NEUTRAL.value,
-        }
-        statement = select(CrossInvestorConsensusEvidence).where(
-            CrossInvestorConsensusEvidence.consensus_policy_version
-            == CROSS_INVESTOR_CONSENSUS_POLICY_VERSION,
-            CrossInvestorConsensusEvidence.consensus_state.in_(qualifying_states),
-        )
-        if asset_ids is not None:
-            statement = statement.where(CrossInvestorConsensusEvidence.asset_id.in_(asset_ids))
+    def _consensus(
+        self, *, asset_ids: frozenset[UUID] | None, sources, fact_times
+    ) -> list[SignalCreate]:
         return [
             SignalCreate(
                 asset_id=evidence.asset_id,
@@ -222,14 +216,14 @@ class SqlAlchemySignalSourceReader:
                 source_type="CrossInvestorConsensusEvidence",
                 source_id=evidence.id,
                 created_at=datetime.now(UTC),
-                observed_at=self._as_utc(evidence.calculated_at),
+                observed_at=fact_times[(SignalType.CONSENSUS_CHANGE, evidence.id)],
                 metadata={
                     "consensus_state": evidence.consensus_state,
                     "consensus_policy_version": evidence.consensus_policy_version,
                     "opinion_investor_count": evidence.opinion_investor_count,
                 },
             )
-            for evidence in self._session.scalars(statement)
+            for evidence in sources
         ]
 
     @staticmethod

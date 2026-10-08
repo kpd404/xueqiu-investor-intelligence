@@ -364,16 +364,12 @@ def test_old_event_pollution_is_retained_separately_from_current_candidates(
         assert SignalRepository(session).get(bad.id) == bad
 
 
-def test_other_signal_types_keep_existing_aggregation_behavior(
+def test_new_attention_keeps_existing_aggregation_behavior_without_policy_dependency(
     db_session_factory, production_policies, monkeypatch
 ):
     source = _seed_change(db_session_factory, production_policies, ThesisChangeType.NEW_THESIS)
     active = []
-    for kind in (
-        SignalType.NEW_ATTENTION,
-        SignalType.CROSS_INVESTOR_ALIGNMENT,
-        SignalType.CONSENSUS_CHANGE,
-    ):
+    for kind in (SignalType.NEW_ATTENTION,):
         investors = (
             (source.investor_id, uuid4())
             if kind is SignalType.NEW_ATTENTION
@@ -408,13 +404,11 @@ def test_other_signal_types_keep_existing_aggregation_behavior(
             source_id=uuid4(),
             state=SignalState.RESOLVED,
         )
-    # Other Signal streams must not acquire a new dependency on Thesis policy.
+    # NEW_ATTENTION remains outside the new Thesis and cross-source validation.
     monkeypatch.setattr("config.production.get_settings", lambda: None)
     result = IntelligenceEventAggregator.from_production(db_session_factory).aggregate()
     assert {item.event_type for item in result.candidates} == {
         IntelligenceEventType.ASSET_ACTIVITY_SPIKE,
-        IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
-        IntelligenceEventType.CONSENSUS_STATE_CHANGE,
     }
     assert result.created_evidence_count == len(active)
     with db_session_factory() as session:

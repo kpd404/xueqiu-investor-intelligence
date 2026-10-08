@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -9,6 +12,28 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 
 from contracts.intelligence_event import IntelligenceEventType
 from contracts.intelligence_priority import IntelligencePriorityReason
+
+THESIS_LIFECYCLE_CONTEXT_KEY = "_thesis_lifecycle"
+
+
+def feed_display_context(context: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in context.items() if key != THESIS_LIFECYCLE_CONTEXT_KEY}
+
+
+def preserve_thesis_lifecycle_context(
+    previous: dict[str, object],
+    display: dict[str, object],
+) -> dict[str, object]:
+    result = feed_display_context(display)
+    if THESIS_LIFECYCLE_CONTEXT_KEY in previous:
+        result[THESIS_LIFECYCLE_CONTEXT_KEY] = deepcopy(previous[THESIS_LIFECYCLE_CONTEXT_KEY])
+    return result
+
+
+@dataclass(frozen=True)
+class ThesisSourceFact:
+    raw_event_id: UUID
+    published_time: datetime
 
 
 class FeedState(StrEnum):

@@ -18,7 +18,9 @@ from contracts import (
     IntelligencePriorityGenerationResult,
     IntelligencePriorityLevel,
     IntelligencePriorityReason,
+    SignalView,
 )
+from intelligence.events.evidence import group_effective_thesis_evidence
 from intelligence.policies.activity import has_multi_investor_activity
 
 
@@ -38,11 +40,21 @@ class IntelligencePriorityReaderWriter(Protocol):
         command: IntelligenceEventPriorityCreate,
     ) -> tuple[IntelligenceEventPriorityView, bool]: ...
 
+    def add_or_refresh_thesis_change(
+        self,
+        command: IntelligenceEventPriorityCreate,
+    ) -> tuple[IntelligenceEventPriorityView, bool]: ...
+
+
+class EffectiveThesisSignalReader(Protocol):
+    def list(self) -> tuple[SignalView, ...]: ...
+
 
 class IntelligencePriorityUoW(Protocol):
     intelligence_events: IntelligenceEventReader
     intelligence_event_evidence: IntelligenceEventEvidenceReader
     intelligence_event_priorities: IntelligencePriorityReaderWriter
+    effective_thesis_signals: EffectiveThesisSignalReader
 
     def __enter__(self) -> Self: ...
 
@@ -79,8 +91,7 @@ class IntelligencePriorityService:
     ) -> IntelligencePriorityGenerationResult:
         with self._unit_of_work_factory() as unit_of_work:
             candidates = self._candidates(
-                unit_of_work.intelligence_events.list(),
-                unit_of_work.intelligence_event_evidence.list(),
+                unit_of_work,
                 event_ids=event_ids,
                 reasons=reasons,
             )
@@ -110,8 +121,7 @@ class IntelligencePriorityService:
     ) -> IntelligencePriorityGenerationResult:
         with self._unit_of_work_factory() as unit_of_work:
             candidates = self._candidates(
-                unit_of_work.intelligence_events.list(),
-                unit_of_work.intelligence_event_evidence.list(),
+                unit_of_work,
                 event_ids=event_ids,
                 reasons=reasons,
             )
@@ -119,9 +129,11 @@ class IntelligencePriorityService:
             created_count = 0
             reused_count = 0
             for candidate in candidates:
-                priority, created = unit_of_work.intelligence_event_priorities.add_if_absent(
-                    candidate
-                )
+                writer = unit_of_work.intelligence_event_priorities
+                if candidate.reason is IntelligencePriorityReason.THESIS_CHANGE_OBSERVED:
+                    priority, created = writer.add_or_refresh_thesis_change(candidate)
+                else:
+                    priority, created = writer.add_if_absent(candidate)
                 priorities.append(priority)
                 if created:
                     created_count += 1
@@ -146,14 +158,25 @@ class IntelligencePriorityService:
     @classmethod
     def _candidates(
         cls,
-        events: Iterable[IntelligenceEventView],
-        evidence: Iterable[IntelligenceEventEvidenceView],
+        unit_of_work: IntelligencePriorityUoW,
         *,
         event_ids: Iterable[UUID] | None,
         reasons: Iterable[IntelligencePriorityReason] | None,
     ) -> tuple[IntelligenceEventPriorityCreate, ...]:
         allowed_events = frozenset(event_ids) if event_ids is not None else None
         allowed_reasons = frozenset(reasons) if reasons is not None else None
+        events = unit_of_work.intelligence_events.list()
+        evidence = unit_of_work.intelligence_event_evidence.list()
+        effective_thesis = {}
+        if any(
+            event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE
+            and event.state is IntelligenceEventState.ACTIVE
+            and (allowed_events is None or event.id in allowed_events)
+            for event in events
+        ):
+            effective_thesis = group_effective_thesis_evidence(
+                events, evidence, unit_of_work.effective_thesis_signals.list()
+            )
         evidence_counts: dict[UUID, int] = {}
         for link in evidence:
             evidence_counts[link.event_id] = evidence_counts.get(link.event_id, 0) + 1
@@ -171,6 +194,8 @@ class IntelligencePriorityService:
             if allowed_reasons is not None and reason not in allowed_reasons:
                 continue
             evidence_count = evidence_counts.get(event.id, 0)
+            if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
+                evidence_count = len(effective_thesis.get(event.id, ()))
             if evidence_count < 1:
                 continue
             candidates.append(

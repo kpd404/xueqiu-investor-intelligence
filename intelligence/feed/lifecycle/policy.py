@@ -15,6 +15,7 @@ from contracts import (
     IntelligencePriorityLevel,
     IntelligencePriorityReason,
 )
+from contracts.intelligence_feed import ThesisSourceFact
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,7 @@ class FeedLifecycleTransition:
     from_state: FeedState
     to_state: FeedState
     reasons: tuple[str, ...]
+    source_facts: tuple[ThesisSourceFact, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +112,12 @@ class FeedLifecyclePolicy:
         return None
 
     @staticmethod
-    def validate_transition(from_state: FeedState, to_state: FeedState) -> None:
+    def validate_transition(
+        from_state: FeedState,
+        to_state: FeedState,
+        *,
+        event_type: IntelligenceEventType | None = None,
+    ) -> None:
         if from_state == to_state:
             return
         allowed = {
@@ -118,6 +125,8 @@ class FeedLifecyclePolicy:
             (FeedState.ACTIVE, FeedState.STALE),
             (FeedState.ACTIVE, FeedState.RESOLVED),
         }
+        if event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
+            allowed.add((FeedState.STALE, FeedState.ACTIVE))
         if (from_state, to_state) not in allowed:
             raise ValueError(f"invalid FeedItem transition: {from_state} -> {to_state}")
 

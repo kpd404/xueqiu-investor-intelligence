@@ -10,7 +10,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from contracts import EffectiveAnalysisPolicy, SignalCreate, SignalState, SignalType, SignalView
+from contracts.intelligence_feed import ThesisSourceFact
 from contracts.thesis_change import ThesisChangeType
+from database.models.raw_event import RawEvent
 from database.models.signal import Signal
 from database.models.thesis_change import ThesisChange
 from database.repositories.thesis_changes import ThesisChangeRepository
@@ -126,6 +128,40 @@ class SignalRepository:
             and entity.investor_id == source.investor_id
         )
 
+    def list_cross_investor_signals_with_valid_references(self, *, signal_types=None):
+        from signal_engine.cross_investor_sources import CrossInvestorReferencedEvidenceReader
+
+        alignments, consensus, fact_times = CrossInvestorReferencedEvidenceReader(
+            self._session
+        ).list_with_fact_times()
+        sources = {
+            (SignalType.CROSS_INVESTOR_ALIGNMENT, "CrossInvestorAssetAlignment", item.id): item
+            for item in alignments
+        }
+        sources.update(
+            {
+                (SignalType.CONSENSUS_CHANGE, "CrossInvestorConsensusEvidence", item.id): item
+                for item in consensus
+            }
+        )
+        selected = (
+            signal_types
+            if signal_types is not None
+            else frozenset({SignalType.CROSS_INVESTOR_ALIGNMENT, SignalType.CONSENSUS_CHANGE})
+        )
+        return tuple(
+            signal.model_copy(
+                update={"observed_at": fact_times[(signal.signal_type, signal.source_id)]}
+            )
+            for signal in self.list()
+            if signal.signal_type in selected
+            and signal.state is SignalState.ACTIVE
+            and (source := sources.get((signal.signal_type, signal.source_type, signal.source_id)))
+            is not None
+            and signal.asset_id == source.asset_id
+            and signal.investor_id is None
+        )
+
     @classmethod
     def _to_view(cls, entity: Signal | None) -> SignalView | None:
         if entity is None:
@@ -161,6 +197,20 @@ class EventAggregationSignalReader:
 
     def list(self) -> tuple[SignalView, ...]:
         signals = self._repository.list()
+        cross_types = {SignalType.CROSS_INVESTOR_ALIGNMENT, SignalType.CONSENSUS_CHANGE}
+        if any(
+            signal.signal_type in cross_types and signal.state is SignalState.ACTIVE
+            for signal in signals
+        ):
+            valid_cross = {
+                signal.id: signal
+                for signal in self._repository.list_cross_investor_signals_with_valid_references()
+            }
+            signals = tuple(
+                valid_cross[signal.id] if signal.signal_type in cross_types else signal
+                for signal in signals
+                if signal.signal_type not in cross_types or signal.id in valid_cross
+            )
         if not any(
             signal.signal_type is SignalType.THESIS_CHANGE and signal.state is SignalState.ACTIVE
             for signal in signals
@@ -192,6 +242,9 @@ class FeedThesisSignalReader:
         self._session = session
 
     def list(self) -> tuple[SignalView, ...]:
+        return self.list_with_facts()[0]
+
+    def list_with_facts(self) -> tuple[tuple[SignalView, ...], dict[UUID, ThesisSourceFact]]:
         from config import get_production_analysis_policy, get_production_thesis_comparison_policy
 
         signals = SignalRepository(self._session).list_effective_thesis_changes(
@@ -199,23 +252,29 @@ class FeedThesisSignalReader:
             get_production_thesis_comparison_policy().active_analysis_version,
         )
         if not signals:
-            return ()
-        source_times = dict(
-            self._session.execute(
-                select(ThesisChange.id, ThesisChange.effective_time).where(
-                    ThesisChange.id.in_({signal.source_id for signal in signals})
-                )
-            ).all()
-        )
+            return (), {}
+        rows = self._session.execute(
+            select(
+                ThesisChange.id, ThesisChange.effective_time, RawEvent.id, RawEvent.published_time
+            )
+            .join(RawEvent, ThesisChange.current_event_id == RawEvent.id)
+            .where(ThesisChange.id.in_({signal.source_id for signal in signals}))
+        ).all()
+        source_times = {row[0]: row[1] for row in rows}
+        facts = {row[0]: ThesisSourceFact(row[2], SignalRepository._as_utc(row[3])) for row in rows}
         # A historical Signal may carry an incorrect observed_at. Correct only
         # this read view; never rewrite it or use calculation time as freshness.
-        return tuple(
+        views = tuple(
             signal.model_copy(
                 update={"observed_at": SignalRepository._as_utc(source_times[signal.source_id])}
             )
             for signal in signals
             if signal.source_id in source_times
         )
+        return views, {signal.id: facts[signal.source_id] for signal in views}
+
+    def known_raw_event_ids(self) -> frozenset[UUID]:
+        return frozenset(self._session.scalars(select(RawEvent.id)))
 
 
 class SqlAlchemySignalUnitOfWork:

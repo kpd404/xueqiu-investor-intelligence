@@ -193,6 +193,307 @@ Event 的有效性与时间保持原行为，尚未闭环；STALE 回流未修�
 recovery/rebuild/迁移/清理，未新增表/policy/评分/算法；已有修改保留，
 基线审计和快照校验值不变。到此停止，不自动继续下一项。
 
+### Thesis Priority → Feed 物化一致性 — 2026-10-08
+
+**本子任务局部完成，隔离历史投影重跑与 HTTP 字段对照通过**。
+起始 HEAD 为 `686a0b091fa6985508c2a5e3ff8bd5559c1bc97a`，工作区干净。
+前四项来源有效性、material gate、中性原因及只读查询校正继续保留。
+
+Priority/Feed 物化批量复用现有 FeedThesisSignalReader（effective selector +
+ThesisChange.effective_time），新增纯关联分组 helper 供 Priority、Feed 及查询
+共同使用。它仅将当前有效 Signal 与真实 Event links 按 Asset 对应分组，
+不复制前驱算法/material 分类，不使用未关联的同标的 Signal 或异标的证据。
+
+ACTIVE INVESTOR_VIEW_CHANGE 有有效关联时，Priority 为 MEDIUM /
+THESIS_CHANGE_OBSERVED，evidence_count 仅计有效关联。新增 repository 的
+`add_or_refresh_thesis_change` 限定检查真实 ACTIVE INVESTOR_VIEW_CHANGE，
+仅此路径可刷新旧 reason、priority_level、evidence_count；通用 add_if_absent
+及其他 Event 类型的复用规则保持原样。Priority id/event_id/created_at 不变。
+隔离实例的实际字段更新为 **HIGH / THESIS_ACCELERATION / 2 →
+MEDIUM / THESIS_CHANGE_OBSERVED / 1**；旧字段确实被替换，不宣称行内仍保存
+被替换的旧值，也没有引入通用审计表。
+
+Feed 使用同一有效关联重建 title/reason/context 与最新来源事实时间，保持
+id/priority_id/created_at/state。既有 STALE、RESOLVED 不自动激活。全部输入
+失效或 Event 不满足 ACTIVE 条件时，不创建/刷新该 Thesis Priority 或 Feed；
+旧行可原样保留，不写 evidence_count=0、不删除、不新增失效状态。
+
+正常执行顺序：**Event 聚合 → Priority.materialize → Feed.materialize → Feed API**。
+Priority.dry_run 只提供候选，不替代实际刷新。旧 Priority 的分类/等级或有效
+计数未刷新时，Feed.dry_run 和 Feed.materialize 均明确 ValueError；保留数量
+一致性检查，比较有效关联数量，不比较全部历史 links。全部有效证据为空时
+直接跳过旧 Priority，不因旧原因/计数重新支撑 Feed。
+
+新增 `tests/integration/test_thesis_materialization_consistency.py`，使用真实
+数据库服务及旧 Event/links/Priority/Feed fixture。首批修复前 **13 failed /
+5 passed**；修复后连同未关联/异标的补充场景 **20 项通过**，相关后端回归
+合计 **223 passed**。Python lint/format 与 git diff --check 通过。
+
+覆盖混合历史关联、旧分类限定纠正、全部非 material 无新建/刷新（有/无旧行）、
+晚到 Opinion 的前驱失效与再次物化、错误较新的 Signal/Event 时间不制造近期
+情报、未关联/异标的排除、Event 状态门槛、STALE/RESOLVED 保留、dry-run 零
+写入、首次纠正后身份/字段幂等、其他三种 Event 保持原行为及 repository scope
+拒绝其他类型。历史兼容测试更新为“旧值可读取、授权 Thesis 刷新后派生值替换”，
+保留 id/created_at 与历史枚举兼容性断言。
+
+完整隔离链路中，旧 Event 已保有前一子任务的合法聚合 metadata 和受污染时间
+范围，因此 Event 聚合只复用身份/关联，不改变该 Event；Priority/Feed 更新后
+逐字段与当前 HTTP 响应对照，而非仅检查 200。Query 仍逐表零写入；保护性快照
+确认除 Priority/Feed 外所有业务表（含 RawEvent、Analysis、Opinion、ThesisChange、
+Signal、Event 及旧 evidence links）内容不变。1 个与 6 个历史混合条目下，
+Priority dry-run + Feed dry-run + HTTP 查询合计均为 **27 次 SELECT**，没有逐条
+来源查询。
+
+本次代码仅修改上述服务/UoW、限定 repository 刷新、共享关联 helper、相应测试
+和本路线；未修改 Event repository/聚合的既有持久化行为，未改业务数据库、
+未调用 LLM、未执行生产 refresh/采集/recovery/rebuild/迁移/历史维护。
+基线审计及快照保持原样。**仍未完成**：历史 Event 时间/metadata/关联纠正，
+全部失效但保留的旧派生行治理、其他 Product/read consumers 的有效证据口径、
+跨投资者有效性和时间、STALE 回流及完整生命周期闭环。整个 Inbox 与可信变化
+阶段未完成；到此停止，不自动执行下一项。
+
+### Thesis Feed Lifecycle 有效证据一致性 — 2026-10-08
+
+**本子任务局部完成，完整隔离链路及前五项相关回归通过**。
+Lifecycle._plan 对 INVESTOR_VIEW_CHANGE 复用 FeedThesisSignalReader 和
+group_effective_thesis_evidence，按实际关联、当前有效且 Asset 一致的 Thesis
+证据检查数量和状态输入，不使用未关联的同标的证据或历史全量 link 数量。
+未复制 policy/material/前驱算法，其他 Event 类型保留普通历史读取和原校验。
+
+有效证据非空时，一致性检查仍严格保留：Priority.evidence_count 必须等于
+有效关联数量，分类必须是 MEDIUM / THESIS_CHANGE_OBSERVED；Feed 的
+Asset/event_type/reason/title/context/observed_at 必须与已刷新的投影一致。
+未按 Priority → Feed 顺序刷新时，dry-run/apply 明确报错，不替上游校正任何字段。
+用于 NEW → ACTIVE / ACTIVE → STALE 的时间来自有效 ThesisChange.effective_time
+读取副本，沿用原有窗口，错误较新的 Signal/Event/无效关联时间不制造新鲜度。
+
+全部关联失效时，在投影分类/历史数量校验前跳过该 Thesis 条目，保留历史行、
+关联和原状态，不激活也不阻断正常条目。FeedLifecyclePlan.skipped 记录
+Feed/Event ID 与 `NO_EFFECTIVE_THESIS_EVIDENCE`；既有 operational lifecycle
+helper 的摘要增加 skipped_count 和明细。该诊断不新增持久化表、policy 或状态
+枚举，不表示旧 ACTIVE 行或持久化污染已清除。
+
+状态 policy 文件和合法转换集合没有修改；**没有新增 STALE → ACTIVE**。
+有效旧证据仍允许正常 ACTIVE → STALE；STALE/RESOLVED 不自动转换。
+Lifecycle apply 仍只写合法 Feed.state，不修改来源、Event、关联、Priority 或
+Feed 的标题/context/时间等字段。
+
+新增 `tests/integration/test_thesis_lifecycle_consistency.py` 使用真实隔离数据库，
+先 Event 聚合 → Priority/Feed 物化，再 Lifecycle 与 HTTP API，保留混合历史
+旧 links 和受污染 Signal/Event 时间。修复前 **20 failed / 3 passed**；修复后
+**23 passed**，前五项及相关 API/物化/架构/运行诊断回归合计 **264 passed**。
+Python lint/format 和 git diff --check 通过。
+
+覆盖近期 NEW 激活、旧 NEW 不激活、旧 ACTIVE 过期、STALE/RESOLVED 无回流；
+历史 non-material 或迟到 Opinion 导致全部来源失效时记录跳过并让正常条目
+继续；未关联/异标的证据不能救活条目；Priority 数量/原因/等级及 Feed 原因/
+标题/context/时间未刷新均报错；dry-run 逐表零写入，重跑及重复应用计划幂等，
+保护性快照确认 Lifecycle 除 Feed.state 外所有业务字段不变；其他三种 Event
+维持原行为。1 个与 6 个混合条目下，Lifecycle dry-run + HTTP 查询均为
+**20 次 SELECT**，没有逐条来源查询。
+
+本次仅改 Lifecycle service/诊断结果导出、operational helper 的跳过摘要、
+上述回归和本路线状态。未调用真实 LLM，未写业务数据库、未执行生产 refresh/
+采集/recovery/rebuild/迁移/维护；诊断 helper 仅在注入隔离数据库的测试中调用。
+前五项改动保留，基线审计和快照不变。**仍未解决**：STALE 回流、跨投资者
+有效性与时间、历史 Event/来源/关联污染及跳过后保留的旧派生行、其他产品
+读取入口口径和完整生命周期闭环。整个可信变化阶段未完成；停止，不自动继续。
+
+### Thesis STALE 回流与原始事实基线 — 2026-10-08
+
+**本子任务局部完成：仅 INVESTOR_VIEW_CHANGE 可按有效新事实 STALE → ACTIVE**。
+保留前六项有效来源、物化、查询和 Lifecycle 一致性要求；RESOLVED 不自动打开，
+其他 Event 类型没有新增回流，默认通用转换校验也不允许它们 STALE → ACTIVE。
+
+#### 基线及判断边界
+
+复用现有 `IntelligenceFeedItem.context["_thesis_lifecycle"]` JSON 内部区域，
+没有新增字段、表、迁移或 Analysis policy。基线格式 version=1，绑定 Event/Asset，
+保存：精确 known_raw_event_ids、已消费来源 consumed_facts（RawEvent ID →
+published_time）、不倒退的事实 high_watermark、reentry_after 过期/初始化截止，
+以及最近合法转换的原因、评估时间和支持它的来源事实。
+
+仅保存 material 解释身份不够：旧 RawEvent 可能在后来重新解释或解析后才变成
+material。因此检查点还批量读取一次当前数据库已知 RawEvent UUID 集合，作为
+“已存在事实”的精确排除集合；它不推进该标的的事实水位。UUID 不用于时间排序，
+也不使用 collected_time/calculated_at/created_at 证明新事实。此精确内部集合
+随数据量增长，暂不引入新的持久化索引或编排表。
+
+回流须同时满足：当前 STALE、实际关联的当前有效 material 来源、Priority/Feed
+已刷新、来源 RawEvent 未被基线记录、published_time 严格晚于事实水位及
+过期/初始化截止、位于原有激活窗口且不晚于评估时间。RawEvent 时间与有效
+投影时间须一致；存在未来或不一致时间时保守不回流。同时间戳不同事件不能
+证明顺序，因此不回流。截止时间只限制过期后发生的事实，不作为新事实证明。
+
+NEW → ACTIVE、ACTIVE → STALE、STALE → ACTIVE 时记录必要检查点；STALE
+观察时单调扩充已知事实/消费记录，必要时只更新内部基线而不转换状态，避免
+未来时间日后变为过去、旧帖新解释或 policy/前驱重配制造回流。集合只追加，
+水位只取 max；来源减少或恢复有效不能忘记已消费事实或使进度倒退。
+全部证据失效仍按前一步跳过，不写状态或基线。
+
+历史 STALE 缺基线或缺可信过期截止时，先建立当前事实检查点并记录
+LEGACY_STALE_BASELINE_INITIALIZED，不立即激活，也不从已被物化覆盖的时间
+猜测旧基线。之后的真实新事实才可能回流；初始化之前的潜在有效新事实或
+同时间戳事实可能继续遗漏。这是保守兼容，不声称恢复全部历史遗漏。已有
+损坏/不支持版本的基线明确报错，不静默清空进度。
+
+#### 存储、计划与写入
+
+Feed repository 物化覆盖展示 context 时保留专用内部区域；公开查询剥离该区域，
+标题/context/时间一致性校验只比较展示字段。Lifecycle 专用 repository 方法
+检查并锁定相关 Feed 行，在同一 UPDATE/事务中保存必要基线与合法状态，保持
+Feed/Priority/Event ID 与现有 created_at；Event 模型本身没有 created_at 列。
+最近回流记录 NEW_EFFECTIVE_THESIS_FACT 及支持 RawEvent ID/发布时间，
+不新增重复条目或通用通知框架。
+
+dry-run 只产生转换和检查点计划，不写任何字段。apply 使用外部计划时，按注入
+执行时钟重新核对相关证据、投影、窗口和基线前置条件；条件失效、计划不再
+匹配或缺少 Thesis 事实检查点则 ValueError，不能只凭 from_state 执行。已提交
+的同一检查点/转换可幂等复用。baseline_updated_count 与状态 updated_count
+分开记录；operational helper 仅追加诊断明细，不执行额外业务步骤。
+
+#### 验证结果及限制
+
+新增 `tests/integration/test_thesis_stale_reentry.py`，固定时钟真实贯通有效来源
+→ Signal → Event → Priority → Feed → Lifecycle → HTTP Inbox。首批修复前
+**7 failed / 9 passed**；修复后连同 policy/前驱/时间反例 **26 passed**。
+保留前六项相关后端回归合计 **290 passed**；前端 lint 与 **41 passed**。
+Python lint/format 和 git diff --check 通过。
+
+覆盖真正新事实回流/近期 Inbox、相同证据重跑、再次过期后不得重复回流、
+仍在近期窗口但早于过期截止的旧事实补录、非 material/未关联/同时间戳事实、
+仅新解释 ID/计算时间、前驱重配、policy 切换及恢复、未来时间及仅时钟推进、
+派生时间与原始时间不一致、全失效跳过、历史保守初始化及随后新事实、基线
+不被物化覆盖、不泄漏 API、旧计划失效/伪造计划拒绝、损坏基线不重置、
+RESOLVED/其他 Event 不回流。首次纠正后重跑稳定，身份和创建时间不变。
+
+成功回流逐表确认除 Feed 外所有业务表不变；失败注入在状态/基线 flush 后触发，
+两者都回滚。前六项保护断言仅额外允许明确内部区域变化，公开字段与来源保护
+未放宽；模拟过去的外部计划测试采用固定执行时钟。Lifecycle dry-run + HTTP
+查询在 1 个与 6 个条目下均 **21 次 SELECT**（新增一次原始 UUID 库存批量读取），
+不存在逐 Feed/Signal 来源查询。
+
+本次未调用真实 LLM、未执行生产 refresh/采集/recovery/rebuild/迁移/维护，
+未写业务数据库或修改/删除来源事实与历史关联；所有写入验证在隔离数据库。
+基线审计及快照未改写。**仍存在**：保守初始化/相同时间/截止前补录的潜在
+遗漏、跨投资者有效性与回流、历史 Event/关联污染、其他产品读取入口口径及
+总体运行验收。整个 Inbox 与可信变化阶段未完成；停止，不自动继续下一项。
+
+### 跨投资者 Signal 已引用来源链校验 — 2026-10-08
+
+**本子任务局部完成：只读 policy/引用边界接入候选与持久化聚合读取**。
+保留此前七项 Thesis 修复、普通 Signal 历史读取，以及 NEW_ATTENTION 原行为。
+新增 `CrossInvestorReferencedEvidenceReader.list_with_valid_references` 作为共享
+来源入口；`SignalRepository.list_cross_investor_signals_with_valid_references`
+复用它并要求 ACTIVE、准确 Signal type/source_type/source_id、Asset 一致、
+无伪造单投资者身份，再由 EventAggregationSignalReader 接入 production UoW。
+本次命名及边界为“已引用来源有效”，不是 Snapshot freshness/supersession。
+
+Alignment → Snapshot 及 Consensus → Alignment → Snapshot 必须存在、同标的、
+Snapshot 引用一致，input identity 与既有 fingerprint 函数一致。显式检查 active
+Snapshot/Alignment/Consensus policy 以及 Snapshot 的批准 Opinion、Attention、
+Thesis comparison、Consistency identity，不回退到历史 policy。来源结构或引用
+不合法的产物排除，不相信 Signal.metadata。既有纯 Alignment/Consensus 构造/
+完整性路径用于核对已有产物，不复制分类算法，不执行 calculate 或持久化。
+
+上游按 Asset + window_end 分组，复用 existing effective selectors；沿用 Snapshot
+服务的 window_end 读取截止（as_of 更晚也不引入窗口后事实）。引用 Opinion、
+Attention、ThesisChange 必须仍有效，Investor/Asset/RawEvent/Analysis 关联准确，
+贡献的方向/时间/类型等标签与已引用真实来源一致；Thesis 前驱也必须在该截止
+的有效时间线中，时间对应 current Opinion 事实。first-Attention 引用及其身份/
+时间可核验，窗口内 latest Opinion 仅从已引用 Opinion 集合确认，不把未来或
+后来未引用的新 Opinion 填进旧窗口。Portfolio/Consistency 只有存在引用时才按
+既有效规则读取校验，不假定生产数据存在，也不扩展 intelligence。
+
+**边界**：已引用证据仍有效，不代表 Snapshot 包含目前窗口全部有效证据。
+晚到事实扩大输入集合不会仅凭这一点判定旧 Snapshot 失效；也不重新断言存储
+first-Attention anchor 已是现在最早的完整历史锚点。窗口版本、late-data 输入
+完整性与 supersession 另行处理，历史完整性继续 UNKNOWN。
+
+新增 `tests/integration/test_cross_signal_source_chains.py`，真实上游数据库数据，
+直接保存历史错误 Signal，不用修复后的 generator 替代旧数据场景，也不 mock
+effective selector。合法 artifact calculate 只用于隔离 fixture 准备，随后专门
+禁止 calculate 的读取测试通过。首批修复前 **50 failed / 3 passed**；补充后
+新增 **61 passed**，跨来源及此前七项/相关消费者回归合计 **401 passed**。
+Python lint/format 与 git diff --check 通过。
+
+覆盖每层及上游 policy、来源缺失/现存错配、Asset/引用/input identity 错误、
+inactive/FAILED Opinion、Attention 实际身份与 policy、Thesis 前驱失效、标签/
+metadata 伪造、窗口后事实、窗口内新增但未引用事实、旧非 ACTIVE Signal、
+混合聚合只新增合法 evidence links、普通历史读取保留、dry-run 逐表零写入、
+重复生成/聚合幂等及缺失 Portfolio 引用排除。旧回归中“跨来源永远放行”的
+断言按本次授权更新为 NEW_ATTENTION 不变，未削弱 Thesis 来源/幂等验证。
+
+批量观测：2 条与 12 条旧跨投资者 Signal 的专用读取均 **10 次 SELECT**；
+六个同 Asset/window_end 的窗口版本共用一次完整上游读取。生成 dry-run 的
+11 → 21 次 SELECT 增量仅为新增候选各自的 Signal 身份查找，非逐 Signal 重读
+来源链。所有校验零写入，未删除历史 Signal、改状态或改来源记录。
+
+**时间及含义未修复**：候选 observed_at 仍取原 calculated_at，Signal 身份仍为
+type + source_id，窗口 fingerprint 不变；CONSENSUS_CHANGE 保留现有枚举及候选
+状态条件，没有把当前共识状态证明为共识变化。不同合法窗口/版本、相同事实
+的重复 Signal、旧 Event metadata/状态/证据关联、Priority/Feed 物化与查询的
+跨投资者有效性仍未解决，最终 Feed 不能据此宣称可信。
+
+本次限 Signal 候选/专用读取、共享只读校验、对应测试和本路线状态；未改
+Priority、Feed query、跨投资者回流、calculated_at/observed_at、窗口/去重规则，
+未调用真实 LLM、未执行生产 refresh/采集/recovery/rebuild/迁移/维护、未写
+业务数据库、未新增表/policy/评分/算法。已有修改和基线快照保留。跨投资者
+情报及整个可信变化阶段均未完成；停止，不自动继续下一项。
+
+### 跨投资者 Signal 方向证据事实时间 — 2026-10-09
+
+**本子任务局部完成：两类新候选与专用读取停止用 calculated_at 充当 observed_at**。
+保留此前八项修复及共享只读来源链校验，不修改 Consensus 分类、窗口输入身份、
+Signal type/source/唯一键/去重、policy、来源时间或历史 Signal 字段。
+
+时间依据：CROSS_INVESTOR_ALIGNMENT 的方向状态使用 Snapshot 各投票投资者的
+latest_window_opinion；现有 CONSENSUS_CHANGE 使用经校验的 Consensus.latest_opinions，
+与同源 Snapshot 的投票成员/Opinion 一致。两类 observed_at 都取这组实际方向
+投票 Opinion 对应 **RawEvent.published_time 的最大值**，表示最晚一票的事实时间，
+不是共识形成/变化时间。Neutral 也是既有方向投票的一部分，不添加新侧别规则。
+Attention-only 贡献、非投票 Opinion、Thesis/Portfolio/Consistency 的较新时间不能
+刷新它；不是 Snapshot 中所有 artifact 时间的最大值。
+
+共享入口新增 `list_with_fact_times`，沿用已加载的 Asset/window_end 有效 Opinion
+→ RawEvent 事实读取，核对实际 Opinion 身份、方向和贡献时间；只从各自 Snapshot
+已引用的 latest votes 取值，不从当前窗口全集或窗口后最新 Opinion 替换。旧
+`list_with_valid_references` 保留接口并复用同一校验。无法证明投票或贡献时间与
+真实来源不一致时排除，不使用 calculated_at/generated_time/collected_time、窗口
+结束或当前时间兜底。不复制分类算法，不创建新情报层。
+
+Generator 使用统一事实时间映射，created_at 仍为实际生成时刻。已落库 Signal 的
+专用读取只对返回的 SignalView 副本校正 observed_at，普通 get/list 保留原值。
+Event 聚合适配器传递校正副本，不能只筛 ID 后又返回原始带污染时间的对象。
+复用旧 Signal 的物理记录不被重写；相同身份重跑无新增行。
+
+新增 `tests/integration/test_cross_signal_fact_time.py`，真实隔离 Snapshot/Alignment/
+Consensus（旧事实、新计算）与直接保存的旧 ACTIVE Signal。首批修复前
+**11 failed**；补充新行、非投票真实 Thesis 引用与混合聚合后 **15 passed**。
+此前 Thesis/来源链及相关 API/物化/生命周期/架构回归合计 **416 passed**，
+Python lint/format 与 git diff --check 通过。上一子任务刻意冻结计算时间的断言
+只更新为事实时间预期，历史原值、身份及有效来源断言继续保留。
+
+覆盖两类候选与旧读取校正、历史值完整保留、重算时间变化不影响 observed_at、
+窗口后事实不泄漏、贡献时间字符串伪造排除、较新的非投票 Attention 与实际
+Thesis 引用不刷新方向时间、迟到旧投票使用原发布时间、新 Signal 的创建时间
+与事实时间分离、dry-run 逐表零写入、重复生成身份复用、混合窗口 Event 候选
+时间范围按校正输入。沿用来源链的分组读取和查询预算：2/12 条持久化 Signal
+仍 **10 次 SELECT**，没有新增逐 Signal 事实查询，输入集合扩大等边界未改。
+
+旧 Event 隔离验证明确区分：新的聚合候选 first/last 都按事实；既有 repository
+仍用 min/max 保留历史范围，例中 first 可扩展到事实时间，但受污染 last 仍是
+旧 calculated_at。旧 links 与历史 Signal 原时间保留，不进行 Event/Priority/Feed
+维护，也不校正最终 Feed 响应。**仍未解决**：窗口输入完整性/supersession、
+重复窗口/相同事实的重复 Signal、CONSENSUS_CHANGE 的真实前后比较与表述、
+历史 Event/关联及最终跨投资者 Feed 时间/有效性、跨投资者回流。
+
+本次只改共享只读事实时间解析、候选/专用读取及 Event 输入接入、相关回归和
+本路线状态；未调用真实 LLM、未执行生产 refresh/采集/recovery/rebuild/迁移/
+维护、未写业务数据库、未改来源或删除关联、未新增表/policy/评分/算法。
+已有修改及基线快照不变。跨投资者情报和整个可信变化阶段均未完成；停止，
+不自动继续下一项。
+
 ## 历史路线与 Sprint 记录（原文保留）
 
 下文所有“current”“next”“complete”按其记录时点解读，不覆盖顶部当前路线。

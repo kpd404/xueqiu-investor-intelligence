@@ -1627,6 +1627,32 @@ class OperationalRefreshService:
             "reused": result.reused_count,
             "transitions": len(result.plan.transitions),
             "evaluated_at": result.plan.evaluated_at.isoformat(),
+            "skipped_count": len(result.plan.skipped),
+            "baseline_updated": result.baseline_updated_count,
+            "thesis_checkpoints": [
+                {
+                    "feed_item_id": str(item.expected.id),
+                    "reason": item.reason,
+                    "from_state": item.expected.state.value,
+                    "to_state": item.to_state.value,
+                    "source_facts": [
+                        {
+                            "raw_event_id": str(fact.raw_event_id),
+                            "published_time": fact.published_time.isoformat(),
+                        }
+                        for fact in item.source_facts
+                    ],
+                }
+                for item in result.plan.checkpoints
+            ],
+            "skipped": [
+                {
+                    "feed_item_id": str(item.feed_item_id),
+                    "event_id": str(item.event_id),
+                    "reason": item.reason,
+                }
+                for item in result.plan.skipped
+            ],
         }
 
     def _verify_product(

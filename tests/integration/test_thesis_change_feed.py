@@ -246,7 +246,7 @@ def test_real_service_dry_runs_and_reruns_preserve_priority_and_feed_identity(
     assert feed_service.dry_run().created_count == 1
     assert _counts(db_session_factory) == (1, 1, 1, 1, 0)
     first_feed = feed_service.materialize().items[0]
-    lifecycle = FeedLifecycleService.from_production(db_session_factory)
+    lifecycle = FeedLifecycleService.from_production(db_session_factory, now_factory=lambda: NOW)
     plan = lifecycle.dry_run(now=NOW)
     assert plan.updated_count == 1
     with db_session_factory() as session:
@@ -267,7 +267,7 @@ def test_real_service_dry_runs_and_reruns_preserve_priority_and_feed_identity(
     assert _recent_feed(feed_api)["total"] == 1
 
 
-def test_legacy_priority_is_readable_and_reuse_does_not_reclassify_it(
+def test_legacy_priority_is_readable_and_thesis_refresh_preserves_identity(
     db_session_factory, production_policies, feed_api
 ):
     first = _seed_change(db_session_factory, production_policies, ThesisChangeType.THESIS_CHANGED)
@@ -286,27 +286,27 @@ def test_legacy_priority_is_readable_and_reuse_does_not_reclassify_it(
         )
         session.commit()
     service = IntelligencePriorityService.from_production(db_session_factory)
-    assert service.dry_run().candidates[0].reason.value == OBSERVED_REASON
+    plan = service.dry_run()
+    assert plan.candidates[0].reason.value == OBSERVED_REASON
+    assert plan.priorities[0].reason is IntelligencePriorityReason.THESIS_ACCELERATION
     reused = service.materialize()
     assert reused.created_count == 0
     assert reused.reused_count == 1
     assert reused.priorities[0].id == old.id
-    assert reused.priorities[0].reason is IntelligencePriorityReason.THESIS_ACCELERATION
+    assert reused.priorities[0].reason.value == OBSERVED_REASON
+    assert reused.priorities[0].created_at == old.created_at
     assert reused.priorities[0].evidence_count == 2
     _downstream(db_session_factory)
     item = _recent_feed(feed_api)["items"][0]
-    # Feed API now corrects current evidence presentation without reclassifying
-    # the persisted legacy Priority or changing its materialization behavior.
+    # The authorized Thesis-only materialization now corrects persisted derived
+    # fields; the legacy enum remains readable before that refresh.
     assert item["reason"] == OBSERVED_REASON
     assert item["title"] == "A thesis change was observed"
     with db_session_factory() as session:
-        assert session.get(IntelligenceEventPriority, old.id).reason == "THESIS_ACCELERATION"
+        assert session.get(IntelligenceEventPriority, old.id).reason == OBSERVED_REASON
         stored_feed = session.scalar(select(IntelligenceFeedItem))
-        assert stored_feed.reason == "THESIS_ACCELERATION"
-        assert (
-            stored_feed.title
-            == "Legacy thesis acceleration classification (acceleration unverified)"
-        )
+        assert stored_feed.reason == OBSERVED_REASON
+        assert stored_feed.title == "A thesis change was observed"
 
 
 def test_new_and_legacy_thesis_reasons_are_distinct_contract_values():

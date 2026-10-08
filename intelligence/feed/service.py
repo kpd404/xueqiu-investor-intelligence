@@ -14,11 +14,15 @@ from contracts import (
     FeedItemCreate,
     IntelligenceEventEvidenceView,
     IntelligenceEventPriorityView,
+    IntelligenceEventState,
+    IntelligenceEventType,
     IntelligenceEventView,
     IntelligenceFeedGenerationResult,
+    IntelligencePriorityLevel,
     IntelligencePriorityReason,
     SignalView,
 )
+from intelligence.events.evidence import group_effective_thesis_evidence
 
 
 class PriorityReader(Protocol):
@@ -48,6 +52,7 @@ class IntelligenceFeedUoW(Protocol):
     intelligence_events: EventReader
     intelligence_event_evidence: EvidenceReader
     signals: SignalReader
+    effective_thesis_signals: SignalReader
     intelligence_feed_items: FeedWriter
 
     def __enter__(self) -> Self: ...
@@ -150,25 +155,56 @@ class IntelligenceFeedService:
         allowed = frozenset(priority_ids) if priority_ids is not None else None
         events = {event.id: event for event in unit_of_work.intelligence_events.list()}
         links_by_event: dict[UUID, list[IntelligenceEventEvidenceView]] = defaultdict(list)
-        for link in unit_of_work.intelligence_event_evidence.list():
+        links = unit_of_work.intelligence_event_evidence.list()
+        for link in links:
             links_by_event[link.event_id].append(link)
         signals = {signal.id: signal for signal in unit_of_work.signals.list()}
+        priorities = unit_of_work.intelligence_event_priorities.list()
+        effective_thesis = {}
+        if any(
+            priority.event_id in events
+            and events[priority.event_id].event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE
+            and events[priority.event_id].state is IntelligenceEventState.ACTIVE
+            and (allowed is None or priority.id in allowed)
+            for priority in priorities
+        ):
+            effective_thesis = group_effective_thesis_evidence(
+                events.values(), links, unit_of_work.effective_thesis_signals.list()
+            )
         candidates: list[FeedItemCreate] = []
-        for priority in unit_of_work.intelligence_event_priorities.list():
+        for priority in priorities:
             if allowed is not None and priority.id not in allowed:
                 continue
             event = events.get(priority.event_id)
             if event is None:
                 raise ValueError(f"IntelligenceEvent not found for Priority: {priority.id}")
-            links = links_by_event.get(event.id, [])
-            source_signals = [
-                signals[link.signal_id] for link in links if link.signal_id in signals
-            ]
-            if len(source_signals) != len(links):
-                raise ValueError(f"Signal evidence is incomplete for IntelligenceEvent: {event.id}")
+            observed_at = event.last_observed_at
+            if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
+                if event.state is not IntelligenceEventState.ACTIVE:
+                    continue
+                source_signals = list(effective_thesis.get(event.id, ()))
+                if not source_signals:
+                    continue
+                if (
+                    priority.reason is not IntelligencePriorityReason.THESIS_CHANGE_OBSERVED
+                    or priority.priority_level is not IntelligencePriorityLevel.MEDIUM
+                ):
+                    raise ValueError(
+                        f"Thesis Priority must be refreshed before Feed: {priority.id}"
+                    )
+                observed_at = max(signal.observed_at for signal in source_signals)
+            else:
+                event_links = links_by_event.get(event.id, [])
+                source_signals = [
+                    signals[link.signal_id] for link in event_links if link.signal_id in signals
+                ]
+                if len(source_signals) != len(event_links):
+                    raise ValueError(
+                        f"Signal evidence is incomplete for IntelligenceEvent: {event.id}"
+                    )
             if len(source_signals) != priority.evidence_count:
                 raise ValueError(
-                    f"Priority evidence count does not match Event evidence: {priority.id}"
+                    f"Priority evidence count does not match selected Event evidence: {priority.id}"
                 )
             candidates.append(
                 FeedItemCreate(
@@ -178,7 +214,7 @@ class IntelligenceFeedService:
                     title=cls._title(priority.reason),
                     context=cls._context(source_signals),
                     reason=priority.reason,
-                    observed_at=event.last_observed_at,
+                    observed_at=observed_at,
                     created_at=datetime.now(UTC),
                 )
             )

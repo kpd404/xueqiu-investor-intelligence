@@ -644,6 +644,7 @@ class SqlAlchemyIntelligencePriorityUnitOfWork:
         self.intelligence_events = IntelligenceEventRepository(self._session)
         self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
         self.intelligence_event_priorities = IntelligenceEventPriorityRepository(self._session)
+        self.effective_thesis_signals = FeedThesisSignalReader(self._session)
         return self
 
     def __exit__(

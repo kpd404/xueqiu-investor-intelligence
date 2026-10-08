@@ -8,6 +8,7 @@ from intelligence.feed.lifecycle.service import (
     FeedLifecyclePlan,
     FeedLifecycleResult,
     FeedLifecycleService,
+    FeedLifecycleSkip,
 )
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "FeedLifecyclePolicy",
     "FeedLifecycleResult",
     "FeedLifecycleService",
+    "FeedLifecycleSkip",
     "FeedLifecycleTransition",
 ]

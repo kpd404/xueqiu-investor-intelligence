@@ -8,6 +8,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from contracts import FeedItem, FeedItemCreate, FeedState
+from contracts.intelligence_event import IntelligenceEventType
+from contracts.intelligence_feed import (
+    THESIS_LIFECYCLE_CONTEXT_KEY,
+    preserve_thesis_lifecycle_context,
+)
 from database.models.intelligence_feed_item import IntelligenceFeedItem
 
 
@@ -39,7 +44,9 @@ class IntelligenceFeedItemRepository:
                 "asset_id": command.asset_id,
                 "event_type": command.event_type.value,
                 "title": command.title,
-                "context": command.context,
+                "context": preserve_thesis_lifecycle_context(
+                    existing_entity.context, command.context
+                ),
                 "reason": command.reason.value,
                 "observed_at": command.observed_at,
             }
@@ -98,6 +105,30 @@ class IntelligenceFeedItemRepository:
         entity = self._session.get(IntelligenceFeedItem, feed_item_id)
         if entity is None:
             raise LookupError(f"FeedItem not found: {feed_item_id}")
+        entity.state = state.value
+        self._session.flush()
+        return self._to_view(entity)
+
+    def update_thesis_lifecycle(
+        self,
+        expected: FeedItem,
+        state: FeedState,
+        baseline: dict[str, object],
+    ) -> FeedItem:
+        """Lock/check this projection, then flush state and checkpoint in one UPDATE."""
+        entity = self._session.scalar(
+            select(IntelligenceFeedItem)
+            .where(IntelligenceFeedItem.id == expected.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if entity is None or self._to_view(entity) != expected:
+            raise ValueError("Thesis lifecycle projection or baseline changed")
+        if entity.event_type != IntelligenceEventType.INVESTOR_VIEW_CHANGE.value:
+            raise ValueError("Thesis lifecycle update requires INVESTOR_VIEW_CHANGE")
+        context = dict(entity.context)
+        context[THESIS_LIFECYCLE_CONTEXT_KEY] = baseline
+        entity.context = context
         entity.state = state.value
         self._session.flush()
         return self._to_view(entity)

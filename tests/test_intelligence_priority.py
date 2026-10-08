@@ -13,6 +13,8 @@ from contracts import (
     IntelligenceEventView,
     IntelligencePriorityLevel,
     IntelligencePriorityReason,
+    SignalType,
+    SignalView,
 )
 from database.models import Asset
 from database.repositories.intelligence_event_priorities import (
@@ -140,12 +142,32 @@ class _PriorityWriter:
         self.values[command.event_id] = priority
         return priority, True
 
+    def add_or_refresh_thesis_change(self, command):
+        return self.add_if_absent(command)
+
 
 class _Uow:
     def __init__(self, events, evidence):
         self.intelligence_events = _EventReader(events)
         self.intelligence_event_evidence = _EvidenceReader(evidence)
         self.intelligence_event_priorities = _PriorityWriter()
+        # Unit read-port fixture, not a substitute for integration source SQL.
+        events_by_id = {event.id: event for event in self.intelligence_events.events}
+        self.effective_thesis_signals = _EvidenceReader(
+            tuple(
+                SignalView(
+                    id=link.signal_id,
+                    asset_id=events_by_id[link.event_id].asset_id,
+                    signal_type=SignalType.THESIS_CHANGE,
+                    source_type="ThesisChange",
+                    source_id=uuid4(),
+                    created_at=NOW,
+                    observed_at=NOW,
+                )
+                for link in self.intelligence_event_evidence.evidence
+                if link.event_id in events_by_id
+            )
+        )
         self.commit_count = 0
 
     def __enter__(self):
