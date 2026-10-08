@@ -186,8 +186,12 @@ def test_feed_titles_are_deterministic_templates() -> None:
         == "Multiple investors started paying attention"
     )
     assert (
+        IntelligenceFeedService._title(IntelligencePriorityReason.THESIS_CHANGE_OBSERVED)
+        == "A thesis change was observed"
+    )
+    assert (
         IntelligenceFeedService._title(IntelligencePriorityReason.THESIS_ACCELERATION)
-        == "Multiple thesis changes were observed"
+        == "Legacy thesis acceleration classification (acceleration unverified)"
     )
 
 

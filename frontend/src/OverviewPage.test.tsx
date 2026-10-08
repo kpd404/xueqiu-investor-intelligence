@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OverviewPage } from "./OverviewPage";
+import { formatEnum } from "./presentation";
 import type { AssetListItem, IntelligenceFeedItem, OperationalStatusResponse } from "./types";
 
 const baseAsset: AssetListItem = {
@@ -150,6 +151,45 @@ const healthyStatus: OperationalStatusResponse = {
 afterEach(cleanup);
 
 describe("已观察情报概览 V0", () => {
+  it.each([1, 2])("renders %i thesis changes with a neutral observed reason", (count) => {
+    const item = {
+      ...recentItem,
+      event_type: "INVESTOR_VIEW_CHANGE" as const,
+      priority_level: "MEDIUM" as const,
+      reason: "THESIS_CHANGE_OBSERVED" as IntelligenceFeedItem["reason"],
+      title: "A thesis change was observed",
+      context: { signal_count: count }
+    };
+    render(
+      <OverviewPage assets={assets} loading={false} error={null}
+        onOpenAsset={vi.fn()} onOpenDiscovery={vi.fn()} recentItems={[item]} />
+    );
+    const panel = screen.getByRole("region", { name: "近期投资情报" });
+    expect(panel).toHaveTextContent("观察到投资逻辑变化。");
+    expect(panel).not.toHaveTextContent("加速");
+    expect(panel).not.toHaveTextContent("多次投资逻辑变化");
+    expect(formatEnum("THESIS_CHANGE_OBSERVED")).toBe("观察到投资逻辑变化");
+  });
+
+  it("labels the legacy acceleration reason without claiming a trusted new change", () => {
+    const item = {
+      ...recentItem,
+      event_type: "INVESTOR_VIEW_CHANGE" as const,
+      priority_level: "MEDIUM" as const,
+      reason: "THESIS_ACCELERATION" as const,
+      title: "Multiple thesis changes were observed"
+    };
+    render(
+      <OverviewPage assets={assets} loading={false} error={null}
+        onOpenAsset={vi.fn()} onOpenDiscovery={vi.fn()} recentItems={[item]} />
+    );
+    const panel = screen.getByRole("region", { name: "近期投资情报" });
+    expect(panel).toHaveTextContent("旧分类");
+    expect(panel).toHaveTextContent("未验证加速");
+    expect(panel).not.toHaveTextContent("观察到投资逻辑变化。");
+    expect(formatEnum("THESIS_ACCELERATION")).toBe("投资逻辑加速（旧分类，未验证加速）");
+  });
+
   it("loads universe facts, patterns, latest observed ordering, and data boundary", () => {
     render(
       <OverviewPage

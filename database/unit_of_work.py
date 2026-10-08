@@ -31,7 +31,11 @@ from database.repositories import (
     ThesisChangeRepository,
 )
 from resolution import AssetResolver
-from signal_engine.repository import SignalRepository
+from signal_engine.repository import (
+    EventAggregationSignalReader,
+    FeedThesisSignalReader,
+    SignalRepository,
+)
 
 
 class SqlAlchemyOpinionUnitOfWork:
@@ -601,7 +605,7 @@ class SqlAlchemyIntelligenceEventUnitOfWork:
     def __enter__(self) -> "SqlAlchemyIntelligenceEventUnitOfWork":
         self._session = self._session_factory()
         self._committed = False
-        self.signals = SignalRepository(self._session)
+        self.signals = EventAggregationSignalReader(SignalRepository(self._session))
         self.intelligence_events = IntelligenceEventRepository(self._session)
         self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
         return self
@@ -679,6 +683,7 @@ class SqlAlchemyIntelligenceFeedUnitOfWork:
         self.investors = InvestorRepository(self._session)
         self.intelligence_event_evidence = IntelligenceEventEvidenceRepository(self._session)
         self.signals = SignalRepository(self._session)
+        self.effective_thesis_signals = FeedThesisSignalReader(self._session)
         self.intelligence_feed_items = IntelligenceFeedItemRepository(self._session)
         self.thesis_changes = ThesisChangeRepository(self._session)
         self.cross_investor_asset_snapshots = CrossInvestorAssetSnapshotRepository(self._session)

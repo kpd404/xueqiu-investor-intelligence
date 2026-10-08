@@ -16,6 +16,8 @@ class IntelligencePriorityLevel(StrEnum):
 
 class IntelligencePriorityReason(StrEnum):
     MULTI_INVESTOR_ATTENTION = "MULTI_INVESTOR_ATTENTION"
+    THESIS_CHANGE_OBSERVED = "THESIS_CHANGE_OBSERVED"
+    # Legacy persisted classification; cumulative counts did not verify acceleration.
     THESIS_ACCELERATION = "THESIS_ACCELERATION"
     CROSS_INVESTOR_DISCOVERY = "CROSS_INVESTOR_DISCOVERY"
     CONSENSUS_STATE_CHANGE = "CONSENSUS_STATE_CHANGE"

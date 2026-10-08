@@ -1,5 +1,10 @@
 # Xueqiu Investor Intelligence System
 
+> 2026-10-08 准备基线：当前执行路线以 [ROADMAP](docs/ROADMAP.md) 顶部为准，
+> 当前正确性、数据库与验收状态见 [基线报告](docs/BASELINE_AUDIT_2026-10-08.md)。
+> 下文 Phase/Sprint COMPLETE 和数据数字保留为历史实现/演练记录，不代表当前重新验收。
+> 本次发现默认 SQLite 初始迁移在 0011 失败；现有安装说明尚未达到可重复安装验收。
+
 ## Current phase
 
 Phase 3 — Operational MVP and Phase 4 — Intelligence Yield Recovery are

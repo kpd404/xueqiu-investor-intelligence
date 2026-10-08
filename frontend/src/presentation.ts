@@ -136,7 +136,7 @@ const enumLabels: Record<string, string> = {
   CROSS_INVESTOR_DISCOVERY: "跨投资者发现",
   CONSENSUS_STATE_CHANGE: "共识状态变化",
   MULTI_INVESTOR_ATTENTION: "多位投资者关注",
-  THESIS_ACCELERATION: "投资逻辑加速",
+  THESIS_ACCELERATION: "投资逻辑加速（旧分类，未验证加速）",
   CONSENSUS_STATE_CHANGE_REASON: "共识状态变化"
 };
 

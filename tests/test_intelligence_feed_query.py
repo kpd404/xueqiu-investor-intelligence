@@ -105,6 +105,9 @@ class _Uow:
         self.intelligence_events = _Reader((values["event"],))
         self.intelligence_event_evidence = _Reader((values["link"],))
         self.signals = _Reader((values["signal"],))
+        # Unit-level read-port fixture; database source validity is covered by
+        # the historical-pollution HTTP integration tests.
+        self.effective_thesis_signals = _Reader((values["signal"],))
         self.assets = _Reader(
             (
                 type(

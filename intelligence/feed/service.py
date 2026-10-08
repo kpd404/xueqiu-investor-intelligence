@@ -200,7 +200,10 @@ class IntelligenceFeedService:
             IntelligencePriorityReason.MULTI_INVESTOR_ATTENTION: (
                 "Multiple investors started paying attention"
             ),
-            IntelligencePriorityReason.THESIS_ACCELERATION: "Multiple thesis changes were observed",
+            IntelligencePriorityReason.THESIS_CHANGE_OBSERVED: "A thesis change was observed",
+            IntelligencePriorityReason.THESIS_ACCELERATION: (
+                "Legacy thesis acceleration classification (acceleration unverified)"
+            ),
             IntelligencePriorityReason.CROSS_INVESTOR_DISCOVERY: (
                 "Cross-investor attention was observed"
             ),

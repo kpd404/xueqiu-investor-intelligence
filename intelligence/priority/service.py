@@ -203,12 +203,12 @@ class IntelligencePriorityService:
                 )
             return None
         if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
-            if int(metadata.get("signal_count", 0)) >= 2:
-                return (
-                    IntelligencePriorityLevel.MEDIUM,
-                    IntelligencePriorityReason.THESIS_ACCELERATION,
-                )
-            return None
+            # _candidates requires actual linked evidence and an ACTIVE Event.
+            # A cumulative Signal count establishes neither rate nor acceleration.
+            return (
+                IntelligencePriorityLevel.MEDIUM,
+                IntelligencePriorityReason.THESIS_CHANGE_OBSERVED,
+            )
         if event.event_type is IntelligenceEventType.CROSS_INVESTOR_DISCOVERY:
             return (
                 IntelligencePriorityLevel.LOW,

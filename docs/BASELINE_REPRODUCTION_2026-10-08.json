@@ -1,0 +1,36 @@
+{
+  "stale_with_fresh_evidence_transitions": 0,
+  "superseded_signal_feed_returned": 1,
+  "two_cumulative_signals_priority": [
+    "MEDIUM",
+    "THESIS_ACCELERATION"
+  ],
+  "existing_failed_analysis": {
+    "partial": true,
+    "analysis_ids": [],
+    "counts": {
+      "processed": 0,
+      "success": 0,
+      "partial": 0,
+      "no_opinion": 0,
+      "failed": 0,
+      "existing_failed": 1,
+      "reused": 0,
+      "llm_requests": 0
+    }
+  },
+  "same_evidence_changed_window_changes_snapshot_identity": true,
+  "fresh_sqlite_migration": {
+    "type": "NotImplementedError",
+    "detail": "No support for ALTER of constraints in SQLite dialect. Please refer to the batch mode feature which allows for SQLite migrations using a copy-and-move strategy."
+  },
+  "git_head": "a2ea769aaf8a67d9a26b4d14e5d6ba748e083a84",
+  "recorded_at": "2026-10-08T19:36:15.827179+08:00",
+  "isolation": "test fixture UoW / pure contracts / new .local SQLite migration target; no business writes or LLM",
+  "isolated_sqlite_direct_update_allowed": true,
+  "isolated_sqlite_direct_delete_allowed": true,
+  "fixtures": [
+    "tests.test_feed_lifecycle._entry/_uow_from_entries",
+    "tests.test_intelligence_feed_query._fixtures/_Uow"
+  ]
+}

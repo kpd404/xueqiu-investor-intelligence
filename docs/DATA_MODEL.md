@@ -2,6 +2,11 @@
 
 ## Data Model Specification
 
+> 当前数据使用 [2026-10-08 只读快照](BASELINE_SNAPSHOT_2026-10-08.json)，
+> 当前正确性缺口见 [基线报告](BASELINE_AUDIT_2026-10-08.md)。历史 schema 设想、
+> Signal Score、quality_score 或扩展章节不构成当前开发授权；本次不新增实体。
+> RawEvent 不可变是要求，现有 ORM 保护尚未证明数据库级保护；历史完整性 UNKNOWN。
+
 Version: 1.4
 
 ---

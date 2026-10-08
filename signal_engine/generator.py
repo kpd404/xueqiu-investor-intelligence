@@ -23,6 +23,7 @@ from contracts import (
     SignalCreate,
     SignalSeverity,
     SignalType,
+    ThesisChangeType,
 )
 from database.models.attention_occurrence import AttentionOccurrence
 from database.models.cross_investor_asset_alignment import CrossInvestorAssetAlignment
@@ -144,6 +145,11 @@ class SqlAlchemySignalSourceReader:
             policy,
             comparison_version,
         )
+        material_change_types = {
+            ThesisChangeType.THESIS_REINFORCED,
+            ThesisChangeType.THESIS_EXTENDED,
+            ThesisChangeType.THESIS_CHANGED,
+        }
         return [
             SignalCreate(
                 asset_id=change.asset_id,
@@ -165,7 +171,8 @@ class SqlAlchemySignalSourceReader:
                 },
             )
             for change in changes
-            if (asset_ids is None or change.asset_id in asset_ids)
+            if change.change_type in material_change_types
+            and (asset_ids is None or change.asset_id in asset_ids)
             and (event_ids is None or change.current_event_id in event_ids)
         ]
 

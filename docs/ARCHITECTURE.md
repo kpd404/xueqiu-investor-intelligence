@@ -2,6 +2,11 @@
 
 ## System Architecture Specification
 
+> 当前执行优先级见 [ROADMAP](ROADMAP.md)，当前审计见
+> [2026-10-08 基线](BASELINE_AUDIT_2026-10-08.md)。本文分层/来源边界继续保留；
+> 历史 Delivery Status、数据和 COMPLETE 不替代当前验收。只修已证明正确性问题，
+> 暂停新增 Intelligence、评分、排名、Portfolio 扩展与云部署。
+
 Version: 1.7
 
 ---

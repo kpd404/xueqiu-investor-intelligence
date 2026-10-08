@@ -9,8 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import SignalCreate, SignalView
+from contracts import EffectiveAnalysisPolicy, SignalCreate, SignalState, SignalType, SignalView
+from contracts.thesis_change import ThesisChangeType
 from database.models.signal import Signal
+from database.models.thesis_change import ThesisChange
+from database.repositories.thesis_changes import ThesisChangeRepository
 
 
 class SignalRepository:
@@ -82,6 +85,47 @@ class SignalRepository:
         )
         return tuple(self._to_view(entity) for entity in self._session.scalars(statement))
 
+    def list_effective_thesis_changes(
+        self,
+        policy: EffectiveAnalysisPolicy,
+        comparison_version: str,
+    ) -> tuple[SignalView, ...]:
+        """Read current material Thesis Signals without changing their history.
+
+        Validity comes from source records, not Signal metadata. The existing
+        effective selector evaluates the complete current predecessor timeline;
+        no local event scope or cached source validity is used here.
+        """
+
+        material_types = {
+            ThesisChangeType.THESIS_REINFORCED,
+            ThesisChangeType.THESIS_EXTENDED,
+            ThesisChangeType.THESIS_CHANGED,
+        }
+        sources = {
+            change.id: change
+            for change in ThesisChangeRepository(self._session).list_effective(
+                policy, comparison_version
+            )
+            if change.change_type in material_types
+        }
+        statement = (
+            select(Signal)
+            .where(
+                Signal.signal_type == SignalType.THESIS_CHANGE.value,
+                Signal.state == SignalState.ACTIVE.value,
+                Signal.source_type == "ThesisChange",
+            )
+            .order_by(Signal.observed_at, Signal.signal_type, Signal.source_id, Signal.id)
+        )
+        return tuple(
+            self._to_view(entity)
+            for entity in self._session.scalars(statement)
+            if (source := sources.get(entity.source_id)) is not None
+            and entity.asset_id == source.asset_id
+            and entity.investor_id == source.investor_id
+        )
+
     @classmethod
     def _to_view(cls, entity: Signal | None) -> SignalView | None:
         if entity is None:
@@ -107,6 +151,71 @@ class SignalRepository:
         if value.tzinfo is None or value.utcoffset() is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+
+class EventAggregationSignalReader:
+    """Event-only read adapter; ordinary Signal repository reads stay historical."""
+
+    def __init__(self, repository: SignalRepository) -> None:
+        self._repository = repository
+
+    def list(self) -> tuple[SignalView, ...]:
+        signals = self._repository.list()
+        if not any(
+            signal.signal_type is SignalType.THESIS_CHANGE and signal.state is SignalState.ACTIVE
+            for signal in signals
+        ):
+            return tuple(
+                signal for signal in signals if signal.signal_type is not SignalType.THESIS_CHANGE
+            )
+
+        from config import get_production_analysis_policy, get_production_thesis_comparison_policy
+
+        effective_ids = {
+            signal.id
+            for signal in self._repository.list_effective_thesis_changes(
+                get_production_analysis_policy().as_effective_policy(),
+                get_production_thesis_comparison_policy().active_analysis_version,
+            )
+        }
+        return tuple(
+            signal
+            for signal in signals
+            if signal.signal_type is not SignalType.THESIS_CHANGE or signal.id in effective_ids
+        )
+
+
+class FeedThesisSignalReader:
+    """Feed-only effective evidence with authoritative source fact times."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list(self) -> tuple[SignalView, ...]:
+        from config import get_production_analysis_policy, get_production_thesis_comparison_policy
+
+        signals = SignalRepository(self._session).list_effective_thesis_changes(
+            get_production_analysis_policy().as_effective_policy(),
+            get_production_thesis_comparison_policy().active_analysis_version,
+        )
+        if not signals:
+            return ()
+        source_times = dict(
+            self._session.execute(
+                select(ThesisChange.id, ThesisChange.effective_time).where(
+                    ThesisChange.id.in_({signal.source_id for signal in signals})
+                )
+            ).all()
+        )
+        # A historical Signal may carry an incorrect observed_at. Correct only
+        # this read view; never rewrite it or use calculation time as freshness.
+        return tuple(
+            signal.model_copy(
+                update={"observed_at": SignalRepository._as_utc(source_times[signal.source_id])}
+            )
+            for signal in signals
+            if signal.source_id in source_times
+        )
 
 
 class SqlAlchemySignalUnitOfWork:
@@ -146,4 +255,9 @@ class SqlAlchemySignalUnitOfWork:
         self._committed = True
 
 
-__all__ = ["SignalRepository", "SqlAlchemySignalUnitOfWork"]
+__all__ = [
+    "EventAggregationSignalReader",
+    "FeedThesisSignalReader",
+    "SignalRepository",
+    "SqlAlchemySignalUnitOfWork",
+]

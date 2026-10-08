@@ -1,0 +1,289 @@
+{
+  "captured_at": "2026-10-08T19:31:22.196013+08:00",
+  "git_head": "a2ea769aaf8a67d9a26b4d14e5d6ba748e083a84",
+  "historical_completeness": "UNKNOWN",
+  "policies": {
+    "opinion": {
+      "analysis_type": "OPINION_EXTRACTION",
+      "active_spec": {
+        "analysis_version": "opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9",
+        "model_version": "deepseek-v4-flash",
+        "prompt_version": "opinion-extraction-v5",
+        "schema_version": "opinion-extraction-result-v2",
+        "provider_id": "deepseek",
+        "analysis_policy_version": "opinion-analysis-v3"
+      }
+    },
+    "thesis": {
+      "analysis_type": "THESIS_COMPARISON",
+      "active_spec": {
+        "analysis_version": "thesis-comparison-policy-v1:b11fa32abad7ca1b339170a41e1f38b18ef72e51e61f26961bd37db2e3982dc4",
+        "model_version": "deepseek-v4-flash",
+        "prompt_version": "thesis-comparison-v1",
+        "schema_version": "thesis-comparison-result-v1",
+        "provider_id": "deepseek",
+        "analysis_policy_version": "thesis-comparison-policy-v1"
+      }
+    },
+    "attention": "attention-occurrence-v1",
+    "snapshot": "cross-investor-asset-snapshot-v2",
+    "alignment": "cross-investor-directional-alignment-v1",
+    "consensus": "cross-investor-consensus-evidence-v2"
+  },
+  "database": {
+    "name": "snowball",
+    "version": "PostgreSQL 17.11 on x86_64-windows, compiled by msvc-19.44.35228, 64-bit",
+    "transaction_time": "2026-10-08 19:31:22.398307+08:00"
+  },
+  "counts": {
+    "alembic_version": 1,
+    "investors": 54,
+    "raw_events": 1868,
+    "assets": 55,
+    "opinions": 284,
+    "investor_asset_state_changes": 100,
+    "investor_asset_states": 75,
+    "event_analyses": 2151,
+    "attention_occurrences": 329,
+    "thesis_changes": 286,
+    "position_snapshots": 0,
+    "portfolio": 0,
+    "portfolio_actions": 0,
+    "asset_aliases": 67,
+    "investor_action_claims": 0,
+    "investor_behavior_snapshots": 0,
+    "investor_action_consistencies": 0,
+    "portfolio_snapshot_batches": 0,
+    "cross_investor_asset_snapshots": 209,
+    "cross_investor_asset_alignments": 127,
+    "cross_investor_consensus_evidences": 130,
+    "collection_runs": 136,
+    "collection_observations": 1267,
+    "signals": 463,
+    "intelligence_events": 99,
+    "intelligence_event_evidence": 437,
+    "intelligence_event_priorities": 70,
+    "intelligence_feed_items": 70,
+    "operational_refresh_runs": 43
+  },
+  "migration": [
+    "20260920_0024"
+  ],
+  "raw_event_span": {
+    "earliest": "2026-08-11 08:37:39+08:00",
+    "latest": "2026-09-22 18:57:20+08:00"
+  },
+  "effective_attention_count": 329,
+  "effective_thesis_groups": {
+    "NEW_THESIS": 82,
+    "THESIS_CHANGED": 113,
+    "THESIS_EXTENDED": 38,
+    "INSUFFICIENT_EVIDENCE": 11,
+    "THESIS_UNCHANGED": 5,
+    "THESIS_REINFORCED": 3
+  },
+  "thesis_signal_candidate_groups": {
+    "NEW_THESIS": 82,
+    "THESIS_CHANGED": 113,
+    "THESIS_EXTENDED": 38,
+    "INSUFFICIENT_EVIDENCE": 11,
+    "THESIS_UNCHANGED": 5,
+    "THESIS_REINFORCED": 3
+  },
+  "persisted_thesis_signal_groups": [
+    {
+      "change_type": "NEW_THESIS",
+      "count": 89
+    },
+    {
+      "change_type": "THESIS_UNCHANGED",
+      "count": 5
+    },
+    {
+      "change_type": "THESIS_EXTENDED",
+      "count": 38
+    },
+    {
+      "change_type": "THESIS_REINFORCED",
+      "count": 3
+    },
+    {
+      "change_type": "INSUFFICIENT_EVIDENCE",
+      "count": 11
+    },
+    {
+      "change_type": "THESIS_CHANGED",
+      "count": 121
+    }
+  ],
+  "active_analysis_missing": 81,
+  "effective_opinion_count": 252,
+  "cross_signal_calculation_time_equals_observed": [
+    {
+      "kind": "alignment",
+      "count": 89
+    },
+    {
+      "kind": "consensus",
+      "count": 7
+    }
+  ],
+  "event_analyses_groups": [
+    {
+      "analysis_version": "opinion-analysis-v3:09ffeb296d9ff28099f3e746749eda14fc74b708efaf5ff59bcfc3c74fcada79",
+      "status": "FAILED",
+      "count": 3
+    },
+    {
+      "analysis_version": "opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9",
+      "status": "FAILED",
+      "count": 1
+    },
+    {
+      "analysis_version": "opinion-analysis-v2:4bb6353f4c49a62cee6a93b8878b34d2f568a610ac30c8961636e51f72756421",
+      "status": "NO_OPINION",
+      "count": 113
+    },
+    {
+      "analysis_version": "opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9",
+      "status": "NO_OPINION",
+      "count": 1131
+    },
+    {
+      "analysis_version": "opinion-analysis-v2:cad333266ed12bd301302c3b5bd4adf4a6aa9e60a12a897d4c6bd78c3bd54595",
+      "status": "SUCCESS",
+      "count": 1
+    },
+    {
+      "analysis_version": "opinion-analysis-v2:4bb6353f4c49a62cee6a93b8878b34d2f568a610ac30c8961636e51f72756421",
+      "status": "SUCCESS",
+      "count": 12
+    },
+    {
+      "analysis_version": "opinion-analysis-v2:eb767d9d7f10647dc4bd5399bf29ae91e8798907fa94fdf5d494667a75d50816",
+      "status": "FAILED",
+      "count": 1
+    },
+    {
+      "analysis_version": "opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9",
+      "status": "PARTIALLY_RESOLVED",
+      "count": 506
+    },
+    {
+      "analysis_version": "opinion-analysis-v2:4bb6353f4c49a62cee6a93b8878b34d2f568a610ac30c8961636e51f72756421",
+      "status": "PARTIALLY_RESOLVED",
+      "count": 43
+    },
+    {
+      "analysis_version": "opinion-analysis-v3:09ffeb296d9ff28099f3e746749eda14fc74b708efaf5ff59bcfc3c74fcada79",
+      "status": "SUCCESS",
+      "count": 7
+    },
+    {
+      "analysis_version": "opinion-analysis-v2:d907f86a8c24a0baae8a4f8b41e038face326920405302ab1f3bca10dd6f3109",
+      "status": "PARTIALLY_RESOLVED",
+      "count": 2
+    },
+    {
+      "analysis_version": "opinion-analysis-v3:09ffeb296d9ff28099f3e746749eda14fc74b708efaf5ff59bcfc3c74fcada79",
+      "status": "NO_OPINION",
+      "count": 137
+    },
+    {
+      "analysis_version": "opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9",
+      "status": "SUCCESS",
+      "count": 149
+    },
+    {
+      "analysis_version": "opinion-analysis-v2:4bb6353f4c49a62cee6a93b8878b34d2f568a610ac30c8961636e51f72756421",
+      "status": "FAILED",
+      "count": 4
+    },
+    {
+      "analysis_version": "opinion-analysis-v3:09ffeb296d9ff28099f3e746749eda14fc74b708efaf5ff59bcfc3c74fcada79",
+      "status": "PARTIALLY_RESOLVED",
+      "count": 41
+    }
+  ],
+  "thesis_changes_groups": [
+    {
+      "change_type": "NEW_THESIS",
+      "count": 107
+    },
+    {
+      "change_type": "THESIS_UNCHANGED",
+      "count": 5
+    },
+    {
+      "change_type": "THESIS_EXTENDED",
+      "count": 38
+    },
+    {
+      "change_type": "INSUFFICIENT_EVIDENCE",
+      "count": 11
+    },
+    {
+      "change_type": "THESIS_CHANGED",
+      "count": 121
+    },
+    {
+      "change_type": "THESIS_REINFORCED",
+      "count": 4
+    }
+  ],
+  "signals_groups": [
+    {
+      "signal_type": "CONSENSUS_CHANGE",
+      "count": 7
+    },
+    {
+      "signal_type": "CROSS_INVESTOR_ALIGNMENT",
+      "count": 89
+    },
+    {
+      "signal_type": "THESIS_CHANGE",
+      "count": 267
+    },
+    {
+      "signal_type": "NEW_ATTENTION",
+      "count": 100
+    }
+  ],
+  "intelligence_feed_items_groups": [
+    {
+      "state": "STALE",
+      "count": 2
+    },
+    {
+      "state": "ACTIVE",
+      "count": 68
+    }
+  ],
+  "raw_event_triggers": [],
+  "latest_refresh": [
+    {
+      "id": "89c2412e-8b98-41ef-904f-91d681eee320",
+      "status": "FAILED",
+      "started_at": "2026-10-08 19:27:52.632660+08:00",
+      "finished_at": "2026-10-08 19:27:53.298815+08:00",
+      "failure_stage": "COLLECTION",
+      "failure_code": "CDP_UNAVAILABLE"
+    },
+    {
+      "id": "0a32f917-6b31-42c0-ad38-fb5e268c5e4f",
+      "status": "FAILED",
+      "started_at": "2026-10-08 18:27:44.706536+08:00",
+      "finished_at": "2026-10-08 18:27:52.395447+08:00",
+      "failure_stage": "COLLECTION",
+      "failure_code": "COLLECTION_AUTH_REQUIRED"
+    },
+    {
+      "id": "53b9d47d-5605-4e28-9974-a39830986647",
+      "status": "FAILED",
+      "started_at": "2026-10-07 23:21:02.818399+08:00",
+      "finished_at": "2026-10-07 23:21:06.200528+08:00",
+      "failure_stage": "COLLECTION",
+      "failure_code": "CDP_UNAVAILABLE"
+    }
+  ]
+}

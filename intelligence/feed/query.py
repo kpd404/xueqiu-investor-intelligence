@@ -17,7 +17,9 @@ from contracts import (
     IntelligenceEventType,
     IntelligenceEventView,
     IntelligencePriorityLevel,
+    IntelligencePriorityReason,
 )
+from intelligence.feed.service import IntelligenceFeedService
 from intelligence.schemas.feed import (
     FeedAssetIdentity,
     FeedInvestorIdentity,
@@ -60,6 +62,7 @@ class IntelligenceFeedQueryUoW(Protocol):
     intelligence_events: EventReader
     intelligence_event_evidence: EvidenceReader
     signals: SignalReader
+    effective_thesis_signals: SignalReader
     assets: AssetReader
     investors: InvestorReader
 
@@ -130,6 +133,16 @@ class IntelligenceFeedQueryService:
             for link in unit_of_work.intelligence_event_evidence.list():
                 links_by_event[link.event_id].append(link)
             signals = {signal.id: signal for signal in unit_of_work.signals.list()}
+            effective_thesis_signals = {}
+            if event_type in (None, IntelligenceEventType.INVESTOR_VIEW_CHANGE) and any(
+                item.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE
+                and (asset_id is None or item.asset_id == asset_id)
+                and (state is None or item.state is state)
+                for item in feed_items
+            ):
+                effective_thesis_signals = {
+                    signal.id: signal for signal in unit_of_work.effective_thesis_signals.list()
+                }
             projected = []
             for item in feed_items:
                 priority = priorities.get(item.priority_id)
@@ -146,14 +159,39 @@ class IntelligenceFeedQueryService:
                     continue
                 if state is not None and item.state is not state:
                     continue
-                if since is not None and item.observed_at < since:
+                source_signals = [
+                    signals[link.signal_id]
+                    for link in links_by_event.get(event.id, [])
+                    if link.signal_id in signals
+                ]
+                observed_at, reason, title, context = (
+                    item.observed_at,
+                    priority.reason,
+                    item.title,
+                    item.context,
+                )
+                if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
+                    if item.event_type is not event.event_type or item.asset_id != event.asset_id:
+                        continue
+                    source_signals = [
+                        effective_thesis_signals[link.signal_id]
+                        for link in links_by_event.get(event.id, [])
+                        if link.signal_id in effective_thesis_signals
+                        and effective_thesis_signals[link.signal_id].asset_id == event.asset_id
+                    ]
+                    if not source_signals:
+                        continue
+                    observed_at = max(signal.observed_at for signal in source_signals)
+                    reason = IntelligencePriorityReason.THESIS_CHANGE_OBSERVED
+                    title = IntelligenceFeedService._title(reason)
+                    context = IntelligenceFeedService._context(source_signals)
+                if since is not None and observed_at < since:
                     continue
                 if investor_id is not None:
                     linked_investors = {
-                        signals[link.signal_id].investor_id
-                        for link in links_by_event.get(event.id, [])
-                        if link.signal_id in signals
-                        and signals[link.signal_id].investor_id is not None
+                        signal.investor_id
+                        for signal in source_signals
+                        if signal.investor_id is not None
                     }
                     if investor_id not in linked_investors:
                         continue
@@ -167,10 +205,9 @@ class IntelligenceFeedQueryService:
                     )
                     for linked_id in sorted(
                         {
-                            signals[link.signal_id].investor_id
-                            for link in links_by_event.get(event.id, [])
-                            if link.signal_id in signals
-                            and signals[link.signal_id].investor_id in investors
+                            signal.investor_id
+                            for signal in source_signals
+                            if signal.investor_id in investors
                         },
                         key=lambda value: (investors[value].name, value.int),
                     )
@@ -187,12 +224,12 @@ class IntelligenceFeedQueryService:
                         ),
                         event_type=event.event_type,
                         priority_level=priority.priority_level,
-                        reason=priority.reason,
-                        title=item.title,
-                        context=item.context,
+                        reason=reason,
+                        title=title,
+                        context=context,
                         investors=linked_investors,
                         state=item.state,
-                        observed_at=item.observed_at,
+                        observed_at=observed_at,
                         created_at=item.created_at,
                     )
                 )

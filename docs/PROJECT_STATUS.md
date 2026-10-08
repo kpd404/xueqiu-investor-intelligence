@@ -1,5 +1,32 @@
 # Project Status
 
+## 当前核对状态 — 2026-10-08
+
+当前主线以 [ROADMAP.md 顶部七步路线](ROADMAP.md) 为准。本次为准备工作，
+没有完成新 Sprint；下文原有 COMPLETE、Current、Recommended next 与数据/测试
+数字保留为历史记录，不代表当前重新验收。
+
+基线 HEAD 为 `a2ea769aaf8a67d9a26b4d14e5d6ba748e083a84`，初始工作区干净。
+[基线报告](BASELINE_AUDIT_2026-10-08.md) 区分已复现、静态风险、局部已修复
+及未验证；[当前只读快照](BASELINE_SNAPSHOT_2026-10-08.json) 包含时间、提交
+和完整 production policy identity。
+
+当前 PostgreSQL：RawEvent 1,868；有效 Opinion 252；有效 Attention 329；
+有效 ThesisChange 252；Signal 463（含历史）；Feed 70（ACTIVE 68、STALE 2）。
+当前 identity Analysis 缺失 81、FAILED 1。Portfolio 事实为零；历史完整性 UNKNOWN。
+2026-10-08 19:32 +08:00 状态 API 为 ACTION_REQUIRED / STALE，最近 scheduled
+失败 COLLECTION / CDP_UNAVAILABLE，9222 无监听。不能沿用历史 HEALTHY/FRESH。
+
+本次 80 项相关离线测试通过；隔离反例确认非变化 Thesis Signal、STALE 回流缺口、
+SUPERSEDED Signal 仍支撑 Feed、FAILED 无自动补偿、SQLite 初始迁移 0011 失败，
+内存 SQLite 直接 SQL 可修改/删除 RawEvent。PG 并发锁、持续进程恢复与真实用户
+阅读/候选验收仍未重验。没有业务写入或付费 LLM 调用。
+
+下一步仅修复 THESIS_CHANGE material gate；不自动执行。暂停语义扩展、Momentum、
+升温、行业趋势、评分/排名、Portfolio 扩展、云部署及全仓重构。
+
+## 历史状态与验收记录（原文保留）
+
 Last repository status reset: 2026-09-20
 
 This document describes the current repository state. Existing semantic

@@ -638,6 +638,7 @@ export interface IntelligenceFeedItem {
   priority_level: "LOW" | "MEDIUM" | "HIGH";
   reason:
     | "MULTI_INVESTOR_ATTENTION"
+    | "THESIS_CHANGE_OBSERVED"
     | "THESIS_ACCELERATION"
     | "CROSS_INVESTOR_DISCOVERY"
     | "CONSENSUS_STATE_CHANGE";
