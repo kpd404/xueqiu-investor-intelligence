@@ -19,6 +19,9 @@ class IntelligencePriorityReason(StrEnum):
     THESIS_CHANGE_OBSERVED = "THESIS_CHANGE_OBSERVED"
     # Legacy persisted classification; cumulative counts did not verify acceleration.
     THESIS_ACCELERATION = "THESIS_ACCELERATION"
+    # Current qualified direction evidence, without any temporal state comparison.
+    CROSS_INVESTOR_DIRECTION_EVIDENCE = "CROSS_INVESTOR_DIRECTION_EVIDENCE"
+    # Independent legacy classifications; retained for immutable old projections.
     CROSS_INVESTOR_DISCOVERY = "CROSS_INVESTOR_DISCOVERY"
     CONSENSUS_STATE_CHANGE = "CONSENSUS_STATE_CHANGE"
 

@@ -70,11 +70,11 @@ const enumLabels: Record<string, string> = {
   REPOST: "转发证据",
   INSUFFICIENT_EVIDENCE: "证据不足",
   MIXED_DIRECTION: "方向分歧",
-  DIVERGENT: "观点分化",
+  DIVERGENT: "直接方向分歧",
   MIXED_WITH_NEUTRAL: "含中性的方向混合",
-  CONSENSUS_BULLISH: "共识方向（看好）",
-  CONSENSUS_BEARISH: "共识方向（谨慎）",
-  CONSENSUS_NEUTRAL: "共识方向（中性）",
+  CONSENSUS_BULLISH: "当前方向一致（看好）",
+  CONSENSUS_BEARISH: "当前方向一致（谨慎）",
+  CONSENSUS_NEUTRAL: "当前方向一致（中性）",
   NEW_DISCOVERY: "新发现",
   ACCELERATING_ACTIVITY: "活动加速",
   RETURNING_ATTENTION: "关注回流",
@@ -133,11 +133,12 @@ const enumLabels: Record<string, string> = {
   HIGH: "高",
   ASSET_ACTIVITY_SPIKE: "标的活动增加",
   INVESTOR_VIEW_CHANGE: "投资者观点变化",
-  CROSS_INVESTOR_DISCOVERY: "跨投资者发现",
-  CONSENSUS_STATE_CHANGE: "共识状态变化",
+  CROSS_INVESTOR_DIRECTION_EVIDENCE: "观察到多人观点方向证据",
+  CROSS_INVESTOR_DISCOVERY: "跨投资者发现（旧分类，来源有效性未验证）",
+  CONSENSUS_STATE_CHANGE: "共识变化（旧分类，未验证变化，来源有效性未验证）",
   MULTI_INVESTOR_ATTENTION: "多位投资者关注",
   THESIS_ACCELERATION: "投资逻辑加速（旧分类，未验证加速）",
-  CONSENSUS_STATE_CHANGE_REASON: "共识状态变化"
+  CONSENSUS_STATE_CHANGE_REASON: "共识变化（旧分类，未验证变化，来源有效性未验证）"
 };
 
 export function formatTime(value: string | null): string {
@@ -224,20 +225,20 @@ export function localizeText(value: string | null | undefined): string {
   if (match) return `观察到 ${match[1]} 的投资者观点变化事件。`;
   match = value.match(/^A CROSS_INVESTOR_DISCOVERY event is present for (.+)\.$/);
   if (match) return `观察到 ${match[1]} 的跨投资者发现事件。`;
-  match = value.match(/^A CONSENSUS_STATE_CHANGE event is present for (.+)\.$/);
-  if (match) return `观察到 ${match[1]} 的共识状态变化事件。`;
+  match = value.match(/^A CONSENSUS_STATE_CHANGE event is present for (.+?)(?: \(compatibility type; temporal change and source validity unverified\))?\.$/);
+  if (match) return `${match[1]} 有兼容共识事件记录；未验证前后变化或来源有效性。`;
   if (value === "No INVESTOR_VIEW_CHANGE event is present in this active candidate.") return "当前候选中暂无投资者观点变化事件。";
   if (value === "No CROSS_INVESTOR_DISCOVERY event is present in this active candidate.") return "当前候选中暂无跨投资者发现事件。";
-  if (value === "No CONSENSUS_STATE_CHANGE event is present in this active candidate.") return "当前候选中暂无共识状态变化事件。";
+  if (value === "No CONSENSUS_STATE_CHANGE event is present in this active candidate.") return "当前候选中暂无兼容共识事件记录；不据此推断状态变化。";
   match = value.match(/^Observed intelligence activity around (.+)$/);
   if (match) return `${match[1]} 周边的已观察情报活动`;
   match = value.match(/^In the current observed sample, (.+) is associated with (\d+) monitored investor\(s\), (\d+) aggregate event\(s\), (\d+) Signal\(s\), and (\d+) ACTIVE FeedItem\(s\)\.$/);
-  if (match) return `当前已观察样本中，${match[1]} 关联 ${match[2]} 位受监测投资者、${match[3]} 个聚合事件、${match[4]} 个变化信号和 ${match[5]} 条进行中情报流记录。`;
+  if (match) return `当前已观察样本中，${match[1]} 关联 ${match[2]} 位受监测投资者、${match[3]} 个聚合事件、${match[4]} 个证据信号和 ${match[5]} 条进行中情报流记录。`;
   if (value.startsWith("Observed event types:")) {
     return value
       .replace("Observed event types:", "观察到的事件类型：")
       .replace("Discovery reasons:", "发现原因：")
-      .replace("distinct Signals:", "不同变化信号：")
+      .replace("distinct Signals:", "不同证据信号：")
       .replace("distinct aggregate Events:", "不同聚合事件：")
       .replace("ACTIVE FeedItems:", "进行中情报流记录：")
       .replace(/\bnone\b/g, "无");

@@ -34,7 +34,11 @@ from intelligence.discovery.service import (
     DiscoveryAssetNotFoundError,
     IntelligenceDiscoveryService,
 )
-from intelligence.read_scope import AssetIntelligenceReadScope
+from intelligence.read_scope import (
+    AssetIntelligenceReadScope,
+    AssetIntelligenceReadScopeLoader,
+    AssetIntelligenceReadScopeNotFoundError,
+)
 from intelligence.schemas.discovery import IntelligenceDiscoveryCandidate
 
 
@@ -85,9 +89,15 @@ class _ScopeContextUoW:
         self.signals = _ScopeReader(scope.signals)
         self.assets = _ScopeAssetReader(scope)
         self.thesis_changes = _ScopeThesisReader(scope)
-        self.cross_investor_asset_snapshots = _ScopeCrossReader(scope.snapshots)
-        self.cross_investor_asset_alignments = _ScopeCrossReader(scope.alignments)
-        self.cross_investor_consensus_evidences = _ScopeCrossReader(scope.consensus_evidences)
+        snapshots, alignments, consensus = scope.context_cross_sources or (
+            scope.snapshots,
+            scope.alignments,
+            scope.consensus_evidences,
+        )
+        self.cross_investor_asset_snapshots = _ScopeCrossReader(snapshots)
+        self.cross_investor_asset_alignments = _ScopeCrossReader(alignments)
+        self.cross_investor_consensus_evidences = _ScopeCrossReader(consensus)
+        self.context_evidence = scope.context_evidence
 
 
 class ThesisReader(Protocol):
@@ -165,6 +175,7 @@ class IntelligenceContextService:
         *,
         context_window_days: int = 30,
         now_factory: Callable[[], datetime] | None = None,
+        scope_loader: AssetIntelligenceReadScopeLoader | None = None,
     ) -> None:
         if context_window_days <= 0:
             raise ValueError("context_window_days must be positive")
@@ -172,6 +183,7 @@ class IntelligenceContextService:
         self._unit_of_work_factory = unit_of_work_factory
         self._context_window_days = context_window_days
         self._now_factory = now_factory or (lambda: datetime.now(UTC))
+        self._scope_loader = scope_loader
 
     @classmethod
     def from_production(
@@ -192,6 +204,7 @@ class IntelligenceContextService:
                 if context_window_days is not None
                 else settings.context_window_days
             ),
+            scope_loader=AssetIntelligenceReadScopeLoader.from_production(session_factory),
         )
 
     def get_asset_context(
@@ -200,6 +213,13 @@ class IntelligenceContextService:
         *,
         as_of: datetime | None = None,
     ) -> IntelligenceContextView:
+        if self._scope_loader is not None:
+            try:
+                scope = self._scope_loader.load(asset_id, as_of=as_of)
+            except AssetIntelligenceReadScopeNotFoundError as exc:
+                raise DiscoveryAssetNotFoundError(str(exc)) from exc
+            candidate = self._discovery_service.get_scope_candidate(scope)
+            return self.get_scope_context(scope, candidate, as_of=as_of)
         candidate = self._discovery_service.get_candidate_by_asset(asset_id)
         window = self._window(as_of)
         if candidate is None:
@@ -221,6 +241,8 @@ class IntelligenceContextService:
         *,
         as_of: datetime | None = None,
     ) -> IntelligenceContextView:
+        if self._scope_loader is not None:
+            return self.get_asset_context(candidate.asset.asset_id, as_of=as_of)
         return self._get_candidate_context(candidate, self._window(as_of))
 
     def get_scope_context(
@@ -250,6 +272,36 @@ class IntelligenceContextService:
         limit: int = 100,
         as_of: datetime | None = None,
     ) -> tuple[IntelligenceContextView, ...]:
+        if self._scope_loader is not None:
+            if not 1 <= limit <= 100:
+                raise ValueError("limit must be between 1 and 100")
+            if candidates is not None:
+                return tuple(
+                    self.get_asset_context(candidate.asset.asset_id, as_of=as_of)
+                    for candidate in candidates
+                )
+            with self._unit_of_work_factory() as unit_of_work:
+                active_assets = {
+                    item.asset_id
+                    for item in unit_of_work.intelligence_feed_items.list()
+                    if item.state is FeedState.ACTIVE
+                }
+            rows = []
+            for asset_id in sorted(active_assets, key=lambda value: value.int):
+                scope = self._scope_loader.load(asset_id, as_of=as_of)
+                candidate = self._discovery_service.get_scope_candidate(scope)
+                if candidate is not None:
+                    rows.append((candidate, self.get_scope_context(scope, candidate, as_of=as_of)))
+            rows.sort(
+                key=lambda value: (
+                    -value[0].timeline.latest_observed_at.timestamp(),
+                    value[0].asset.name,
+                    value[0].asset.market,
+                    value[0].asset.symbol,
+                    value[0].asset.asset_id.int,
+                )
+            )
+            return tuple(value[1] for value in rows[:limit])
         if candidates is None:
             candidates = self._discovery_service.get_candidates(limit=limit).items
         window = self._window(as_of)
@@ -282,6 +334,7 @@ class IntelligenceContextService:
         links_by_event: dict[UUID, list[IntelligenceEventEvidenceView]] = defaultdict(list)
         for link in unit_of_work.intelligence_event_evidence.list():
             links_by_event[link.event_id].append(link)
+        groups = getattr(unit_of_work, "context_evidence", None)
 
         current_event_ids: set[UUID] = set()
         previous_event_ids: set[UUID] = set()
@@ -326,6 +379,11 @@ class IntelligenceContextService:
         previous_signals = self._signals_for_events(previous_event_ids, links_by_event, signals)
         current_investors = {item.investor_id for item in current_signals if item.investor_id}
         previous_investors = {item.investor_id for item in previous_signals if item.investor_id}
+        if groups is not None:
+            for event_id in current_event_ids:
+                current_investors.update(groups.get(event_id, ((), frozenset()))[1])
+            for event_id in previous_event_ids:
+                previous_investors.update(groups.get(event_id, ((), frozenset()))[1])
         current_attention = {
             item.id for item in current_signals if item.signal_type == SignalType.NEW_ATTENTION
         }
@@ -341,6 +399,14 @@ class IntelligenceContextService:
             comparison_version,
             as_of=window.as_of,
         )
+        if groups is not None:
+            linked_thesis_ids = {
+                signal.source_id
+                for event_id in current_event_ids | previous_event_ids
+                for signal in groups.get(event_id, ((), frozenset()))[0]
+                if signal.signal_type is SignalType.THESIS_CHANGE
+            }
+            thesis_changes = [change for change in thesis_changes if change.id in linked_thesis_ids]
         current_thesis = [
             change
             for change in thesis_changes

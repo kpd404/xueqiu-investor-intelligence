@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from collections.abc import Iterable
+from typing import Protocol
 from uuid import UUID
 
 from contracts import (
@@ -12,6 +13,17 @@ from contracts import (
     SignalType,
     SignalView,
 )
+
+
+class CrossDirectionEvidenceReader(Protocol):
+    """Shared read port for validated, association-scoped cross evidence."""
+
+    def group_by_events(
+        self,
+        events: Iterable[IntelligenceEventView],
+        links: Iterable[IntelligenceEventEvidenceView],
+        signals: Iterable[SignalView],
+    ) -> dict[UUID, tuple[tuple[SignalView, ...], frozenset[UUID]]]: ...
 
 
 def group_effective_thesis_evidence(

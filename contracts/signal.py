@@ -12,6 +12,7 @@ class SignalType(StrEnum):
     NEW_ATTENTION = "NEW_ATTENTION"
     THESIS_CHANGE = "THESIS_CHANGE"
     CROSS_INVESTOR_ALIGNMENT = "CROSS_INVESTOR_ALIGNMENT"
+    # Compatibility identity for current ConsensusEvidence, not proof of change over time.
     CONSENSUS_CHANGE = "CONSENSUS_CHANGE"
 
 

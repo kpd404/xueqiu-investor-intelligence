@@ -1,4 +1,8 @@
-"""Read-only validation of referenced evidence, not snapshot input completeness."""
+"""Read-only source-chain and current database window input validation."""
+
+import json
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,6 +18,8 @@ from contracts import (
     CROSS_INVESTOR_POLICY_VERSION,
     ConsensusEvidenceState,
     DirectionalAlignmentState,
+    SignalState,
+    SignalType,
 )
 from contracts.consistency import CONSISTENCY_POLICY_VERSION
 from contracts.cross_investor import (
@@ -46,6 +52,7 @@ from database.repositories.thesis_changes import ThesisChangeRepository
 from intelligence.services.cross_investor_asset_alignment import (
     classify_cross_investor_asset_snapshot,
 )
+from intelligence.services.cross_investor_asset_snapshot import CrossInvestorAssetSnapshotService
 from intelligence.services.cross_investor_consensus_evidence import (
     build_cross_investor_consensus_evidence,
 )
@@ -54,8 +61,9 @@ from intelligence.services.cross_investor_consensus_evidence import (
 class CrossInvestorReferencedEvidenceReader:
     """Validate explicit policies and existing references, grouped by asset/cutoff.
 
-    New unreferenced facts do not invalidate a snapshot here. This deliberately
-    does not select newest windows/versions, repair timestamps, or deduplicate facts.
+    Validate each snapshot against its own complete input scope. This does not
+    select newest windows/versions or deduplicate facts across windows, and cannot
+    prove external historical completeness.
     """
 
     def __init__(self, session: Session) -> None:
@@ -79,6 +87,21 @@ class CrossInvestorReferencedEvidenceReader:
 
     def list_with_fact_times(self, *, asset_ids=None):
         """Return qualified source views plus times of their actual direction votes."""
+        alignments, consensus, times, _keys = self.list_with_equivalence(asset_ids=asset_ids)
+        return alignments, consensus, times
+
+    def list_with_equivalence(self, *, asset_ids=None):
+        """Keep the existing four-field source contract for Signal consumers."""
+        alignments, consensus, times, keys, _votes = self.list_with_votes(asset_ids=asset_ids)
+        return alignments, consensus, times, keys
+
+    def list_with_votes(self, *, asset_ids=None):
+        """Qualified sources, fact times, equivalence keys and actual Opinion voters.
+
+        Keys are ephemeral, derived from the shared preparation and actual source
+        validation, never trusted from Signal metadata or persisted as a new policy.
+        Voters use validated effective Opinion identities, not Attention membership.
+        """
         policy = get_production_analysis_policy().as_effective_policy()
         thesis_version = get_production_thesis_comparison_policy().active_analysis_version
         attention_version = get_production_attention_policy_version()
@@ -110,8 +133,25 @@ class CrossInvestorReferencedEvidenceReader:
             self._session.scalars(statements[2]), CrossInvestorConsensusEvidenceRepository
         )
         scopes = {}
+        prepared_scopes = {}
+        input_service = CrossInvestorAssetSnapshotService(
+            None,
+            policy,
+            attention_policy_version=attention_version,
+            thesis_comparison_version=thesis_version,
+        )
+        input_readers = SimpleNamespace(
+            attention_occurrences=AttentionOccurrenceRepository(self._session),
+            opinions=OpinionRepository(self._session),
+            thesis_changes=ThesisChangeRepository(self._session),
+            portfolio_actions=PortfolioActionRepository(self._session),
+            portfolios=PortfolioRepository(self._session),
+            consistencies=InvestorActionConsistencyRepository(self._session),
+        )
         valid_snapshots = {}
+        snapshot_input_keys = {}
         snapshot_fact_times = {}
+        snapshot_voters = {}
         for snapshot in snapshots.values():
             if (
                 snapshot.cross_investor_policy_version != CROSS_INVESTOR_POLICY_VERSION
@@ -120,6 +160,30 @@ class CrossInvestorReferencedEvidenceReader:
                 or snapshot.thesis_comparison_version != thesis_version
                 or snapshot.consistency_policy_version != CONSISTENCY_POLICY_VERSION
             ):
+                continue
+            # All approved policies are fixed for this invocation; scope includes
+            # as_of even though selectors deliberately stop at window_end.
+            input_scope = (
+                snapshot.asset_id,
+                snapshot.window_start,
+                snapshot.window_end,
+                snapshot.as_of,
+                snapshot.opinion_analysis_version,
+                snapshot.attention_policy_version,
+                snapshot.thesis_comparison_version,
+                snapshot.consistency_policy_version,
+                snapshot.cross_investor_policy_version,
+            )
+            if input_scope not in prepared_scopes:
+                prepared_scopes[input_scope] = input_service.prepare_inputs(
+                    input_readers,
+                    snapshot.asset_id,
+                    snapshot.window_start,
+                    snapshot.window_end,
+                    as_of=snapshot.as_of,
+                )
+            prepared = prepared_scopes[input_scope]
+            if snapshot.input_identity != prepared.input_identity:
                 continue
             scope = (snapshot.asset_id, snapshot.window_end)
             if scope not in scopes:
@@ -140,6 +204,7 @@ class CrossInvestorReferencedEvidenceReader:
             try:
                 if self._snapshot_references_match(snapshot, scopes[scope]):
                     valid_snapshots[snapshot.id] = snapshot
+                    snapshot_input_keys[snapshot.id] = _window_independent_input_key(prepared)
                     # Every latest Opinion below has already been identity/time
                     # checked against the effective Opinion -> RawEvent read.
                     # Newer non-voting artifacts never enter this time basis.
@@ -151,6 +216,11 @@ class CrossInvestorReferencedEvidenceReader:
                     ]
                     if votes:
                         snapshot_fact_times[snapshot.id] = max(votes)
+                        snapshot_voters[snapshot.id] = frozenset(
+                            opinions[value.latest_window_opinion_id].investor_id
+                            for value in snapshot.contributions
+                            if value.window_opinion_count > 0
+                        )
             except ValueError:
                 continue
         valid_alignments = {}
@@ -217,8 +287,6 @@ class CrossInvestorReferencedEvidenceReader:
             ConsensusEvidenceState.CONSENSUS_BEARISH,
             ConsensusEvidenceState.CONSENSUS_NEUTRAL,
         }
-        from contracts import SignalType
-
         qualified_alignments = tuple(
             value
             for value in valid_alignments.values()
@@ -246,7 +314,28 @@ class CrossInvestorReferencedEvidenceReader:
                 for value in qualified_consensus
             }
         )
-        return qualified_alignments, qualified_consensus, fact_times
+        equivalence = {
+            (kind, source.id): (
+                kind,
+                source.asset_id,
+                snapshot_input_keys[source.source_snapshot_id],
+                _classification_key(source),
+            )
+            for kind, sources in (
+                (SignalType.CROSS_INVESTOR_ALIGNMENT, qualified_alignments),
+                (SignalType.CONSENSUS_CHANGE, qualified_consensus),
+            )
+            for source in sources
+        }
+        voters = {
+            (kind, source.id): snapshot_voters[source.source_snapshot_id]
+            for kind, sources in (
+                (SignalType.CROSS_INVESTOR_ALIGNMENT, qualified_alignments),
+                (SignalType.CONSENSUS_CHANGE, qualified_consensus),
+            )
+            for source in sources
+        }
+        return qualified_alignments, qualified_consensus, fact_times, equivalence, voters
 
     def _load_scope(
         self, snapshot, policy, attention_version, thesis_version, portfolio_references
@@ -492,3 +581,108 @@ class CrossInvestorReferencedEvidenceReader:
             first_attention_dependencies=tuple(dependencies),
         )
         return identity == snapshot.input_identity
+
+
+def _window_independent_input_key(prepared):
+    """Reuse the existing fingerprint with only the three window bounds normalized.
+
+    The fixed bound is a fingerprint placeholder, never a query or fact-time
+    fallback. Effective artifact IDs, all policies, Investor contributions and
+    their source fact times (including first history) remain part of the key.
+    """
+    boundary = datetime(1970, 1, 1, tzinfo=UTC)
+    contributions = prepared.contributions
+    identity = build_cross_investor_input_identity(
+        asset_id=prepared.asset_id,
+        as_of=boundary,
+        window_start=boundary,
+        window_end=boundary,
+        opinion_analysis_version=prepared.opinion_analysis_version,
+        attention_policy_version=prepared.attention_policy_version,
+        thesis_comparison_version=prepared.thesis_comparison_version,
+        consistency_policy_version=prepared.consistency_policy_version,
+        cross_investor_policy_version=prepared.cross_investor_policy_version,
+        attention_occurrence_ids=tuple(
+            i for c in contributions for i in c.attention_occurrence_ids
+        ),
+        opinion_ids=tuple(i for c in contributions for i in c.window_opinion_ids),
+        thesis_change_ids=tuple(i for c in contributions for i in c.thesis_change_ids),
+        portfolio_action_ids=tuple(i for c in contributions for i in c.portfolio_action_ids),
+        consistency_ids=tuple(i for c in contributions for i in c.consistency_ids),
+        first_attention_dependencies=tuple(
+            (c.investor_id, c.first_attention_occurrence_id, c.first_attention_published_time)
+            for c in contributions
+            if c.attention_occurrence_ids
+        ),
+    )
+    # Preparation already uses the existing deterministic source/Investor sort.
+    # Preserve actual latest Opinion times rather than collapsing to observed_at.
+    facts = json.dumps(
+        [c.model_dump(mode="json") for c in contributions], sort_keys=True, separators=(",", ":")
+    )
+    return identity, facts
+
+
+def _classification_key(source):
+    return json.dumps(
+        source.model_dump(
+            mode="json",
+            exclude={
+                "id",
+                "source_snapshot_id",
+                "source_alignment_id",
+                "input_identity",
+                "calculated_at",
+                "created_at",
+            },
+        ),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def select_effective_cross_signals(signals, source_data, *, deduplicate=True):
+    """Validate ACTIVE inputs; Feed callers may defer grouping until association."""
+    alignments, consensus, times, keys = source_data
+    sources = {
+        (kind, source_type, source.id): source
+        for kind, source_type, values in (
+            (SignalType.CROSS_INVESTOR_ALIGNMENT, "CrossInvestorAssetAlignment", alignments),
+            (SignalType.CONSENSUS_CHANGE, "CrossInvestorConsensusEvidence", consensus),
+        )
+        for source in values
+    }
+    valid = []
+    for signal in sorted(signals, key=lambda value: (value.created_at, value.id.int)):
+        source = sources.get((signal.signal_type, signal.source_type, signal.source_id))
+        if (
+            signal.state is not SignalState.ACTIVE
+            or source is None
+            or signal.asset_id != source.asset_id
+            or signal.investor_id is not None
+        ):
+            continue
+        identity = (signal.signal_type, signal.source_id)
+        valid.append(signal.model_copy(update={"observed_at": times[identity]}))
+    if not deduplicate:
+        return tuple(valid)
+    return select_cross_signal_representatives(valid, keys)
+
+
+def select_cross_signal_representatives(signals, keys):
+    """Stable selection over already validated signals in the caller's scope."""
+    representatives = {}
+    for signal in sorted(signals, key=lambda value: (value.created_at, value.id.int)):
+        representatives.setdefault(keys[(signal.signal_type, signal.source_id)], signal)
+    return tuple(
+        sorted(
+            representatives.values(),
+            key=lambda value: (
+                value.observed_at,
+                value.signal_type.value,
+                value.asset_id.int,
+                value.source_id.int,
+                value.id.int,
+            ),
+        )
+    )

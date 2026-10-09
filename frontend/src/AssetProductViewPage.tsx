@@ -17,14 +17,14 @@ const reviewLabels: Record<AttentionClass, string> = {
 };
 
 const reviewDescriptions: Record<AttentionClass, string> = {
-  IMMEDIATE_REVIEW: "存在明确的变化证据，建议人工复核。",
+  IMMEDIATE_REVIEW: "存在需要人工复核的证据；复核分类本身不证明前后变化。",
   ACTIVE_REVIEW: "存在当前产品发现证据，建议人工复核。",
   BACKGROUND_MONITORING: "存在历史情报，但当前不满足发现条件。",
   LIMITED_CONTEXT: "已观察证据范围有限，无法提升复核等级。"
 };
 
 const reasonLabels: Record<string, string> = {
-  CONSENSUS_STATE_CHANGE: "观察到共识状态变化",
+  CONSENSUS_STATE_CHANGE: "兼容共识事件分类（前后变化与来源有效性未验证）",
   CONSENSUS_FRAGMENTATION: "共识分化证据",
   MULTI_INVESTOR_EXPANSION: "多位投资者已观察",
   THESIS_TRANSITION: "观察到实质性投资逻辑转变",
@@ -110,7 +110,7 @@ export function AssetProductViewPage({
       </section>
 
       <section className="product-section">
-        <ProductHeading number="02" title="当前情报状态" subtitle="方向一致性与共识证据彼此独立" />
+        <ProductHeading number="02" title="当前情报状态" subtitle="仅观察当前方向状态；未验证前后共识变化，方向一致不代表投资逻辑一致" />
         <div className="product-state-grid">
           <StateCard
             label="方向一致性"
@@ -133,7 +133,7 @@ export function AssetProductViewPage({
           <ProductStat label="当前背景中的投资者" value={view.context.investor_context.current_investor_count} />
           <ProductStat label="关注动态证据" value={view.context.attention_context.current_attention_count} />
           <ProductStat label="投资逻辑变化" value={view.context.thesis_context.current_thesis_changes} />
-          <ProductStat label="当前背景中的变化信号" value={view.context.activity_context.current_signal_count} />
+          <ProductStat label="当前背景中的证据信号" value={view.context.activity_context.current_signal_count} />
         </div>
         <div className="product-context-note">
           <span>{view.discovery.activity_summary ? "发现活动" : "历史证据"}</span>

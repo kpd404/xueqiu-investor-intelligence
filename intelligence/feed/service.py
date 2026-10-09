@@ -22,7 +22,11 @@ from contracts import (
     IntelligencePriorityReason,
     SignalView,
 )
-from intelligence.events.evidence import group_effective_thesis_evidence
+from intelligence.events.evidence import (
+    CrossDirectionEvidenceReader,
+    group_effective_thesis_evidence,
+)
+from intelligence.priority.service import IntelligencePriorityService
 
 
 class PriorityReader(Protocol):
@@ -53,6 +57,7 @@ class IntelligenceFeedUoW(Protocol):
     intelligence_event_evidence: EvidenceReader
     signals: SignalReader
     effective_thesis_signals: SignalReader
+    effective_cross_signals: CrossDirectionEvidenceReader
     intelligence_feed_items: FeedWriter
 
     def __enter__(self) -> Self: ...
@@ -172,6 +177,29 @@ class IntelligenceFeedService:
                 events.values(), links, unit_of_work.effective_thesis_signals.list()
             )
         candidates: list[FeedItemCreate] = []
+        cross_types = {
+            IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+            IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+        }
+        cross_event_ids = {
+            priority.event_id
+            for priority in priorities
+            if (allowed is None or priority.id in allowed)
+        }
+        cross_events = [
+            event
+            for event in events.values()
+            if event.id in cross_event_ids
+            and event.event_type in cross_types
+            and event.state is IntelligenceEventState.ACTIVE
+        ]
+        effective_cross = {}
+        if cross_events:
+            effective_cross = unit_of_work.effective_cross_signals.group_by_events(
+                cross_events,
+                links,
+                signals.values(),
+            )
         for priority in priorities:
             if allowed is not None and priority.id not in allowed:
                 continue
@@ -179,6 +207,7 @@ class IntelligenceFeedService:
             if event is None:
                 raise ValueError(f"IntelligenceEvent not found for Priority: {priority.id}")
             observed_at = event.last_observed_at
+            voters = frozenset()
             if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
                 if event.state is not IntelligenceEventState.ACTIVE:
                     continue
@@ -191,6 +220,20 @@ class IntelligenceFeedService:
                 ):
                     raise ValueError(
                         f"Thesis Priority must be refreshed before Feed: {priority.id}"
+                    )
+                observed_at = max(signal.observed_at for signal in source_signals)
+            elif event.event_type in cross_types:
+                if event.state is not IntelligenceEventState.ACTIVE:
+                    continue
+                source_signals, voters = effective_cross.get(event.id, ((), frozenset()))
+                if not source_signals:
+                    continue
+                if (
+                    priority.priority_level,
+                    priority.reason,
+                ) != IntelligencePriorityService._classify(event):
+                    raise ValueError(
+                        f"Cross-investor Priority must be refreshed before Feed: {priority.id}"
                     )
                 observed_at = max(signal.observed_at for signal in source_signals)
             else:
@@ -212,7 +255,9 @@ class IntelligenceFeedService:
                     asset_id=event.asset_id,
                     event_type=event.event_type,
                     title=cls._title(priority.reason),
-                    context=cls._context(source_signals),
+                    context=cls._cross_context(source_signals, voters)
+                    if event.event_type in cross_types
+                    else cls._context(source_signals),
                     reason=priority.reason,
                     observed_at=observed_at,
                     created_at=datetime.now(UTC),
@@ -240,13 +285,23 @@ class IntelligenceFeedService:
             IntelligencePriorityReason.THESIS_ACCELERATION: (
                 "Legacy thesis acceleration classification (acceleration unverified)"
             ),
+            IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE: (
+                "Cross-investor direction evidence was observed"
+            ),
             IntelligencePriorityReason.CROSS_INVESTOR_DISCOVERY: (
-                "Cross-investor attention was observed"
+                "Legacy cross-investor discovery classification (source validity unverified)"
             ),
             IntelligencePriorityReason.CONSENSUS_STATE_CHANGE: (
-                "A consensus state change was observed"
+                "Legacy consensus state change classification "
+                "(change and source validity unverified)"
             ),
         }[reason]
+
+    @staticmethod
+    def _cross_context(signals, voters):
+        context = IntelligenceFeedService._context(signals)
+        context["investor_count"] = len(voters)
+        return context
 
     @staticmethod
     def _context(signals: list[SignalView]) -> dict[str, object]:

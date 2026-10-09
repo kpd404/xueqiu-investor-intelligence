@@ -292,6 +292,17 @@ def test_other_types_keep_legacy_repository_and_feed_behavior(
         event.metadata_json = {"investor_ids": ["a", "b", "c"]}
         session.commit()
     result = IntelligencePriorityService.from_production(db_session_factory).materialize()
+    if event_type in {
+        IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+        IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+    }:
+        # This fixture links a Thesis Signal, not qualified cross direction
+        # evidence. The newly scoped cross materializers must preserve/skip it.
+        before = _snapshot(db_session_factory)
+        assert result.priorities == ()
+        assert IntelligenceFeedService.from_production(db_session_factory).materialize().items == ()
+        assert _snapshot(db_session_factory) == before
+        return
     assert result.priorities[0].reason is IntelligencePriorityReason.THESIS_ACCELERATION
     assert result.priorities[0].evidence_count == 1
     materialized = (

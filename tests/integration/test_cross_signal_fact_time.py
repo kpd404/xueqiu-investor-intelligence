@@ -206,7 +206,7 @@ def test_newer_non_voting_attention_does_not_refresh_direction_time(
 
 
 @pytest.mark.parametrize("kind", CROSS)
-def test_newer_referenced_thesis_does_not_refresh_older_direction_votes(
+def test_newer_referenced_thesis_with_omitted_direction_input_is_incomplete(
     db_session_factory, production_policies, kind
 ):
     chain = _computed_late(db_session_factory, production_policies)
@@ -300,8 +300,9 @@ def test_newer_referenced_thesis_does_not_refresh_older_direction_votes(
     result = SignalGenerator.from_production(db_session_factory).dry_run(signal_types=(kind,))
     source_id = alignment.id if kind is CROSS[0] else consensus.id
     matching = [value for value in result.candidates if value.source_id == source_id]
-    assert len(matching) == 1
-    assert matching[0].observed_at == FACT_TIME < newer.effective_time
+    # This manually assembled snapshot omits the newer effective Opinion. It
+    # cannot supply direction intelligence even though its saved references pass.
+    assert matching == []
 
 
 def test_late_old_voting_fact_uses_original_publication_not_new_recording_time(
@@ -447,15 +448,15 @@ def test_mixed_window_signal_inputs_produce_fact_based_aggregate_ranges(
     aggregate = IntelligenceEventAggregator.from_production(db_session_factory)
     plan = aggregate.dry_run()
     assert len(plan.candidates) == 2
-    assert all(value.metadata["signal_count"] == 2 for value in plan.candidates)
+    assert all(value.metadata["signal_count"] == 1 for value in plan.candidates)
     assert all(
-        value.first_observed_at == FACT_TIME and value.last_observed_at == late_time
+        value.first_observed_at == late_time and value.last_observed_at == late_time
         for value in plan.candidates
     )
     assert _snapshot(db_session_factory) == before
     result = aggregate.aggregate()
     assert all(
-        value.first_observed_at == FACT_TIME and value.last_observed_at == late_time
+        value.first_observed_at == late_time and value.last_observed_at == late_time
         for value in result.events
     )
     assert aggregate.aggregate().created_evidence_count == 0

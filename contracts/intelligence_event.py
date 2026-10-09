@@ -12,6 +12,7 @@ class IntelligenceEventType(StrEnum):
     ASSET_ACTIVITY_SPIKE = "ASSET_ACTIVITY_SPIKE"
     INVESTOR_VIEW_CHANGE = "INVESTOR_VIEW_CHANGE"
     CROSS_INVESTOR_DISCOVERY = "CROSS_INVESTOR_DISCOVERY"
+    # Compatibility identity; current direction evidence has no before/after comparison.
     CONSENSUS_STATE_CHANGE = "CONSENSUS_STATE_CHANGE"
 
 

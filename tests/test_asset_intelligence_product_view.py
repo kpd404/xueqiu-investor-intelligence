@@ -172,7 +172,7 @@ def _discoverable_scope() -> AssetIntelligenceReadScope:
         id=uuid4(),
         event_id=event.id,
         priority_level=IntelligencePriorityLevel.MEDIUM,
-        reason=IntelligencePriorityReason.THESIS_ACCELERATION,
+        reason=IntelligencePriorityReason.THESIS_CHANGE_OBSERVED,
         evidence_count=1,
         created_at=NOW,
     )
@@ -181,8 +181,13 @@ def _discoverable_scope() -> AssetIntelligenceReadScope:
         priority_id=priority.id,
         asset_id=asset_id,
         event_type=event.event_type,
-        title="Thesis activity",
-        context={},
+        title="A thesis change was observed",
+        context={
+            "signal_count": 1,
+            "investor_count": 1,
+            "source_count": 1,
+            "source_types": ["ThesisChange"],
+        },
         reason=priority.reason,
         state=FeedState.ACTIVE,
         observed_at=signal.observed_at,
@@ -418,6 +423,13 @@ class _CountingUow:
         )
         self.assets = _CountingAsset(self.counts, asset)
         self.signals = _CountingAssetRows(self.counts, "signals", scope.signals)
+
+        class ValidatedSignals:
+            def list(inner):
+                self.counts["effective_thesis"] += 1
+                return scope.signals
+
+        self.effective_thesis_signals = ValidatedSignals()
         self.intelligence_events = _CountingAssetRows(self.counts, "events", scope.events)
         self.intelligence_event_evidence = _CountingEventRows(
             self.counts, "event_evidence", scope.event_evidence
@@ -467,6 +479,7 @@ def test_shared_scope_has_bounded_repository_calls_and_no_event_n_plus_one():
         "snapshots",
         "alignments",
         "consensus",
+        "effective_thesis",
     }
     assert all(value == 1 for value in uow.counts.values())
     assert uow.intelligence_event_evidence.received_ids == tuple(item.id for item in scope.events)

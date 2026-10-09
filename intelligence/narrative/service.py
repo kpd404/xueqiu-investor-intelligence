@@ -68,7 +68,8 @@ class IntelligenceNarrativeService:
             else "No CROSS_INVESTOR_DISCOVERY event is present in this active candidate."
         )
         consensus_summary = (
-            f"A CONSENSUS_STATE_CHANGE event is present for {asset_name}."
+            f"A CONSENSUS_STATE_CHANGE event is present for {asset_name} "
+            "(compatibility type; temporal change and source validity unverified)."
             if IntelligenceEventType.CONSENSUS_STATE_CHANGE in event_types
             else "No CONSENSUS_STATE_CHANGE event is present in this active candidate."
         )

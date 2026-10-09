@@ -1,5 +1,6 @@
 """Persistence adapter for deterministic Signal evidence."""
 
+from collections import defaultdict
 from collections.abc import Callable
 from types import TracebackType
 from typing import Self
@@ -9,7 +10,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import EffectiveAnalysisPolicy, SignalCreate, SignalState, SignalType, SignalView
+from contracts import (
+    EffectiveAnalysisPolicy,
+    IntelligenceEventType,
+    SignalCreate,
+    SignalState,
+    SignalType,
+    SignalView,
+)
 from contracts.intelligence_feed import ThesisSourceFact
 from contracts.thesis_change import ThesisChangeType
 from database.models.raw_event import RawEvent
@@ -129,37 +137,21 @@ class SignalRepository:
         )
 
     def list_cross_investor_signals_with_valid_references(self, *, signal_types=None):
-        from signal_engine.cross_investor_sources import CrossInvestorReferencedEvidenceReader
-
-        alignments, consensus, fact_times = CrossInvestorReferencedEvidenceReader(
-            self._session
-        ).list_with_fact_times()
-        sources = {
-            (SignalType.CROSS_INVESTOR_ALIGNMENT, "CrossInvestorAssetAlignment", item.id): item
-            for item in alignments
-        }
-        sources.update(
-            {
-                (SignalType.CONSENSUS_CHANGE, "CrossInvestorConsensusEvidence", item.id): item
-                for item in consensus
-            }
+        from signal_engine.cross_investor_sources import (
+            CrossInvestorReferencedEvidenceReader,
+            select_effective_cross_signals,
         )
+
+        source_data = CrossInvestorReferencedEvidenceReader(self._session).list_with_equivalence()
         selected = (
             signal_types
             if signal_types is not None
             else frozenset({SignalType.CROSS_INVESTOR_ALIGNMENT, SignalType.CONSENSUS_CHANGE})
         )
         return tuple(
-            signal.model_copy(
-                update={"observed_at": fact_times[(signal.signal_type, signal.source_id)]}
-            )
-            for signal in self.list()
+            signal
+            for signal in select_effective_cross_signals(self.list(), source_data)
             if signal.signal_type in selected
-            and signal.state is SignalState.ACTIVE
-            and (source := sources.get((signal.signal_type, signal.source_type, signal.source_id)))
-            is not None
-            and signal.asset_id == source.asset_id
-            and signal.investor_id is None
         )
 
     @classmethod
@@ -233,6 +225,60 @@ class EventAggregationSignalReader:
             for signal in signals
             if signal.signal_type is not SignalType.THESIS_CHANGE or signal.id in effective_ids
         )
+
+
+class FeedCrossInvestorSignalReader:
+    """Feed-only batch validation, then deduplication within actual Event links."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def group_by_events(self, events, links, signals):
+        from signal_engine.cross_investor_sources import (
+            CrossInvestorReferencedEvidenceReader,
+            select_cross_signal_representatives,
+            select_effective_cross_signals,
+        )
+
+        kinds = {
+            IntelligenceEventType.CROSS_INVESTOR_DISCOVERY: SignalType.CROSS_INVESTOR_ALIGNMENT,
+            IntelligenceEventType.CONSENSUS_STATE_CHANGE: SignalType.CONSENSUS_CHANGE,
+        }
+        events = {event.id: event for event in events if event.event_type in kinds}
+        if not events:
+            return {}
+        source_data = CrossInvestorReferencedEvidenceReader(self._session).list_with_votes(
+            asset_ids={event.asset_id for event in events.values()}
+        )
+        valid = {
+            signal.id: signal
+            for signal in select_effective_cross_signals(
+                signals, source_data[:4], deduplicate=False
+            )
+        }
+        keys, votes = source_data[3:]
+        grouped = defaultdict(dict)
+        for link in links:
+            event, signal = events.get(link.event_id), valid.get(link.signal_id)
+            if (
+                event is not None
+                and signal is not None
+                and signal.signal_type is kinds[event.event_type]
+                and signal.asset_id == event.asset_id
+            ):
+                grouped[event.id][signal.id] = signal
+        result = {}
+        for event_id, associated in grouped.items():
+            selected = select_cross_signal_representatives(associated.values(), keys)
+            # Union is only for evidence participants/display/filtering. Never
+            # classify combined window votes as a new current consensus state.
+            voters = frozenset(
+                investor
+                for signal in selected
+                for investor in votes[(signal.signal_type, signal.source_id)]
+            )
+            result[event_id] = selected, voters
+        return result
 
 
 class FeedThesisSignalReader:

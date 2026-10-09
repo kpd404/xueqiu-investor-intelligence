@@ -494,6 +494,560 @@ Thesis 引用不刷新方向时间、迟到旧投票使用原发布时间、新 
 已有修改及基线快照不变。跨投资者情报和整个可信变化阶段均未完成；停止，
 不自动继续下一项。
 
+### Snapshot 当前窗口输入完整性校验 — 2026-10-09
+
+**本子任务局部完成：当前数据库与批准 policy 下的窗口输入 identity 校验**。
+保留此前九项修复，特别是方向投票 RawEvent 事实时间；不选择全标的“最新
+Snapshot”，不跨窗口比较，不改变窗口、policy、fingerprint 或分类规则。
+
+`CrossInvestorAssetSnapshotService.prepare_inputs` 是共享只读入口，提取原
+calculate 中的 effective selectors、窗口过滤、排序、贡献构造、first Attention
+history 依赖及 fingerprint。calculate 使用相同准备结果再持久化；读取路径
+使用同一 Session 的只读 repository ports，不调用 calculate、不写 Snapshot。
+没有持久化 UoW 的准备实例明确拒绝 calculate。
+
+共享来源链入口逐 Snapshot 按 asset/window_start/window_end/as_of 及全部批准
+policy 身份重建应有 input_identity，与存储身份比较后再做原引用链校验。
+截止仍为 window_end，as_of 更晚不能引入未来事实；相同数量下的身份替换、
+有效前驱重配、窗口前首次 Attention identity 变化均能使旧输入身份不匹配。
+其他标的、窗口后事实、FAILED/inactive 解释不改变该 scope 的有效输入。
+所有现有来源链接口（含事实时间接口）、新 Alignment/Consensus 候选及旧
+ACTIVE Signal 的 Event 专用读取共用这一规则，普通历史读取仍保留原记录。
+正常隔离刷新产生匹配输入的新 Snapshot 后可入选，旧 Snapshot/Signal/state
+均保留；本次不是历史修复或 Signal 删除。
+
+修复前先运行新增真实数据库测试，两类 Signal 在已有引用仍有效但遗漏迟到
+窗口 Opinion 时均失败：**2 failed**。修复后新增窗口完整性用例 **12 passed**，
+覆盖迟到 Opinion/Attention（包括仅补 Attention）、同数量身份替换、前驱、
+first history、无关/无效输入、不同 window_start/as_of、旧行保留、新来源链
+通过、dry-run 逐表零写入与重复生成/聚合幂等。来源链及事实时间旧测试中
+允许遗漏输入/继续消费过时 Snapshot 的预期按本次正确性边界更新，保留事实
+时间、有效来源、历史读取和幂等断言，不扩展共识变化含义。
+
+实际回归命令使用 `.venv/Scripts/python.exe -m pytest ... -q
+-p no:cacheprovider --tb=short`：Snapshot/Alignment/Consensus、来源链/事实
+时间、此前七项 Thesis/Feed/Lifecycle 及 Signal/Event/Priority/Feed 回归共
+**317 passed**；另运行 architecture、intelligence_read_api、thesis_change_contracts
+和 integration/thesis_change 共 **90 passed**，合计 **407 passed**。
+Python ruff check/format 与 git diff --check 通过。仅存在已有 httpx/Starlette
+弃用警告，未调用 LLM 或外部服务。
+
+按完整 scope 在一次调用内缓存准备身份，不存在跨请求永久缓存。实测无
+Portfolio 引用 fixture：1 个 scope/2 条旧 Signal 的专用读取 **19 SELECT**；
+6 个不同完整 scope/12 条旧 Signal **64 SELECT**（每新增 scope 9 次输入准备，
+共同 asset/window_end 的原引用读取继续复用）。生成 dry-run **20 → 75 SELECT**，
+另外每新增两类来源有 2 次既有 Signal 身份查找。来源读取随 distinct scope
+增长，不逐 Signal/Alignment/Consensus 重读整个上游；不同窗口不共用错误截止。
+Portfolio 有效输入也由原准备逻辑读取以发现新增输入，没有扩展 Portfolio。
+
+所有写入验证仅在隔离 SQLite；未执行生产 refresh/采集/recovery/迁移/维护，
+业务数据库、来源事实、历史关联及基线审计/快照未改写。历史完整性仍
+**UNKNOWN**：本次仅证明当前数据库/policy 的窗口输入一致，不能证明外部
+历史完整。**仍未解决**跨窗口相同事实重复 Signal、CONSENSUS_CHANGE 的真实
+前后比较及表述、旧 Event 时间/关联、跨投资者 Priority/Feed 最终有效性及回流、
+其他产品读取入口。整个跨投资者情报与可信变化阶段未完成；到此停止。
+
+### 跨窗口等价跨投资者 Signal 消费 — 2026-10-09
+
+**本子任务局部完成：新生成与 Event 专用读取抑制等价窗口重复输入**。
+保留此前十项修复、Snapshot/Alignment/Consensus 的合法窗口身份与持久化
+内容、Signal 的 type + source_id 数据库唯一键及真实来源引用。未新增表、
+policy、共识变化算法、内部签名字段或通用去重框架。
+
+先以真实隔离数据库复现：同输入两个合法窗口的新候选为 4 条而非 2 条，
+旧重复 Signal 的专用读取也返回 4 条。另调用真实 OperationalRefreshService
+的 `_derive_cross_investor`、`_generate_signals` 派生阶段（不调用 run、采集或
+分析），补入其他标的较晚 RawEvent 后，全局 window_end 扩大，本标的贡献
+不变、生成新合法 Snapshot，却新增 2 条跨投资者 Signal。首批 **3 failed**，
+不是仅凭 source_id 静态风险作结论。
+
+共享 `list_with_equivalence` 使用同次 prepare_inputs 和既有来源链、完整性、
+事实时间校验。等价要求 Signal 类型、Asset、当前批准解释 identity/资格、
+规范化完整有效输入、分类结果都一致。沿用原 fingerprint 构造，仅把
+window_start/window_end/as_of 替换为相同的指纹占位边界，不用占位时间做查询
+或观察时间兜底；计算时间与版本来源 ID 不参与等价。保留全部有效 artifact
+IDs、各层 policy、投资者贡献、first Attention dependency 与事实时间，以及
+最新 Opinion 身份/方向/事实时间；不是只比较人数、方向或 observed_at。
+分类 key 来自已校验的真实 Alignment/Consensus 结果，不复制分类算法，不
+信任 Signal.metadata 中的签名。本次不会将当前共识状态证明为“共识变化”。
+
+新候选在同批每组选择一个代表；优先复用真实有效 ACTIVE Signal，旧重复
+记录按持久化 created_at、Signal UUID 选稳定代表，无可复用记录时按来源 UUID
+选代表。顺序不依赖数据库返回次序或本次评估时间；代表保持实际 source_type/
+source_id，候选 observed_at 仍为方向投票 RawEvent 事实时间。无效/非 ACTIVE
+Signal 占用的旧 type/source 身份不自动激活，也不阻断其他可用来源。实际
+generate 与 dry-run 使用同一候选路径，不仅在预览中去重。
+
+`select_effective_cross_signals` 同时用于新候选的已有代表选择与 repository
+专用读取，Event 聚合只消费每组一个经校验、校正事实时间的代表。普通历史
+读取保留所有旧行/state/原时间，失效代表不会屏蔽仍有效的来源。原 Event
+repository 在正常聚合重跑时仍可能更新其 metadata，但本次未改其规则或执行
+历史重建；隔离旧 Event 的四条 evidence links 与受污染 last time 全部保留，
+新候选 signal_count 为 1、零新增重复关联。Priority/Feed 未修改。
+
+新增 `test_cross_signal_equivalence.py` **18 passed**，覆盖同窗口与不同窗口/
+as_of/计算时间重跑、同批稳定选择、已有代表优先、旧重复消费、policy/状态/
+身份失效后的有效替代、不同 Opinion 历史及不同 Attention 投资者即使人数/
+方向/事实时间相同也不误合并、类型/标的隔离、真实有效输入变化、伪造
+metadata、实际刷新全局窗口反例、源表保护、dry-run 零写入及生成/聚合幂等。
+此前完整性测试仍确认三个合法来源窗口都通过自己的校验、历史六条 Signal
+保留，仅专用消费结果改为每类型一个代表。未削弱来源有效性、时间或身份断言。
+
+使用 `.venv/Scripts/python.exe -m pytest ... -q -p no:cacheprovider --tb=short`，
+Signal/Event、Snapshot/Alignment/Consensus、此前 Thesis/Feed/生命周期/读取
+链路合计 **335 passed**；architecture、intelligence_read_api、Thesis 契约及
+integration/thesis_change 另 **90 passed**，合计 **425 passed**。最终新增测试
+单独重跑 18 passed，ruff check/format 和 git diff --check 通过。唯一测试警告
+是既有 httpx/Starlette 弃用警告；没有外部服务或 LLM 调用。
+
+按来源/完整 scope 复用同次准备，不用永久缓存。实测 1 个 scope：历史 Signal
+从 2 条增至 22 条（新增伪造来源记录），专用读取均 **19 SELECT**，生成 dry-run
+均 **21 SELECT**。6 个 distinct scope/12 条旧等价 Signal：专用读取 **64**、
+生成 dry-run **66 SELECT**。后者只保留两条候选的身份查找，另有一次历史
+Signal 批量读取；来源查询随 distinct scope 增长，不逐重复 Signal 重建来源链。
+
+**并发边界仍有限**：等价查找与 add_if_absent 在同一生成 UoW，但数据库只
+约束同一 type/source，未约束不同来源的等价输入。独立并发调用可能看到不同
+可见窗口/未提交 Signal，仍可能分别写入等价来源，不能凭串行幂等测试宣称
+数据库级跨来源唯一性。SQLite canonical refresh 锁实测仅同进程协作互斥；
+PostgreSQL 使用 session advisory lock，只有锁持续属于同一 backend 且所有
+调用遵守锁协议时才可协调刷新。当前实现跨 commit 未显式固定连接，持续
+持锁/连接池复用及跨进程行为尚未验证，不在本次扩建或修复锁框架。
+
+所有写入验证仅隔离 SQLite，未执行生产刷新/采集/恢复/迁移/维护，未修改
+业务数据库、来源事实、历史关联或 Signal.state；既有工作区修改和基线文件
+保留。**仍未解决**：共识变化的真实前后比较与文案、旧 Event 关联/时间及
+Priority/Feed 的历史污染和最终跨投资者有效性、跨投资者回流、其他产品读取
+入口、独立并发的跨来源唯一性和 PG 锁持续性。历史完整性仍 UNKNOWN。
+路线只记录本子任务完成，不宣称跨投资者情报或整个可信变化阶段完成；停止。
+
+### 跨投资者当前方向状态的准确分类与展示 — 2026-10-09
+
+**本子任务局部完成：新数据链路表达当前方向观察，不宣称共识前后变化**。
+保留此前十一项修复。新增独立 Priority reason
+`CROSS_INVESTOR_DIRECTION_EVIDENCE`，表示既有规则下观察到多人观点方向证据，
+涵盖符合资格的方向一致或直接看好/谨慎分歧。Alignment 对应 Priority 仍 LOW，
+Consensus 对应仍 HIGH；方向分类、资格、阈值、排序及 Signal/Event 身份不变。
+未增加 Consensus Change Over Time、演化算法、表、policy 或变化加分。
+
+保留 `SignalType.CONSENSUS_CHANGE`、`EventType.CONSENSUS_STATE_CHANGE` 及
+其他既有技术身份，契约注明它们是兼容值，不能证明形成、增强、减弱、反转
+或变化。旧 Priority reason `CONSENSUS_STATE_CHANGE`、`CROSS_INVESTOR_DISCOVERY`
+保持独立原字符串，可反序列化，不删除、不与新原因设别名。已核对模型和
+既有迁移中 reason 为 String(64)，没有枚举/check 约束；未新增或执行迁移。
+
+新 Feed 标题为 `Cross-investor direction evidence was observed`，中文原因
+为“观察到多人观点方向证据”。前端明确区分当前方向状态、来源观察时间与
+是否有前后比较：新卡片标注来源观察时间、未进行前后状态比较、方向一致
+不代表投资逻辑一致。当前方向一致/直接分歧标签不描述逻辑共识或反转；
+Asset 页的兼容事件原因、通用复核说明及 Narrative 文本不再用技术类型宣称
+真实变化，证据 Signal 计数也不统一称“变化信号”。没有改变这些产品读取
+入口的有效性或分类算法。
+
+历史处理限定为准确展示：旧原因标题/中文标签明确“旧分类、未验证变化或
+来源有效性”。Feed query 对旧原因返回警示标题的只读副本，reason、context、
+时间和数据库原行不被重分类或校正；未把旧记录包装成新可信观察。真实
+隔离测试明确：Priority repository 重用旧行仍仅更新 evidence_count，旧 reason、
+id、created_at 保留；本次未添加跨投资者历史重分类或批量维护。Thesis 的
+限定刷新行为继续保留，未全局改变 repository 重用规则。
+
+先通过真实有效来源 → Snapshot/Alignment/Consensus → Signal → Event →
+Priority → Feed → Lifecycle → HTTP API 添加失败测试：首次看好方向一致及
+直接看好/谨慎分歧均因旧原因失败，**2 failed**。新增前端新原因/旧原因/
+当前状态翻译测试在修复前 **5 failed / 11 passed**。
+修复后新增隔离链路 **6 passed**：除两类首次观察外，还验证重复生成与物化
+复用原身份/创建时间、中性标题/新原因/事实时间/HTTP 一致、旧原因独立可读、
+旧 Priority 数量刷新但原因保留、旧 Feed 只读警示及来源失效后仍可能返回。
+查询逐表零写入，普通历史字段和来源保护断言保留，没有手工正确新 Priority
+代替上游生成；仅历史兼容 fixture 直接保存明确标注的旧 Priority。
+
+使用 `.venv/Scripts/python.exe -m pytest ... -q -p no:cacheprovider --tb=short`，
+跨窗口等价/来源校验/事实时间/完整性及 Thesis/物化/Lifecycle/Feed 回归
+**341 passed**；架构、实际读 API、Thesis 上游、Discovery/Narrative/Context/
+Attention Classification/Asset Product 消费者另 **126 passed**，共 **467 passed**。
+前端 `npm test` **46 passed**，`npm run lint` 与 `npm run build` 通过；Python
+ruff check/format 和 git diff --check 通过。测试保留既有 HTTP 库弃用警告。
+旧分类规则测试只更新新原因预期与显式枚举集合，不改变等级/有效性/幂等断言。
+
+**Lifecycle 不修改**：HIGH_PRIORITY、兼容 CONSENSUS_EVENT 与 CROSS_INVESTOR_EVENT
+特殊激活分支继续存在。隔离固定时钟验证，60 天前的 NEW 条目仍可能仅因
+这些分支 ACTIVE，即使不在激活时间窗口；有正确事实时间时近期 since 查询
+排除它们。技术值与激活分支都不证明旧事实有资格进入近期 Inbox。受污染
+旧 Event/Feed 时间及失效证据可能绕过时间筛选，必须由后续跨投资者有效
+证据物化/查询/Lifecycle 口径修复；本次未实现跨投资者回流。
+
+所有写入仅隔离数据库，未调用真实 LLM，未执行生产刷新/采集/恢复/迁移/
+维护，未修改业务数据库或基线审计/快照，既有工作区修改保留。**仍未解决**
+历史跨投资者 Priority 原因、Event/证据关联和时间污染、最终 Feed 有效性及
+特殊激活口径、跨投资者回流与其他产品入口有效性；真实共识变化能力没有
+实现，历史完整性仍 UNKNOWN。只记录本子任务状态；停止，不自动继续。
+
+### 跨投资者 Feed 查询的有效关联、投票者与事实时间 — 2026-10-09
+
+**本子任务局部完成，仅修复两类 Feed 查询响应**：
+CROSS_INVESTOR_ALIGNMENT → CROSS_INVESTOR_DISCOVERY、CONSENSUS_CHANGE →
+CONSENSUS_STATE_CHANGE。技术身份仍兼容旧值，不证明真实前后变化。此前十二项
+修复保留，特别是 Thesis 查询、内部生命周期基线、全局 Signal 去重与事实时间。
+
+共享 `list_with_votes` 在原 policy/来源链/窗口输入完整性/事实时间/等价校验的
+同次加载中，提供实际参与方向投票的有效 Opinion 投资者；原三字段事实时间
+与四字段等价入口保持兼容。新增 `FeedCrossInvestorSignalReader.group_by_events`
+注入现有 Feed 查询 UoW，复用传入的历史 Signal 批量读取，不新增持久化投影。
+ACTIVE、来源身份和 Asset 合法的 Signal 先保留未去重的有效读取副本，再按
+每个 Event 的真实 evidence links、对应 Signal type 和 Asset 过滤，最后复用
+原稳定代表规则在该关联集合内去重。没有先全局代表相交，也没有补造关联或
+借用同标的未关联 Signal；全局代表未关联、另一合法等价来源已关联时仍可读。
+
+仅在 Event/Feed Asset 和技术类型一致且有效关联非空时返回当前方向证据。
+响应重新构造 signal_count/source_count/source_types、实际投票者及其人数，
+observed_at 取已校验方向投票 RawEvent 事实时间的最大值。忽略旧 Event/Feed
+时间、Priority.evidence_count、旧 context 以及 Signal 的错误观察时间。
+Signal.investor_id 为空也不再导致零人数；Attention-only 投资者不是投票者。
+不同真实输入的合法历史窗口仍分别作为证据保留，投资者集合仅用于展示/
+人数/过滤，不把跨窗口投票重新组合成一个当前共识，不新增方向分类。
+
+当前有效响应 reason 为 CROSS_INVESTOR_DIRECTION_EVIDENCE，标题为
+`Cross-investor direction evidence was observed`。旧 Priority/Feed 的 reason
+只在响应副本校正，存储原值不变，LOW/HIGH 不重分类。since、investor_id、
+排序、total、limit、has_more 在有效筛选/去重/事实时间校正后计算；调用方
+Feed.state 过滤保持，STALE/RESOLVED/NEW 不写状态、不自动激活或重开。
+旧 context 与 Thesis 内部生命周期区域不泄漏，其他 Event 类型不扩展校验。
+
+修复前先构造已有 Event/旧 Priority/旧 Feed、错误历史时间及真实旧关联，
+首批真实 HTTP 测试 **6 failed**：两类 inactive 来源仍返回、重复窗口仍展示
+999 旧计数、未正确展示实际投票者。修复后新增
+`test_effective_cross_feed_query.py` **43 passed**，覆盖政策/FAILED/前驱失效、
+窗口遗漏迟到输入、非 ACTIVE/缺失来源、类型/Asset/投资者身份错配、有效与
+更晚失效证据混合、等价窗口关联、未关联全局代表/未关联有效来源不可补足、
+Attention-only、事实旧计算新、不同状态的多个历史窗口不合成共识、投票者
+过滤、当前中性分类、分页/排序/各状态、等级保留、全部业务表零写入及查询规模。
+
+使用 `.venv/Scripts/python.exe -m pytest ... -q -p no:cacheprovider --tb=short`：
+本次 HTTP 场景与此前十二项来源/Signal/Event/Thesis/物化/Lifecycle/Feed 回归
+**384 passed**；架构、读 API、Thesis 上游、Discovery/Narrative/Context/Attention
+Classification/Asset Product 消费者另 **126 passed**，共 **510 passed**。
+ruff check/format、git diff --check 通过；只有既有 HTTP 库弃用警告。此前“旧
+跨投资者原因仍在 HTTP 返回”“非方向证据可支撑跨 Event”的预期按新边界
+更新，底层旧 Priority/Feed 内容不变、Thesis 与其他类型的断言没有放宽。
+未改前端或响应字段形状，投票者沿用现有 investors 契约。
+
+SQL 实测所有查询仅 SELECT，查询前后逐表比较内容完全相同：
+1 个 distinct scope、1/2 个 Event 均 **25 SELECT**；历史 Signal 从 2 条增至
+22 条（新增已关联伪造来源）仍 25。单标的 6 个完整 scope、32 条 Signal、
+2 个 Event 为 **70 SELECT**；6 个标的、11 个完整 scope、42 条 Signal、12 个
+Event 为 **145 SELECT**。本无 Portfolio 引用 fixture 的查询量为基础 10 +
+9×完整 scope + 6×asset/window_end 引用读取 scope；Signal/Event 增长只增加
+批量数据及内存关联处理，不逐 Feed/Signal 重建完整来源链。同次准备复用，
+不同窗口各自读取正确截止，不使用跨请求永久缓存。Thesis-only 查询仍保留
+此前 11 次批量读取预算。
+
+写入验证仅隔离数据库 fixture；查询零写入，没有生产刷新/采集/恢复/迁移/
+维护、真实 LLM、业务数据库修改或历史清理，基线文件和既有修改保留。
+**仍未解决**跨投资者 Priority/Feed 物化的有效数量/投票者/时间一致性、旧
+Event/关联/Priority/Feed 的持久化污染、Lifecycle 特殊激活口径与回流、其他
+产品读取入口有效性、独立并发/PG 锁边界及真实共识变化能力。当前查询校正
+不代表安全物化重跑或生命周期已闭环；历史完整性仍 UNKNOWN。路线只记录
+本子任务完成，停止，不自动继续，不宣称整个 Inbox 或可信变化阶段完成。
+
+### 跨投资者 Priority → Feed 物化一致性 — 2026-10-09
+
+**本子任务局部完成，仅修复两类目标物化，不包含 Lifecycle 或回流**。
+保留此前十三项修复、原 Signal/Event 身份和普通历史读取。Priority、Feed 与
+查询复用 `FeedCrossInvestorSignalReader.group_by_events`：真实关联、ACTIVE
+Signal、有效 policy/来源链/窗口完整性、Event 范围等价去重、方向投票者和
+RawEvent 事实时间都由同一入口解析，没有复制来源/前驱/等价算法。
+共享端口移至 evidence 模块，共用公开 context 构造，不改变查询响应口径。
+
+Priority 仅处理 ACTIVE Event 和非空有效证据，evidence_count 为去重后数量，
+reason 为 CROSS_INVESTOR_DIRECTION_EVIDENCE，按既有规则分别 LOW/HIGH。
+新增限定 writer `add_or_refresh_cross_direction`，只允许两类 ACTIVE Event，
+纠正 reason、priority_level、evidence_count，保留 id/event_id/created_at。
+**旧字段值被替换，不再保存在该行**：隔离旧 CROSS_INVESTOR_DISCOVERY /
+CONSENSUS_STATE_CHANGE 原因变为中性原因，故意错置的 HIGH/LOW 恢复 LOW/HIGH，
+999/历史关联数量改为有效数量。未新增审计框架，通用 add_if_absent 与 Thesis
+限定刷新原行为不变；其他类型不会因本次 writer 被重新分类。
+
+执行顺序明确为 **Event 聚合 → Priority 物化 → Feed 物化**。Priority dry-run
+只提供候选，不刷新旧行；未实际刷新或 reason/等级/有效数量不一致时，Feed
+dry-run 与 materialize 均明确 ValueError，数量校验未删除。资格及来源按各自
+完整 scope 判断，不用 event_ids 局部集合替代有效性；未关联全局代表不能
+误排合法关联，也不能借同标的未关联证据。
+
+Feed 使用同一有效组的中性标题/原因/公开 context 和事实 observed_at，不用
+Event.last_observed_at。投票人数来自有效 Opinion，Attention-only 不算投票者；
+不同真实输入的窗口证据保持独立，只合并展示参与者集合，不合成共识。
+复用 Feed id/priority_id/created_at/state，既有内部区域按原契约保留、HTTP
+不泄漏。STALE/RESOLVED 不激活或重开。全部证据失效或 Event 非 ACTIVE 时
+跳过，不写零数量、不生成/刷新投影，旧行保留；失效来源继续由当前查询排除。
+
+先构造已有 Event/旧 Priority/旧 Feed、重复及非 ACTIVE 历史关联和污染时间，
+运行真实 Priority dry-run 复现两类都把 1 组有效证据计为 3 条：**2 failed**。
+修复后新增 `test_cross_materialization_consistency.py` **30 passed**，覆盖混合
+历史纠正及真实聚合→物化→HTTP 字段一致、ACTIVE/STALE/RESOLVED、旧原因/
+等级替换、身份/创建时间/内部区域保留、dry-run 零写入、重复字段稳定、
+失效 policy/迟到输入与非 ACTIVE Event 跳过、无 Priority 的全失效 Event
+不新建、未刷新与单字段不一致报错、局部合法代表、不借未关联证据、
+Attention-only、不同真实输入不合并、其他类型重用及 scoped writer 拒绝越界。
+每次写入逐表确认除 Priority/Feed 外全部记录保持原样，源事实、Signal、Event
+及旧 links 完整保留；查询前后全部表相同，公开持久化字段与 HTTP 响应一致。
+
+使用 `.venv/Scripts/python.exe -m pytest ... -q -p no:cacheprovider --tb=short`，
+本次物化与此前十三项/相关 Signal/Event/Thesis/Feed 回归 **414 passed**；
+架构、实际读取 API、上游及 Discovery/Narrative/Context/Attention Classification/
+Asset Product 消费者另 **126 passed**，共 **540 passed**。ruff check/format、
+git diff --check 通过。此前刻意保留“目标类型旧原因不刷新”“Thesis 关联可
+支撑跨 Event 物化”的预期更新为本次正确边界；其他类型、有效性与幂等保护
+未削弱。唯一测试警告仍为既有 HTTP 库弃用警告。
+
+批量实测无 Portfolio 引用 fixture：一个完整 scope、两类 Event 的 Priority /
+Feed dry-run 为 **22 / 23 SELECT**；六个完整 scope、12 条等价 Signal 为
+**67 / 68 SELECT**，每增加 scope 增量 9 次，两类来源共用同次准备/校验。
+没有逐 Signal/Feed 重建来源链；实际写入额外使用既有按投影身份查找/刷新，
+没有新增跨请求缓存或并发框架。来源集合改变后必须再次按规定顺序刷新，
+不能用旧计划或 dry-run 当作已完成的 Priority 更新。
+
+**Lifecycle 仍未闭环，已保留真实反例**：新 Priority 有效数量为 1，旧 links
+仍为 3，完成 Feed 物化后 Lifecycle dry-run/apply 均报
+`Priority evidence count does not match Event evidence`，没有状态或其他写入。
+单来源场景中 HIGH_PRIORITY/CONSENSUS_EVENT/CROSS_INVESTOR_EVENT 仍可激活旧
+事实（此前固定时钟反例继续通过）。未修改这些分支、数量口径或跨投资者
+回流；本次全链路证明止于物化和 HTTP，不声称 Lifecycle 已修复。
+
+所有写入仅隔离 SQLite fixture；未调用真实 LLM，未执行生产刷新/采集/恢复/
+迁移/维护，未修改业务数据库、历史 Event/来源/Signal/关联、锁或其他读取
+入口，基线文件与既有修改保留。**仍未解决** Lifecycle 有效证据/时间口径、
+特殊激活及回流、保留的历史 Event 时间/关联与全失效旧投影、其他产品入口
+有效性、独立并发/PG 锁、真实共识演化及产品验收。历史完整性仍 UNKNOWN。
+路线只记录本子任务状态；停止，不自动继续，不宣称整个 Inbox 或可信变化阶段完成。
+
+### 跨投资者 Lifecycle 有效口径与限定时间激活 — 2026-10-09
+
+**本子任务局部完成，不实现跨投资者 STALE → ACTIVE**。保留此前十四项修复，
+Lifecycle 的两类目标 Event 批量复用查询/物化的有效关联入口，包含来源链、
+完整窗口输入、Event 范围等价去重、实际投票者和 RawEvent 事实时间。不复制
+来源算法、不借未关联证据，不用全部旧 links、旧 Event 时间或计算时间判断。
+
+有效证据存在时严格检查 Priority 原因/LOW-HIGH 规则/有效数量及 Feed 标的、
+技术类型、原因、中性标题、公开 context、事实 observed_at。内部区域沿用
+feed_display_context 契约，不因私有内容存在而误报公开字段不同；未刷新字段
+直接 ValueError，Lifecycle 不修正上游、标题、context 或时间。来源全失效时
+保留行、关联和原状态，记录 `NO_EFFECTIVE_CROSS_DIRECTION_EVIDENCE`，不激活
+且不阻断其他正常条目；跳过不表示历史污染清除。
+
+仅两类目标的 NEW 激活改为：ACTIVE Event + 有效证据 + 投影一致 + 来源事实
+在现有激活窗口内且不晚于评估时间。HIGH_PRIORITY、CONSENSUS_EVENT、
+CROSS_INVESTOR_EVENT、旧原因不再单独绕过时间窗口；其他 Event 原规则保留。
+ACTIVE 过期按有效事实时间及原 stale_window，重复/失效较新关联、旧 Event
+时间不能阻止过期；STALE/RESOLVED 不新增自动转换，Thesis 回流与基线算法
+不变。目标转换只写合法 Feed.state，无跨投资者内部基线写入。
+
+外部跨投资者自动转换计划执行前按执行时钟重新批量核对来源及投影；识别
+实际 Priority→Event 关系，不能通过篡改 Feed.type 绕过目标检查。来源失效、
+窗口过期或投影错配后不能只凭 from_state 执行旧计划。沿用原合法状态集合
+及错误风格，不增加并发框架，不扩大成跨投资者回流；现有手工处理状态的
+合法转换保留。Thesis 外部计划/checkpoint 校验继续执行既有逻辑。
+
+先实际生成历史 3 links/1 有效组，完成 Priority/Feed 物化再调用 Lifecycle，
+以及两类旧/未来事实的正确单来源投影：修复前新增 **6 failed**，分别复现
+旧数量错误与不受时间约束的激活。修复后新增
+`test_cross_lifecycle_consistency.py` **45 passed**：真实聚合→Priority→Feed→
+Lifecycle→HTTP 字段/状态/近期窗口验证、等价关联、LOW/HIGH 旧事实不激活、
+未来事实不激活、近期 NEW 激活、旧 ACTIVE 过期、失效的真实近期事实不能
+阻止过期、全失效跳过/不阻断、Priority/Feed 九项字段错配报错、非 ACTIVE
+Event、STALE/RESOLVED 无回流、外部计划来源/时钟/类型失效拒绝、dry-run 零
+写入、重复执行幂等及按字段确认只写目标 state。源记录/关联/所有上游表
+保持不变，API 仍按真实投票者和事实时间返回，不仅检查 HTTP 200。
+
+真实 Thesis 基线保护场景保留原库存吸收行为：新增 RawEvent 后既有 Thesis
+维护仍可扩展 known_raw_event_ids；完成这项既有维护后，跨投资者激活不改
+Thesis 状态或基线。此前 Thesis 回流、假回流/外部计划及原子性回归保留。
+旧“按全部 links 报错”“兼容类型能激活旧事实”“Thesis Signal 能支撑跨
+Event 激活”的目标类型预期按本次修复更新，其他 Event 与 Thesis 原断言未放宽。
+
+实际 `.venv/Scripts/python.exe -m pytest ... -q -p no:cacheprovider --tb=short`：
+本次及此前十四项/相关 Signal/Event/Thesis/Feed/Lifecycle 回归 **459 passed**，
+架构、实际读 API、上游及相邻产品消费者 **126 passed**，合计 **585 passed**。
+最终本次+既有 Lifecycle 单测重跑 50 passed，ruff check/format、git diff --check
+通过；仅保留既有 HTTP 库弃用警告。SQL 实测一个完整 scope、两类 Event 的
+Lifecycle dry-run **23 SELECT**；六个 scope、12 条等价 Signal **68 SELECT**。
+同次来源准备复用，所有 dry-run SELECT 且逐表零写入，不逐 Feed/Signal 重建。
+
+**真实 Thesis 启动失败独立保留，未解决**：用户报告启动在 FEED_LIFECYCLE 因
+Thesis Priority 与有效证据数量不一致失败。本次隔离保留同类别反例，未刷新
+Thesis Priority 时仍报 `Priority evidence count does not match effective Thesis
+evidence`，没有写入。这不证明真实故障根因，不把它归因于跨投资者旧关联；
+后续必须单独核查 canonical refresh 的选择范围/阶段顺序/有效输入一致性。
+本次未运行生产刷新、读取/修改业务数据库或操纵现有服务，不宣称真实启动
+恢复成功，也没有扩大修改编排。
+
+未调用真实 LLM，未执行生产采集/恢复/迁移/维护，未停止或重启服务；历史
+Event/Signal/来源/关联与基线文件保留。**仍未解决**跨投资者回流、上述真实
+Thesis 编排失败及其根因、持久化历史污染、其他产品入口有效性、独立并发/
+PG 锁、真实共识演化和真实用户验收。历史完整性仍 UNKNOWN。路线只记录
+本子任务状态，停止，不自动继续，不宣称整个 Inbox 或可信变化阶段完成。
+
+### canonical refresh 物化与 Lifecycle 范围协调 — 2026-10-09
+
+**本子任务局部完成：修复编排范围，不宣称生产运行恢复或整轮验收完成**。
+保留此前十五项 Intelligence 修复，不改变有效来源、分类、事实时间、等级、
+状态规则，不实现跨投资者回流。只协调已有服务和明确评估范围。
+
+生产只读核查：香港时间 **2026-10-09 22:22:27.921706 +08:00**，连接 localhost
+PostgreSQL snowball，REPEATABLE READ / READ ONLY，SHOW transaction_read_only=on，
+结束 rollback。当前 HEAD 为 e3db4bd353eaf2c68904d4c2d7bacd84ed66b6e3，含本会话
+既有未提交修改；失败摘要未记录执行代码提交，不能将当前工作区当作失败时
+完整版本。未调用 LLM、运行 refresh 或修改业务表。
+
+读取真实 run f3a11789-ef66-41b3-9894-e3a97b06dac3：开始 21:40:38.194555、结束
+21:43:11.703326（香港时间），FAILED / FEED_LIFECYCLE / STAGE_FAILED。摘要记录
+60 个 observed RawEvent、25 个新事件、25 次新 Analysis，domain 11 个 Opinion、
+9 个 affected Assets，聚合 25 个 Event，物化 23 个 Priority/Feed；该运行的
+历史 LLM 请求是已存摘要，本次没有发出这些请求。
+
+报错 Priority 62c6ba81-1da2-4efa-b2e6-3f51c7544f86 不在摘要 23 个已物化 ID 中；
+当前父 Event ab976a9a-ced4-4671-8b96-e0cb554c42f1 不在 25 个聚合 ID 中；Asset
+5d7bb2ad-e432-411e-8662-f02f35086a2f 不在 9 个 affected Assets 中。当前该 Priority
+仍 MEDIUM/THESIS_ACCELERATION/evidence_count=2，Feed 0323fe80-628d-4bb1-8374-
+e5f42df85598 为 ACTIVE、旧原因与计数 2。两条 ACTIVE Thesis Signal 中，第一条
+来源 NEW_THESIS（比较仍有效但不是 material），第二条 THESIS_EXTENDED 有效，
+当前有效变化数量为 **1**；两条来源 RawEvent 均未在本轮 observed 集合中。
+当前 Opinion policy 为 opinion-analysis-v3:794dc66ba5096337c3e2c0f85554887352f476e5f52ad55363b6b9420d5502a9，
+comparison 为 thesis-comparison-policy-v1:b11fa32abad7ca1b339170a41e1f38b18ef72e51e61f26961bd37db2e3982dc4，
+两条来源 identity 匹配当前配置、Analysis 均 SUCCESS。
+
+**可确认与限制**：失败摘要明确报错行未被本轮物化；当前代码只按聚合候选
+ID 刷新投影，却全量评估 Feed，当前数据库仍有同类 2/1 不一致。来源类别/
+有效数量是核查时状态，不是失败时快照，不能证明当时恰为 1，也不能据此
+宣称阶段间来源变化已被还原。读取摘要和当前记录不等于复原全部失败事实。
+
+真实隔离 canonical 反例：两个标的，一个为本轮已有成功 Analysis 的输入，
+另一个为历史旧 Thesis 投影；只有外部 comparator 使用结构化 fixture，全部
+内部 scope 选择、resolution/domain/cross/Signal/Event/Priority/Feed/Lifecycle/
+Product 服务及 operational run/锁仍真实执行。修复前 **1 failed**，canonical
+返回 FEED_LIFECYCLE 的 effective Thesis count 错误，不是 NoOpRefresh 或仅手动
+串联服务。实际外部采集在无数据场景使用明确空结果 fixture，不访问网络。
+
+最小修复：domain 的 affected Assets 额外来自观察 RawEvent 与已有 Opinion、
+Attention、Thesis 当前/前驱事件的持久化关系（含旧 policy/FAILED 依赖）；
+只是保守依赖覆盖，不由编排器判断有效性。聚合候选 ID 继续记录，但后续
+projection_event_ids 取 affected Assets 全部已有 ACTIVE Event，避免“有新
+候选”代替“有受影响旧投影”；Priority 后的 projection_priority_ids 从范围内
+持久化行读取，包含全失效保留行。Feed 与 Lifecycle 传递相同 Event 范围。
+Lifecycle dry_run/apply 新增可选 event_ids，默认仍全量原行为，显式空集合
+评估零条；外部 plan 不与 scope 混用。只筛评估条目/关联，不改变全局有效
+来源选择、Thesis 基线或状态算法。
+
+边界明确：其他未受本轮观察依赖/派生输出影响的标的，以及非 ACTIVE 父
+Event，暂不评估，未宣称其投影已一致。摘要输出 source_dependency_asset_ids、
+projection_event_ids、projection_priority_ids、Lifecycle scope_event_ids /
+evaluated_items 与 deferred_feed_count，便于识别延期范围。无新采集不触发
+全仓历史修复或重复分析；合法 skip-collection CLI 仍要求显式 RawEvent ID，
+空数据验收走真实 collection 阶段的外部空结果 fixture。
+
+新增 `test_canonical_refresh_scope.py` **7 passed**：原类 scope 错误修复、本轮
+新变化至 HTTP ACTIVE 结果、当前标的与无关旧投影边界、迟到前驱使有效数量
+减少、无新 material 候选但旧 Event 全失效、FAILED 来源依赖覆盖、干净重复
+运行零新增业务产物/零 LLM 请求、空采集安全执行、阶段间真实来源变化及
+单写入故障仍分别 FAILED 于 FEED_LIFECYCLE/FEED。没有删除检查、强改数量、
+清理关联或 fallback inactive policy。旧无关投影逐行不变，已有失效行按原
+规则跳过，真实来源变化会重新验证/暴露失败，不用捕获异常制造 SUCCESS。
+
+**发现但未扩大修复的独立阻断**：有效数量从 2 降到 1 的 canonical 场景，
+Priority、Feed、Lifecycle 和 HTTP 已正确协调，但 Asset Product 的 Context
+仍要求所有旧 evidence links 数量与有效 Priority 数量一致，报
+`Event evidence count mismatch`，PRODUCT_VERIFICATION 为 PARTIAL，最终
+PARTIAL_FAILURE。这是其他产品读取入口口径问题，按范围限制保留，不弱化
+验证或改为 SUCCESS。已有 FAILED Analysis 场景也保持 PARTIAL_FAILURE。
+干净新变化/重跑/空数据及全失效场景可 SUCCESS，不以这些场景宣称生产所有
+历史条目或整个产品链路已经恢复。
+
+实际命令 `.venv/Scripts/python.exe -m pytest ... -q -p no:cacheprovider --tb=short`：
+新 canonical/既有编排单测和此前十五项回归 **475 passed**，架构/实际读取/
+相邻产品另 **126 passed**，合计 **601 passed**；最终范围测试+编排单测 16
+passed，ruff check/format、git diff --check 通过。仅既有 HTTP 库弃用警告。
+canonical 集成与 NoOp 单测结果分开：正确性证明使用七项真实服务集成场景。
+
+尚需单独授权的真实运行验收：观察新 summary scope 是否覆盖实际依赖、识别
+延期旧投影、核对阶段间来源变化和其他产品检查结果。未执行生产验证，
+报错旧 Priority 本身未在业务库被纠正，不能宣称真实服务已恢复。另保留
+全局 policy 切换/未观察依赖的有界协调、其他读入口口径、历史污染、独立
+并发/PG 锁、跨投资者回流、真实共识演化及用户验收缺口。历史完整性仍
+UNKNOWN，基线快照/历史 Sprint 不改写；路线只记录本子任务，停止，不自动继续。
+
+### Asset Product Context 有效关联读取一致性 — 2026-10-09
+
+**本子任务局部完成，解除已复现的 Context 产品验收阻断，不启动生产验证**。
+保留此前十六项修复，未改 Context 窗口边界、判定算法、状态规则、表、policy
+或持久化投影，没有新增 Momentum/共识演化/加速。历史完整性保持 UNKNOWN。
+
+实际路径根因不只一处：独立 Context 先调用 standalone Discovery，该入口按
+旧 evidence links 检查 Priority；Asset Product 则先加载 Asset read scope，
+scoped Discovery/Attention 的检查及 Context 自身仍消费旧 links。仅替换
+Context 内一个数量比较不能解除这些前置阻断。修复前通过真实 Priority/Feed
+物化及 Lifecycle 后调用独立 Context/Asset Product，首批 **3 failed**，确认
+旧关联与当前有效数量不一致；前一步 canonical 数量减少案例仍 PARTIAL。
+
+最小读取修复在现有内存 scope 完成：Asset UoW 注入既有有效 Thesis Signal /
+跨投资者关联读取端口；一次准备 ACTIVE Feed 所关联三类 Event 的有效组，
+Thesis 复用事实时间读取和真实链接分组，跨投资者复用来源/完整性/事实时间/
+投票者及关联范围等价去重。严格校验必要 Priority/Feed 已按该组刷新（身份、
+分类、等级、数量、标题、公开 context、事实时间），非空有效证据下不一致
+直接报错，不删检查、不读侧替上游修正。全失效 ACTIVE 行从消费集合排除，
+不制造有效零投影；数据库状态/旧关联/来源内容不变。
+
+scope 携带 context_evidence 与已验证关联的跨来源引用，内存 evidence links
+只保留该 Event 实际关联的有效代表，Signal 时间为只读副本。原历史 Signal
+repository 与所有持久化记录保留；没有虚拟 source 或补造关联。Asset Product
+现有 scope 消费者共用这套输入以通过前置检查，未重写其算法；独立 Discovery/
+Evolution 等其他入口不做全仓修复。Context 独立 asset/candidate/batch 生产
+入口改用同一 scope loader，避免先通过旧 standalone Discovery 检查。batch
+按 listing scope 复用结果，不让每个 Context 子区块重新查询完整来源链。
+
+Context 的 activity/investor/timeline 使用校正后的实际关联集合与来源事实，
+跨方向 Signal.investor_id 为空时仍使用验证过的 Opinion 投票者，Attention-only
+不算方向投资者。保留既有 Feed/Event 观察窗口成员分配与 current/previous
+边界，不新增逐观点窗口算法；有效观察时间替代污染的旧时间。Thesis 变化
+计数只消费关联 material 来源，未关联/非 material 的比较产物不冒充变化；
+Context cross_state 在原窗口截止规则内只使用有效关联所支持的来源引用，不
+用失效较新产物或计算时间填补状态。新/返回投资者仍只是观察集合的差/交，
+两个窗口差异不证明完整行为变化、共识形成或消失，限制文字保持 UNKNOWN。
+
+新增 `test_effective_asset_context.py` **29 passed**，覆盖 Thesis 数量减少、
+跨投资者失效/等价关联、合法非全局代表、三类投影五字段未刷新保真、
+全失效排除、实际投票者/Attention-only、事实时间/历史窗口、asset/candidate/
+batch Context 一致、Asset Product context 字段一致、真实 HTTP 200 具体字段
+及不一致时 422、逐表零写入、保留基线/历史关联、共享读取规模。原 scope
+计数单测补充已验证端口及准确投影 fixture，未 mock 掉新增集成有效 selectors。
+
+此前真实 canonical 数量减少场景现在 **PRODUCT_VERIFICATION SUCCESS**、整轮
+SUCCESS：经过实际 raw 范围选择/既有 Analysis 与派生/Event/Priority/Feed/
+Lifecycle/Asset Product/Context，接着验证 Feed 与 Asset/Context HTTP 具体
+数量和投资者，并核对查询零写入。只使用外部采集/comparator/时钟 fixture，
+没有绕过 scope 或产品验证。另对必要产品读取单点注入真实 ValueError，
+canonical 仍 PARTIAL_FAILURE 且 PRODUCT_VERIFICATION PARTIAL；前一步 FEED /
+FEED_LIFECYCLE 失败阶段及来源变化保真测试继续通过，没有捕获后标 SUCCESS。
+
+实际 `.venv/Scripts/python.exe -m pytest ... -q -p no:cacheprovider --tb=short`：
+本次及 canonical/此前十六项回归 **504 passed**；架构/实际 API/上游/相邻
+产品消费者 **126 passed**，共 **630 passed**。最终本次+canonical 重跑 36
+passed，ruff check/format、git diff --check 通过，只有既有 HTTP 库弃用警告。
+字段形状、窗口含义与其他 Event 语义保持，未改前端或降低接口错误约束。
+
+SQL 实测（无 Portfolio 引用 fixture）独立 Context 和整次 Asset Product
+在 1 个完整 scope、2 个 Event 下均 **30 SELECT**；6 个等价完整 scope、12 条
+旧 Signal 下均 **75 SELECT**（每新增 scope 9 次，共用 asset/window_end 引用
+读取）。跨 Context 子区块/产品组合不再重复重建来源链；同次来源准备复用，
+只读且逐表内容完全不变。批量 Context 以每个 Asset scope 读取一次，不宣称
+全仓查询常数成本，也没有优化全部 Feed 查询。
+
+未调用真实 LLM、未执行生产刷新/恢复/迁移/维护、未修改业务数据库或操作
+现有服务，基线审计与快照不改写。**尚需真实运行验收** canonical 当前 scope、
+延期历史投影、真实来源阶段变化与产品验证结果；隔离成功不证明生产失败
+行已经纠正或服务已恢复。仍保留其他 standalone 产品读取入口有效性、
+历史污染、未观察依赖/全局 policy 协调、独立并发/PG 锁、跨投资者回流、
+真实共识演化及用户验收缺口。路线只记录本子任务，停止，不自动执行生产
+验证，不宣称整个 Inbox 或可信变化阶段完成。
+
 ## 历史路线与 Sprint 记录（原文保留）
 
 下文所有“current”“next”“complete”按其记录时点解读，不覆盖顶部当前路线。

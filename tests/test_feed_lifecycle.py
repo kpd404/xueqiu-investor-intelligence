@@ -164,6 +164,16 @@ def test_lifecycle_policy_activates_new_items_by_each_deterministic_rule() -> No
         _entry(state=FeedState.NEW, observed_at=old),
     )
     uow = _uow_from_entries(entries)
+    # Cross compatibility types are no longer standalone activation reasons.
+    # Their database source/projection path is covered by integration tests.
+    policy = FeedLifecyclePolicy(activation_window=timedelta(days=7))
+    for entry in entries[1:3]:
+        assert (
+            policy.activation_reasons(entry["feed"], entry["priority"], entry["event"], now=NOW)
+            == ()
+        )
+    entries = (entries[0], *entries[3:])
+    uow = _uow_from_entries(entries)
     service = FeedLifecycleService(
         lambda: uow,
         policy=FeedLifecyclePolicy(
@@ -174,10 +184,10 @@ def test_lifecycle_policy_activates_new_items_by_each_deterministic_rule() -> No
 
     result = service.dry_run(now=NOW)
 
-    assert len(result.plan.transitions) == 5
-    assert result.plan.current_counts[FeedState.NEW] == 6
+    assert len(result.plan.transitions) == 3
+    assert result.plan.current_counts[FeedState.NEW] == 4
     assert result.plan.predicted_counts[FeedState.NEW] == 1
-    assert result.plan.predicted_counts[FeedState.ACTIVE] == 5
+    assert result.plan.predicted_counts[FeedState.ACTIVE] == 3
     assert uow.commit_count == 0
     assert all(item.state is FeedState.NEW for item in uow.intelligence_feed_items.list())
 

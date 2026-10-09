@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from types import TracebackType
@@ -26,7 +26,10 @@ from contracts.intelligence_feed import (
     ThesisSourceFact,
     feed_display_context,
 )
-from intelligence.events.evidence import group_effective_thesis_evidence
+from intelligence.events.evidence import (
+    CrossDirectionEvidenceReader,
+    group_effective_thesis_evidence,
+)
 from intelligence.feed.lifecycle.policy import FeedLifecyclePolicy, FeedLifecycleTransition
 from intelligence.feed.lifecycle.thesis_baseline import (
     baseline_progress,
@@ -35,6 +38,7 @@ from intelligence.feed.lifecycle.thesis_baseline import (
     read_baseline,
 )
 from intelligence.feed.service import IntelligenceFeedService
+from intelligence.priority.service import IntelligencePriorityService
 
 
 class FeedItemLifecycleReader(Protocol):
@@ -79,6 +83,7 @@ class FeedLifecycleUoW(Protocol):
     intelligence_event_evidence: LifecycleEvidenceReader
     signals: LifecycleSignalReader
     effective_thesis_signals: ThesisLifecycleReader
+    effective_cross_signals: CrossDirectionEvidenceReader
 
     def __enter__(self) -> Self: ...
 
@@ -170,9 +175,15 @@ class FeedLifecycleService:
     def policy(self) -> FeedLifecyclePolicy:
         return self._policy
 
-    def dry_run(self, *, now: datetime | None = None) -> FeedLifecycleResult:
+    def dry_run(
+        self, *, now: datetime | None = None, event_ids: Iterable[UUID] | None = None
+    ) -> FeedLifecycleResult:
         with self._unit_of_work_factory() as unit_of_work:
-            plan = self._plan(unit_of_work, now=now)
+            plan = self._plan(
+                unit_of_work,
+                now=now,
+                event_ids=frozenset(event_ids) if event_ids is not None else None,
+            )
         return FeedLifecycleResult(
             plan=plan,
             updated_count=len(plan.transitions),
@@ -185,15 +196,82 @@ class FeedLifecycleService:
         *,
         now: datetime | None = None,
         plan: FeedLifecyclePlan | None = None,
+        event_ids: Iterable[UUID] | None = None,
     ) -> FeedLifecycleResult:
         if now is not None and plan is not None:
             raise ValueError("pass either now or plan, not both")
+        if plan is not None and event_ids is not None:
+            raise ValueError("pass either event_ids or plan, not both")
         external_plan = plan is not None
         with self._unit_of_work_factory() as unit_of_work:
             if plan is None:
-                plan = self._plan(unit_of_work, now=now)
+                plan = self._plan(
+                    unit_of_work,
+                    now=now,
+                    event_ids=frozenset(event_ids) if event_ids is not None else None,
+                )
             current_items = {item.id: item for item in unit_of_work.intelligence_feed_items.list()}
             actions = plan.checkpoints
+            if external_plan:
+                external_priorities = {
+                    priority.id: priority
+                    for priority in unit_of_work.intelligence_event_priorities.list()
+                }
+                external_events = {
+                    event.id: event for event in unit_of_work.intelligence_events.list()
+                }
+                cross_types = {
+                    IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+                    IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+                }
+                cross_ids = frozenset(
+                    transition.feed_item_id
+                    for transition in plan.transitions
+                    if (item := current_items.get(transition.feed_item_id)) is not None
+                    and (
+                        item.event_type in cross_types
+                        or (
+                            (priority := external_priorities.get(item.priority_id)) is not None
+                            and (event := external_events.get(priority.event_id)) is not None
+                            and event.event_type in cross_types
+                        )
+                    )
+                )
+                if cross_ids:
+                    fresh_cross = self._plan(
+                        unit_of_work,
+                        now=self._now_factory(),
+                        cross_ids=cross_ids,
+                    )
+                    proposals = {value.feed_item_id: value for value in fresh_cross.transitions}
+                    skipped_ids = {value.feed_item_id for value in fresh_cross.skipped}
+                    for transition in plan.transitions:
+                        if transition.feed_item_id not in cross_ids:
+                            continue
+                        current = current_items[transition.feed_item_id]
+                        proposal = proposals.get(current.id)
+                        policy_transition = transition.to_state in {
+                            FeedState.ACTIVE,
+                            FeedState.STALE,
+                        }
+                        if (
+                            current.id in skipped_ids
+                            or (
+                                policy_transition
+                                and current.state is transition.from_state
+                                and proposal != transition
+                            )
+                            or (
+                                policy_transition
+                                and current.state is transition.to_state
+                                and proposal is not None
+                            )
+                        ):
+                            raise ValueError(
+                                "Cross lifecycle plan no longer matches "
+                                "effective evidence or window"
+                            )
+                    plan = replace(plan, evaluated_at=fresh_cross.evaluated_at)
             if external_plan:
                 checkpoint_ids = {action.expected.id for action in actions}
                 for transition in plan.transitions:
@@ -310,19 +388,29 @@ class FeedLifecycleService:
         *,
         now: datetime | None,
         thesis_ids: frozenset[UUID] | None = None,
+        cross_ids: frozenset[UUID] | None = None,
+        event_ids: frozenset[UUID] | None = None,
     ) -> FeedLifecyclePlan:
         evaluated_at = now or self._now_factory()
         evaluated_at = self._normalize_time(evaluated_at, "now")
         feed_items = unit_of_work.intelligence_feed_items.list()
-        if thesis_ids is not None:
-            feed_items = tuple(item for item in feed_items if item.id in thesis_ids)
+        selected_ids = thesis_ids if thesis_ids is not None else cross_ids
+        if selected_ids is not None:
+            feed_items = tuple(item for item in feed_items if item.id in selected_ids)
         priorities = {
             priority.id: priority for priority in unit_of_work.intelligence_event_priorities.list()
         }
         events = {event.id: event for event in unit_of_work.intelligence_events.list()}
+        if event_ids is not None:
+            feed_items = tuple(
+                item
+                for item in feed_items
+                if (priority := priorities.get(item.priority_id)) is not None
+                and priority.event_id in event_ids
+            )
         signals = {signal.id: signal for signal in unit_of_work.signals.list()}
         links = unit_of_work.intelligence_event_evidence.list()
-        if thesis_ids is not None:
+        if selected_ids is not None or event_ids is not None:
             selected_events = {
                 priorities[item.priority_id].event_id
                 for item in feed_items
@@ -330,14 +418,17 @@ class FeedLifecycleService:
             }
             links = tuple(link for link in links if link.event_id in selected_events)
         links_by_event: dict[UUID, list[IntelligenceEventEvidenceView]] = {}
+        cross_types = {
+            IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+            IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+        }
         for link in links:
             if link.event_id not in events:
                 raise ValueError(f"IntelligenceEvent not found for evidence: {link.id}")
-            if (
-                link.signal_id not in signals
-                and events[link.event_id].event_type
-                is not IntelligenceEventType.INVESTOR_VIEW_CHANGE
-            ):
+            if link.signal_id not in signals and events[link.event_id].event_type not in {
+                IntelligenceEventType.INVESTOR_VIEW_CHANGE,
+                *cross_types,
+            }:
                 raise ValueError(f"Signal not found for evidence: {link.id}")
             links_by_event.setdefault(link.event_id, []).append(link)
 
@@ -356,6 +447,21 @@ class FeedLifecycleService:
             )
             known_raw_ids = unit_of_work.effective_thesis_signals.known_raw_event_ids()
 
+        cross_event_ids = {
+            priority.event_id
+            for item in feed_items
+            if (priority := priorities.get(item.priority_id)) is not None
+            and priority.event_id in events
+            and events[priority.event_id].event_type in cross_types
+        }
+        effective_cross = {}
+        if cross_event_ids:
+            effective_cross = unit_of_work.effective_cross_signals.group_by_events(
+                (event for event in events.values() if event.id in cross_event_ids),
+                links,
+                signals.values(),
+            )
+
         transitions: list[FeedLifecycleTransition] = []
         skipped: list[FeedLifecycleSkip] = []
         checkpoints: list[ThesisLifecycleCheckpoint] = []
@@ -367,6 +473,15 @@ class FeedLifecycleService:
             if event is None:
                 raise ValueError(f"IntelligenceEvent not found for Priority: {priority.id}")
             is_thesis = event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE
+            is_cross = event.event_type in cross_types
+            cross_signals, cross_voters = effective_cross.get(event.id, ((), frozenset()))
+            if is_cross and not cross_signals:
+                skipped.append(
+                    FeedLifecycleSkip(
+                        feed_item.id, event.id, "NO_EFFECTIVE_CROSS_DIRECTION_EVIDENCE"
+                    )
+                )
+                continue
             source_signals = effective_thesis.get(event.id, ()) if is_thesis else ()
             if is_thesis and not source_signals:
                 skipped.append(
@@ -408,6 +523,37 @@ class FeedLifecycleService:
                         raise ValueError(
                             f"Thesis Feed {field} must be refreshed before Lifecycle: "
                             f"{feed_item.id}"
+                        )
+                policy_feed = feed_item.model_copy(update={"observed_at": observed_at})
+            elif is_cross:
+                if len(cross_signals) != priority.evidence_count:
+                    raise ValueError(
+                        "Priority evidence count does not match effective cross evidence: "
+                        f"{priority.id}"
+                    )
+                if (
+                    priority.priority_level,
+                    priority.reason,
+                ) != IntelligencePriorityService._classify(event):
+                    raise ValueError(
+                        f"Cross Priority must be refreshed before Lifecycle: {priority.id}"
+                    )
+                observed_at = max(signal.observed_at for signal in cross_signals)
+                expected_projection = {
+                    "reason": priority.reason,
+                    "title": IntelligenceFeedService._title(priority.reason),
+                    "context": IntelligenceFeedService._cross_context(cross_signals, cross_voters),
+                    "observed_at": observed_at,
+                }
+                for field, expected in expected_projection.items():
+                    actual = (
+                        feed_display_context(feed_item.context)
+                        if field == "context"
+                        else getattr(feed_item, field)
+                    )
+                    if actual != expected:
+                        raise ValueError(
+                            f"Cross Feed {field} must be refreshed before Lifecycle: {feed_item.id}"
                         )
                 policy_feed = feed_item.model_copy(update={"observed_at": observed_at})
             else:

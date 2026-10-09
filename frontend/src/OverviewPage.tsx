@@ -330,18 +330,22 @@ function RecentIntelligenceCard({
   onOpenAsset: (assetId: string) => void;
   onOpenInvestor: (investorId: string) => void;
 }) {
-  const eventCopy = item.reason === "THESIS_ACCELERATION" ? formatEnum(item.reason) : {
+  const directionEvidence = item.reason === "CROSS_INVESTOR_DIRECTION_EVIDENCE";
+  const reasonHeading = ["THESIS_ACCELERATION", "CROSS_INVESTOR_DIRECTION_EVIDENCE",
+    "CONSENSUS_STATE_CHANGE", "CROSS_INVESTOR_DISCOVERY"].includes(item.reason);
+  const eventCopy = reasonHeading ? formatEnum(item.reason) : {
     ASSET_ACTIVITY_SPIKE: "多位投资者关注了该标的",
     INVESTOR_VIEW_CHANGE: "投资者观点发生变化",
     CROSS_INVESTOR_DISCOVERY: "发现跨投资者关注动态",
-    CONSENSUS_STATE_CHANGE: "共识状态发生变化"
+    CONSENSUS_STATE_CHANGE: "兼容共识事件记录（未验证变化）"
   }[item.event_type];
   const reasonCopy: string = {
     MULTI_INVESTOR_ATTENTION: "多位受监测投资者贡献了关注动态证据。",
     THESIS_CHANGE_OBSERVED: "观察到投资逻辑变化。",
     THESIS_ACCELERATION: "旧分类：曾按累计数量标记为投资逻辑加速，未验证加速。",
-    CROSS_INVESTOR_DISCOVERY: "观察到跨投资者证据。",
-    CONSENSUS_STATE_CHANGE: "共识证据状态发生变化。"
+    CROSS_INVESTOR_DIRECTION_EVIDENCE: "观察到多人观点方向证据；仅表示当前方向状态，未进行前后状态比较。方向一致不代表投资逻辑一致。",
+    CROSS_INVESTOR_DISCOVERY: "旧分类：跨投资者发现，来源有效性未验证。",
+    CONSENSUS_STATE_CHANGE: "旧分类：共识变化，未验证变化，来源有效性未验证。"
   }[item.reason];
 
   return (
@@ -350,7 +354,7 @@ function RecentIntelligenceCard({
         <span className={"priority-badge " + item.priority_level.toLowerCase()}>
           {formatEnum(item.priority_level)}级复核优先级
         </span>
-        <time dateTime={item.observed_at}>{formatTime(item.observed_at)}</time>
+        <time dateTime={item.observed_at}>{directionEvidence && "来源观察时间 "}{formatTime(item.observed_at)}</time>
       </div>
       <h3>{eventCopy}</h3>
       <a

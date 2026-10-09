@@ -20,7 +20,10 @@ from contracts import (
     IntelligencePriorityReason,
 )
 from contracts.intelligence_feed import feed_display_context
-from intelligence.events.evidence import group_effective_thesis_evidence
+from intelligence.events.evidence import (
+    CrossDirectionEvidenceReader,
+    group_effective_thesis_evidence,
+)
 from intelligence.feed.service import IntelligenceFeedService
 from intelligence.schemas.feed import (
     FeedAssetIdentity,
@@ -65,6 +68,7 @@ class IntelligenceFeedQueryUoW(Protocol):
     intelligence_event_evidence: EvidenceReader
     signals: SignalReader
     effective_thesis_signals: SignalReader
+    effective_cross_signals: CrossDirectionEvidenceReader
     assets: AssetReader
     investors: InvestorReader
 
@@ -149,6 +153,26 @@ class IntelligenceFeedQueryService:
             effective_thesis_by_event = group_effective_thesis_evidence(
                 events.values(), links, effective_thesis_signals.values()
             )
+            cross_types = {
+                IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+                IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+            }
+            cross_event_ids = {
+                priority.event_id
+                for item in feed_items
+                if item.event_type in cross_types
+                and event_type in (None, item.event_type)
+                and (asset_id is None or item.asset_id == asset_id)
+                and (state is None or item.state is state)
+                and (priority := priorities.get(item.priority_id)) is not None
+            }
+            effective_cross_by_event = {}
+            if cross_event_ids:
+                effective_cross_by_event = unit_of_work.effective_cross_signals.group_by_events(
+                    (event for event in events.values() if event.id in cross_event_ids),
+                    links,
+                    signals.values(),
+                )
             projected = []
             for item in feed_items:
                 priority = priorities.get(item.priority_id)
@@ -176,6 +200,13 @@ class IntelligenceFeedQueryService:
                     item.title,
                     item.context,
                 )
+                if reason in {
+                    IntelligencePriorityReason.CROSS_INVESTOR_DISCOVERY,
+                    IntelligencePriorityReason.CONSENSUS_STATE_CHANGE,
+                }:
+                    # Presentation-only legacy warning, not source validation or
+                    # reclassification. Stored reason/title/time remain historical.
+                    title = IntelligenceFeedService._title(reason)
                 if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
                     if item.event_type is not event.event_type or item.asset_id != event.asset_id:
                         continue
@@ -186,15 +217,29 @@ class IntelligenceFeedQueryService:
                     reason = IntelligencePriorityReason.THESIS_CHANGE_OBSERVED
                     title = IntelligenceFeedService._title(reason)
                     context = IntelligenceFeedService._context(source_signals)
-                if since is not None and observed_at < since:
-                    continue
-                if investor_id is not None:
-                    linked_investors = {
+                if event.event_type in cross_types:
+                    if item.event_type is not event.event_type or item.asset_id != event.asset_id:
+                        continue
+                    source_signals, voter_ids = effective_cross_by_event.get(
+                        event.id, ((), frozenset())
+                    )
+                    if not source_signals:
+                        continue
+                    linked_investor_ids = voter_ids
+                    observed_at = max(signal.observed_at for signal in source_signals)
+                    reason = IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE
+                    title = IntelligenceFeedService._title(reason)
+                    context = IntelligenceFeedService._cross_context(source_signals, voter_ids)
+                else:
+                    linked_investor_ids = {
                         signal.investor_id
                         for signal in source_signals
                         if signal.investor_id is not None
                     }
-                    if investor_id not in linked_investors:
+                if since is not None and observed_at < since:
+                    continue
+                if investor_id is not None:
+                    if investor_id not in linked_investor_ids:
                         continue
                 asset = assets.get(item.asset_id)
                 if asset is None:
@@ -205,11 +250,7 @@ class IntelligenceFeedQueryService:
                         name=investors[linked_id].name,
                     )
                     for linked_id in sorted(
-                        {
-                            signal.investor_id
-                            for signal in source_signals
-                            if signal.investor_id in investors
-                        },
+                        {identity for identity in linked_investor_ids if identity in investors},
                         key=lambda value: (investors[value].name, value.int),
                     )
                 )

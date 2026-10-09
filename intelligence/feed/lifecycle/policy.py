@@ -10,6 +10,7 @@ from contracts import (
     FeedItem,
     FeedState,
     IntelligenceEventPriorityView,
+    IntelligenceEventState,
     IntelligenceEventType,
     IntelligenceEventView,
     IntelligencePriorityLevel,
@@ -68,6 +69,18 @@ class FeedLifecyclePolicy:
         """Return all deterministic reasons that activate a NEW FeedItem."""
 
         now = self._normalize_time(now, "now")
+        if event.event_type in {
+            IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+            IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+        }:
+            # Source/projection qualification belongs to the service. These
+            # compatibility types and HIGH do not establish fact freshness.
+            if (
+                event.state is IntelligenceEventState.ACTIVE
+                and now - self.activation_window <= feed_item.observed_at <= now
+            ):
+                return ("WITHIN_ACTIVATION_WINDOW",)
+            return ()
         reasons: list[str] = []
         if priority.priority_level == IntelligencePriorityLevel.HIGH:
             reasons.append("HIGH_PRIORITY")

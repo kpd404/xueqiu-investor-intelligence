@@ -60,6 +60,7 @@ from contracts import (
     CollectionTransport,
     EventAnalysisStatus,
     FeedCollectionRequest,
+    IntelligenceEventState,
     OperationalRefreshRunCreate,
     OperationalRefreshStatus,
     OperationalRefreshTrigger,
@@ -414,7 +415,9 @@ class OperationalRefreshService:
             )
             summary.counts["events"] = events
 
-            event_ids = tuple(UUID(value) for value in events["event_ids"])
+            event_ids = tuple(
+                UUID(value) for value in events.get("projection_event_ids", events["event_ids"])
+            )
             priorities = await self._execute_stage(
                 summary,
                 RefreshStage.PRIORITY,
@@ -422,7 +425,10 @@ class OperationalRefreshService:
             )
             summary.counts["priorities"] = priorities
 
-            priority_ids = tuple(UUID(value) for value in priorities["priority_ids"])
+            priority_ids = tuple(
+                UUID(value)
+                for value in priorities.get("projection_priority_ids", priorities["priority_ids"])
+            )
             feed = await self._execute_stage(
                 summary,
                 RefreshStage.FEED,
@@ -433,7 +439,7 @@ class OperationalRefreshService:
             lifecycle = await self._execute_stage(
                 summary,
                 RefreshStage.FEED_LIFECYCLE,
-                self._apply_feed_lifecycle,
+                lambda: self._apply_feed_lifecycle(event_ids=event_ids),
             )
             summary.counts["feed_lifecycle"] = lifecycle
 
@@ -1346,7 +1352,8 @@ class OperationalRefreshService:
         effective_policy = policy.as_effective_policy()
         opinion_rows = self._active_opinion_rows(event_ids, policy.active_analysis_version)
         opinion_ids = tuple(row[0] for row in opinion_rows)
-        affected_assets = {row[2] for row in opinion_rows}
+        dependency_assets = self._source_dependency_assets(event_ids)
+        affected_assets = {row[2] for row in opinion_rows} | dependency_assets
         affected_investors = {row[1] for row in opinion_rows}
         affected_pairs = {(row[1], row[2]) for row in opinion_rows}
 
@@ -1418,6 +1425,9 @@ class OperationalRefreshService:
             "affected_investors": affected_investors,
             "counts": {
                 "opinions": len(opinion_ids),
+                "source_dependency_asset_ids": [
+                    str(value) for value in sorted(dependency_assets, key=lambda item: item.int)
+                ],
                 "state_updated": state_changed,
                 "state_failed": len(state_failures),
                 "attention_created": attention_created,
@@ -1477,6 +1487,29 @@ class OperationalRefreshService:
                 .order_by(Opinion.id)
             )
             return tuple(session.scalars(statement))
+
+    def _source_dependency_assets(self, event_ids: Sequence[UUID]) -> set[UUID]:
+        """Conservative persisted dependencies, not an effective-source algorithm.
+
+        Retain old-policy/FAILED references so a reduction or loss of effective
+        inputs still reaches its existing projection. Domain outputs add new assets.
+        """
+        if not event_ids:
+            return set()
+        with self._session_factory() as session:
+            statements = (
+                select(Opinion.asset_id).where(Opinion.event_id.in_(event_ids)),
+                select(AttentionOccurrence.asset_id).where(
+                    AttentionOccurrence.event_id.in_(event_ids)
+                ),
+                select(ThesisChange.asset_id).where(
+                    or_(
+                        ThesisChange.current_event_id.in_(event_ids),
+                        ThesisChange.previous_event_id.in_(event_ids),
+                    )
+                ),
+            )
+            return {value for statement in statements for value in session.scalars(statement)}
 
     def _raw_event_time_bounds(self) -> tuple[datetime | None, datetime | None]:
         with self._session_factory() as session:
@@ -1590,6 +1623,26 @@ class OperationalRefreshService:
         result = IntelligenceEventAggregator.from_production(self._session_factory).aggregate(
             asset_ids=asset_ids
         )
+        with self._session_factory() as session:
+            projection_ids = tuple(
+                session.scalars(
+                    select(IntelligenceEvent.id)
+                    .where(
+                        IntelligenceEvent.asset_id.in_(asset_ids),
+                        IntelligenceEvent.state == IntelligenceEventState.ACTIVE.value,
+                    )
+                    .order_by(IntelligenceEvent.id)
+                )
+            )
+            deferred = session.scalar(
+                select(func.count())
+                .select_from(IntelligenceFeedItem)
+                .join(
+                    IntelligenceEventPriority,
+                    IntelligenceFeedItem.priority_id == IntelligenceEventPriority.id,
+                )
+                .where(IntelligenceEventPriority.event_id.not_in(projection_ids))
+            )
         return {
             "candidates": len(result.candidates),
             "created": result.created_event_count,
@@ -1597,17 +1650,28 @@ class OperationalRefreshService:
             "evidence_created": result.created_evidence_count,
             "evidence_reused": result.reused_evidence_count,
             "event_ids": [str(event.id) for event in result.events],
+            "projection_event_ids": [str(value) for value in projection_ids],
+            "deferred_feed_count": deferred,
         }
 
     def _materialize_priorities(self, event_ids: Sequence[UUID]) -> dict[str, object]:
         result = IntelligencePriorityService.from_production(self._session_factory).materialize(
             event_ids=event_ids
         )
+        with self._session_factory() as session:
+            projection_ids = tuple(
+                session.scalars(
+                    select(IntelligenceEventPriority.id)
+                    .where(IntelligenceEventPriority.event_id.in_(event_ids))
+                    .order_by(IntelligenceEventPriority.id)
+                )
+            )
         return {
             "candidates": len(result.candidates),
             "created": result.created_count,
             "reused": result.reused_count,
             "priority_ids": [str(priority.id) for priority in result.priorities],
+            "projection_priority_ids": [str(value) for value in projection_ids],
         }
 
     def _materialize_feed(self, priority_ids: Sequence[UUID]) -> dict[str, int]:
@@ -1620,9 +1684,17 @@ class OperationalRefreshService:
             "reused": result.reused_count,
         }
 
-    def _apply_feed_lifecycle(self) -> dict[str, object]:
-        result = FeedLifecycleService.from_production(self._session_factory).apply()
+    def _apply_feed_lifecycle(
+        self, *, event_ids: Sequence[UUID] | None = None
+    ) -> dict[str, object]:
+        result = FeedLifecycleService.from_production(self._session_factory).apply(
+            event_ids=event_ids
+        )
         return {
+            "scope_event_ids": [str(value) for value in event_ids]
+            if event_ids is not None
+            else None,
+            "evaluated_items": sum(result.plan.current_counts.values()),
             "updated": result.updated_count,
             "reused": result.reused_count,
             "transitions": len(result.plan.transitions),

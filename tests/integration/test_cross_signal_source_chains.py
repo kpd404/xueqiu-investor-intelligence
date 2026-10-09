@@ -50,7 +50,7 @@ START, END = FACT_TIME - timedelta(days=2), FACT_TIME + timedelta(days=1)
 CROSS = (SignalType.CROSS_INVESTOR_ALIGNMENT, SignalType.CONSENSUS_CHANGE)
 
 
-def _chain(factory, policies):
+def _chain(factory, policies, *, directions=None):
     first = _seed_change(factory, policies, ThesisChangeType.THESIS_CHANGED)
     sources = [first] + [
         _shared_asset_change(
@@ -59,8 +59,12 @@ def _chain(factory, policies):
         for _ in range(2)
     ]
     with factory() as session:
-        for source in sources:
+        for index, source in enumerate(sources):
             opinion = session.get(Opinion, source.current_opinion_id)
+            if directions is not None:
+                # Structured fixture before Snapshot calculation, never a live
+                # source rewrite or a mocked effective selector/classifier.
+                opinion.direction = directions[index]
             AttentionOccurrenceRepository(session).replace_for_event(
                 source.current_event_id,
                 "attention-occurrence-v1",
@@ -299,7 +303,7 @@ def test_legacy_signal_must_match_source_identity(
 
 
 @pytest.mark.parametrize("late_time", (END - timedelta(hours=1), END + timedelta(days=1)))
-def test_new_unreferenced_facts_do_not_assert_snapshot_completeness_or_leak_after_window(
+def test_new_window_inputs_invalidate_snapshot_but_after_window_inputs_do_not(
     db_session_factory, production_policies, late_time
 ):
     chain = _chain(db_session_factory, production_policies)
@@ -317,17 +321,18 @@ def test_new_unreferenced_facts_do_not_assert_snapshot_completeness_or_leak_afte
         )
         session.commit()
     before = _snapshot(db_session_factory)
+    expected = 0 if late_time <= END else 2
     assert (
         len(
             SignalGenerator.from_production(db_session_factory)
             .dry_run(signal_types=CROSS)
             .candidates
         )
-        == 2
+        == expected
     )
     assert (
         len(IntelligenceEventAggregator.from_production(db_session_factory).dry_run().candidates)
-        == 2
+        == expected
     )
     assert _snapshot(db_session_factory) == before
 
@@ -404,11 +409,13 @@ def test_reads_group_by_window_scope_not_per_signal(
         version = (chain[0], snapshot, alignment, consensus)
         for kind in CROSS:
             _legacy(db_session_factory, version, kind)
-    # Six window versions share one asset/window_end scope; only repository
-    # identity lookups for additional candidate sources may grow here.
-    assert count() == first_count + 10
-    assert first_count == 11
-    assert count(persisted=True) == first_persisted_count == 10
+    # Each additional complete window scope prepares inputs once (9 SELECTs),
+    # shared by Alignment/Consensus. Equivalent windows now have only two
+    # candidate identity lookups overall, plus one batch of historical Signals.
+    assert count() == first_count + 5 * 9
+    assert first_count == 21
+    assert count(persisted=True) == first_persisted_count + 5 * 9
+    assert first_persisted_count == 19
 
 
 @pytest.mark.parametrize("kind", CROSS)

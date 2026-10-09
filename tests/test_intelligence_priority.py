@@ -65,6 +65,7 @@ def test_priority_contract_has_explicit_levels_and_reasons() -> None:
         IntelligencePriorityReason.MULTI_INVESTOR_ATTENTION,
         IntelligencePriorityReason.THESIS_CHANGE_OBSERVED,
         IntelligencePriorityReason.THESIS_ACCELERATION,
+        IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE,
         IntelligencePriorityReason.CROSS_INVESTOR_DISCOVERY,
         IntelligencePriorityReason.CONSENSUS_STATE_CHANGE,
     }
@@ -101,13 +102,13 @@ def test_priority_rules_are_deterministic_and_do_not_use_inactive_events() -> No
         _event(IntelligenceEventType.CROSS_INVESTOR_DISCOVERY)
     ) == (
         IntelligencePriorityLevel.LOW,
-        IntelligencePriorityReason.CROSS_INVESTOR_DISCOVERY,
+        IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE,
     )
     assert IntelligencePriorityService._classify(
         _event(IntelligenceEventType.CONSENSUS_STATE_CHANGE)
     ) == (
         IntelligencePriorityLevel.HIGH,
-        IntelligencePriorityReason.CONSENSUS_STATE_CHANGE,
+        IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE,
     )
 
 

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OverviewPage } from "./OverviewPage";
-import { formatEnum } from "./presentation";
+import { formatEnum, localizeText } from "./presentation";
 import type { AssetListItem, IntelligenceFeedItem, OperationalStatusResponse } from "./types";
 
 const baseAsset: AssetListItem = {
@@ -151,6 +151,46 @@ const healthyStatus: OperationalStatusResponse = {
 afterEach(cleanup);
 
 describe("已观察情报概览 V0", () => {
+  it.each(["CROSS_INVESTOR_DISCOVERY", "CONSENSUS_STATE_CHANGE"] as const)(
+    "renders current direction evidence for compatibility event %s without temporal claims", (eventType) => {
+      const item = { ...recentItem, event_type: eventType,
+        reason: "CROSS_INVESTOR_DIRECTION_EVIDENCE" as IntelligenceFeedItem["reason"],
+        title: "Cross-investor direction evidence was observed" };
+      render(<OverviewPage assets={assets} loading={false} error={null}
+        onOpenAsset={vi.fn()} onOpenDiscovery={vi.fn()} recentItems={[item]} />);
+      const panel = screen.getByRole("region", { name: "近期投资情报" });
+      expect(panel).toHaveTextContent("观察到多人观点方向证据");
+      expect(panel).toHaveTextContent("来源观察时间");
+      expect(panel).toHaveTextContent("未进行前后状态比较");
+      expect(panel).toHaveTextContent("方向一致不代表投资逻辑一致");
+      expect(panel).not.toHaveTextContent("共识状态发生变化");
+      expect(panel).not.toHaveTextContent("共识刚形成");
+      expect(formatEnum("CROSS_INVESTOR_DIRECTION_EVIDENCE")).toBe("观察到多人观点方向证据");
+    }
+  );
+
+  it.each(["CROSS_INVESTOR_DISCOVERY", "CONSENSUS_STATE_CHANGE"] as const)(
+    "keeps old reason %s visibly historical and unverified", (oldReason) => {
+      const item = { ...recentItem, event_type: oldReason, reason: oldReason,
+        title: "A consensus state change was observed" };
+      render(<OverviewPage assets={assets} loading={false} error={null}
+        onOpenAsset={vi.fn()} onOpenDiscovery={vi.fn()} recentItems={[item]} />);
+      const panel = screen.getByRole("region", { name: "近期投资情报" });
+      expect(panel).toHaveTextContent("旧分类");
+      expect(panel).toHaveTextContent("来源有效性未验证");
+      expect(panel).not.toHaveTextContent("观察到多人观点方向证据");
+      if (oldReason === "CONSENSUS_STATE_CHANGE") expect(panel).toHaveTextContent("未验证变化");
+    }
+  );
+
+  it("does not translate compatibility narratives or current direction labels into temporal changes", () => {
+    expect(formatEnum("CONSENSUS_BULLISH")).toBe("当前方向一致（看好）");
+    expect(formatEnum("DIVERGENT")).toBe("直接方向分歧");
+    expect(localizeText("A CONSENSUS_STATE_CHANGE event is present for 腾讯.")).toContain("未验证前后变化");
+    expect(localizeText("A CONSENSUS_STATE_CHANGE event is present for 腾讯 (compatibility type; temporal change and source validity unverified)."))
+      .toBe("腾讯 有兼容共识事件记录；未验证前后变化或来源有效性。");
+  });
+
   it.each([1, 2])("renders %i thesis changes with a neutral observed reason", (count) => {
     const item = {
       ...recentItem,

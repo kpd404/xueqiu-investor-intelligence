@@ -109,6 +109,46 @@ class IntelligenceEventPriorityRepository:
             self._session.flush()
         return self._to_view(entity), False
 
+    def add_or_refresh_cross_direction(
+        self,
+        command: IntelligenceEventPriorityCreate,
+    ) -> tuple[IntelligenceEventPriorityView, bool]:
+        """Replace only approved cross-derived fields; preserve identity/created_at."""
+        event = self._session.get(IntelligenceEvent, command.event_id)
+        levels = {
+            IntelligenceEventType.CROSS_INVESTOR_DISCOVERY.value: IntelligencePriorityLevel.LOW,
+            IntelligenceEventType.CONSENSUS_STATE_CHANGE.value: IntelligencePriorityLevel.HIGH,
+        }
+        if (
+            event is None
+            or event.event_type not in levels
+            or event.state != IntelligenceEventState.ACTIVE.value
+        ):
+            raise ValueError("Cross direction refresh requires an ACTIVE cross-investor Event")
+        if (
+            command.reason is not IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE
+            or command.priority_level is not levels[event.event_type]
+        ):
+            raise ValueError(
+                "Cross direction refresh requires the existing level and observed reason"
+            )
+        priority, created = self.add_if_absent(command)
+        if created:
+            return priority, True
+        entity = self._session.get(IntelligenceEventPriority, priority.id)
+        changed = False
+        for field, value in (
+            ("reason", command.reason.value),
+            ("priority_level", command.priority_level.value),
+            ("evidence_count", command.evidence_count),
+        ):
+            if getattr(entity, field) != value:
+                setattr(entity, field, value)
+                changed = True
+        if changed:
+            self._session.flush()
+        return self._to_view(entity), False
+
     def list(self) -> tuple[IntelligenceEventPriorityView, ...]:
         statement = select(IntelligenceEventPriority).order_by(
             IntelligenceEventPriority.priority_level,

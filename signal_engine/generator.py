@@ -23,8 +23,12 @@ from contracts import (
 )
 from database.models.attention_occurrence import AttentionOccurrence
 from database.models.event_analysis import EventAnalysis
+from database.models.signal import Signal
 from database.repositories.thesis_changes import ThesisChangeRepository
-from signal_engine.cross_investor_sources import CrossInvestorReferencedEvidenceReader
+from signal_engine.cross_investor_sources import (
+    CrossInvestorReferencedEvidenceReader,
+    select_effective_cross_signals,
+)
 
 
 class SignalSourceReader(Protocol):
@@ -52,14 +56,14 @@ class SqlAlchemySignalSourceReader:
     ) -> tuple[SignalCreate, ...]:
         selected = signal_types if signal_types is not None else frozenset(SignalType)
         candidates: list[SignalCreate] = []
-        cross_sources = ((), (), {})
+        cross_sources = ((), (), {}, {})
         if event_ids is None and selected & {
             SignalType.CROSS_INVESTOR_ALIGNMENT,
             SignalType.CONSENSUS_CHANGE,
         }:
             cross_sources = CrossInvestorReferencedEvidenceReader(
                 self._session
-            ).list_with_fact_times(asset_ids=asset_ids)
+            ).list_with_equivalence(asset_ids=asset_ids)
         if SignalType.NEW_ATTENTION in selected:
             candidates.extend(self._new_attention(asset_ids=asset_ids, event_ids=event_ids))
         if SignalType.THESIS_CHANGE in selected:
@@ -77,6 +81,9 @@ class SqlAlchemySignalSourceReader:
                 )
             )
 
+        if cross_sources[3]:
+            candidates = self._select_cross_candidates(candidates, cross_sources)
+
         candidates.sort(
             key=lambda value: (
                 value.observed_at,
@@ -89,6 +96,47 @@ class SqlAlchemySignalSourceReader:
         if len(identities) != len(set(identities)):
             raise ValueError("Signal candidate source identity is duplicated")
         return tuple(candidates)
+
+    def _select_cross_candidates(self, candidates, source_data):
+        from signal_engine.repository import SignalRepository
+
+        keys = source_data[3]
+        kinds = {kind.value for kind, _source in keys}
+        assets = {
+            candidate.asset_id
+            for candidate in candidates
+            if (candidate.signal_type, candidate.source_id) in keys
+        }
+        # One batch, same transaction as add_if_absent. The database's unchanged
+        # unique key protects one source only, not concurrent equivalent sources.
+        histories = tuple(
+            SignalRepository._to_view(row)
+            for row in self._session.scalars(
+                select(Signal).where(Signal.signal_type.in_(kinds), Signal.asset_id.in_(assets))
+            )
+        )
+        existing = {
+            keys[(signal.signal_type, signal.source_id)]: signal
+            for signal in select_effective_cross_signals(histories, source_data)
+        }
+        occupied = {(signal.signal_type, signal.source_id) for signal in histories}
+        selected = {}
+        other = []
+        for candidate in sorted(candidates, key=lambda value: value.source_id.int):
+            identity = (candidate.signal_type, candidate.source_id)
+            key = keys.get(identity)
+            if key is None:
+                other.append(candidate)
+                continue
+            previous = existing.get(key)
+            if previous is not None:
+                if identity == (previous.signal_type, previous.source_id):
+                    selected[key] = candidate
+            elif identity not in occupied:
+                # Inactive/invalid rows cannot be reactivated by add_if_absent;
+                # leave them historical and choose an unoccupied valid source.
+                selected.setdefault(key, candidate)
+        return [*other, *selected.values()]
 
     def _new_attention(
         self,

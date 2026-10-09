@@ -58,7 +58,7 @@ class NoOpRefresh(OperationalRefreshService):
     def _materialize_feed(self, priority_ids):
         return {"candidates": 0, "created": 0, "reused": 0}
 
-    def _apply_feed_lifecycle(self):
+    def _apply_feed_lifecycle(self, *, event_ids=None):
         return {"updated": 0, "reused": 0, "transitions": 0}
 
     def _verify_product(self, asset_ids, investor_ids):

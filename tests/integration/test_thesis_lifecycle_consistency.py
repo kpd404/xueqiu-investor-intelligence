@@ -232,7 +232,14 @@ def test_other_event_types_keep_original_lifecycle_behavior(
     result = FeedLifecycleService.from_production(db_session_factory).apply(
         now=old.observed_at + timedelta(hours=1)
     )
-    assert result.updated_count == 1
+    if kind in {
+        IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+        IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+    }:
+        assert result.updated_count == 0
+        assert result.plan.skipped[0].reason == "NO_EFFECTIVE_CROSS_DIRECTION_EVIDENCE"
+    else:
+        assert result.updated_count == 1
 
 
 def test_lifecycle_and_http_source_reads_are_batched_and_dry_run_is_read_only(

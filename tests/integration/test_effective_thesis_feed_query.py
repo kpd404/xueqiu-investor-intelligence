@@ -321,6 +321,16 @@ def test_other_event_types_keep_stored_response_behavior(
     source = _seed_change(db_session_factory, production_policies, ThesisChangeType.NEW_THESIS)
     signal = _persist_signal(db_session_factory, source, state=SignalState.RESOLVED)
     stored = _legacy_feed(db_session_factory, source.asset_id, (signal,), event_type=event_type)
+    if event_type in {
+        IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+        IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+    }:
+        # Cross Feed now requires linked current direction evidence. A resolved
+        # non-material Thesis Signal cannot support these compatibility types.
+        before = _snapshot(db_session_factory)
+        assert _get(feed_api)["total"] == 0
+        assert _snapshot(db_session_factory) == before
+        return
     item = _get(feed_api)["items"][0]
     assert item["reason"] == stored.reason.value
     assert item["title"] == stored.title

@@ -20,7 +20,10 @@ from contracts import (
     IntelligencePriorityReason,
     SignalView,
 )
-from intelligence.events.evidence import group_effective_thesis_evidence
+from intelligence.events.evidence import (
+    CrossDirectionEvidenceReader,
+    group_effective_thesis_evidence,
+)
 from intelligence.policies.activity import has_multi_investor_activity
 
 
@@ -45,6 +48,11 @@ class IntelligencePriorityReaderWriter(Protocol):
         command: IntelligenceEventPriorityCreate,
     ) -> tuple[IntelligenceEventPriorityView, bool]: ...
 
+    def add_or_refresh_cross_direction(
+        self,
+        command: IntelligenceEventPriorityCreate,
+    ) -> tuple[IntelligenceEventPriorityView, bool]: ...
+
 
 class EffectiveThesisSignalReader(Protocol):
     def list(self) -> tuple[SignalView, ...]: ...
@@ -55,6 +63,8 @@ class IntelligencePriorityUoW(Protocol):
     intelligence_event_evidence: IntelligenceEventEvidenceReader
     intelligence_event_priorities: IntelligencePriorityReaderWriter
     effective_thesis_signals: EffectiveThesisSignalReader
+    signals: EffectiveThesisSignalReader
+    effective_cross_signals: CrossDirectionEvidenceReader
 
     def __enter__(self) -> Self: ...
 
@@ -132,6 +142,10 @@ class IntelligencePriorityService:
                 writer = unit_of_work.intelligence_event_priorities
                 if candidate.reason is IntelligencePriorityReason.THESIS_CHANGE_OBSERVED:
                     priority, created = writer.add_or_refresh_thesis_change(candidate)
+                elif (
+                    candidate.reason is IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE
+                ):
+                    priority, created = writer.add_or_refresh_cross_direction(candidate)
                 else:
                     priority, created = writer.add_if_absent(candidate)
                 priorities.append(priority)
@@ -178,6 +192,24 @@ class IntelligencePriorityService:
                 events, evidence, unit_of_work.effective_thesis_signals.list()
             )
         evidence_counts: dict[UUID, int] = {}
+        cross_types = {
+            IntelligenceEventType.CROSS_INVESTOR_DISCOVERY,
+            IntelligenceEventType.CONSENSUS_STATE_CHANGE,
+        }
+        cross_events = [
+            event
+            for event in events
+            if event.event_type in cross_types
+            and event.state is IntelligenceEventState.ACTIVE
+            and (allowed_events is None or event.id in allowed_events)
+        ]
+        effective_cross = {}
+        if cross_events:
+            effective_cross = unit_of_work.effective_cross_signals.group_by_events(
+                cross_events,
+                evidence,
+                unit_of_work.signals.list(),
+            )
         for link in evidence:
             evidence_counts[link.event_id] = evidence_counts.get(link.event_id, 0) + 1
 
@@ -196,6 +228,8 @@ class IntelligencePriorityService:
             evidence_count = evidence_counts.get(event.id, 0)
             if event.event_type is IntelligenceEventType.INVESTOR_VIEW_CHANGE:
                 evidence_count = len(effective_thesis.get(event.id, ()))
+            elif event.event_type in cross_types:
+                evidence_count = len(effective_cross.get(event.id, ((), frozenset()))[0])
             if evidence_count < 1:
                 continue
             candidates.append(
@@ -237,12 +271,12 @@ class IntelligencePriorityService:
         if event.event_type is IntelligenceEventType.CROSS_INVESTOR_DISCOVERY:
             return (
                 IntelligencePriorityLevel.LOW,
-                IntelligencePriorityReason.CROSS_INVESTOR_DISCOVERY,
+                IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE,
             )
         if event.event_type is IntelligenceEventType.CONSENSUS_STATE_CHANGE:
             return (
                 IntelligencePriorityLevel.HIGH,
-                IntelligencePriorityReason.CONSENSUS_STATE_CHANGE,
+                IntelligencePriorityReason.CROSS_INVESTOR_DIRECTION_EVIDENCE,
             )
         return None
 
