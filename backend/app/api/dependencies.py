@@ -87,7 +87,7 @@ def get_intelligence_discovery_service() -> IntelligenceDiscoveryService:
     def unit_of_work_factory() -> SqlAlchemyIntelligenceFeedUnitOfWork:
         return SqlAlchemyIntelligenceFeedUnitOfWork(_read_only_session)
 
-    return IntelligenceDiscoveryService(unit_of_work_factory)
+    return IntelligenceDiscoveryService(unit_of_work_factory, effective_evidence=True)
 
 
 def get_intelligence_narrative_service() -> IntelligenceNarrativeService:

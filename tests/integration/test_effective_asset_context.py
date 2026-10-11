@@ -268,6 +268,13 @@ def test_attention_only_is_not_context_voter_and_new_invalid_time_is_ignored(
     assert old_window.activity_context.current_signal_count == 0
     assert old_window.activity_context.previous_signal_count == 1
     assert old_window.investor_context.previous_investor_count == 3
+    from intelligence.discovery.service import IntelligenceDiscoveryService
+
+    candidate = IntelligenceDiscoveryService.from_production(
+        db_session_factory
+    ).get_candidate_by_asset(chain[1].asset_id)
+    assert candidate.activity_summary.investor_count == 3
+    assert candidate.timeline.latest_observed_at == FACT_TIME
     assert _snapshot(db_session_factory) == before
 
 
@@ -331,8 +338,8 @@ def test_shared_product_read_only_source_queries_are_once_per_scope(
 
     before = _snapshot(db_session_factory)
     first = read(True)
-    assert first == 30
-    assert read(False) == first
+    assert first == 25  # two batched provenance reads, independent of Signal count
+    assert read(False) == 23
     assert _snapshot(db_session_factory) == before
     for offset in range(1, 6):
         version = _refresh(db_session_factory, chain, start=START - timedelta(hours=offset))
@@ -341,7 +348,8 @@ def test_shared_product_read_only_source_queries_are_once_per_scope(
             _historical_feed(db_session_factory, chain[1].asset_id, [signal], kind)
     _ready(db_session_factory)
     before = _snapshot(db_session_factory)
-    assert read(True) == read(False) == first + 5 * 9
+    assert read(True) == first
+    assert read(False) == 23
     assert _snapshot(db_session_factory) == before
 
 

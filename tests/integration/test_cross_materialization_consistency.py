@@ -422,7 +422,7 @@ def test_materialization_dry_runs_share_scope_reads_not_per_signal_or_event(
         return result
 
     before = _snapshot(db_session_factory)
-    assert counts() == [22, 23]
+    assert counts() == [15, 16]
     assert _snapshot(db_session_factory) == before
     for offset in range(1, 6):
         version = _refresh(db_session_factory, chain, start=START - timedelta(hours=offset))
@@ -433,7 +433,7 @@ def test_materialization_dry_runs_share_scope_reads_not_per_signal_or_event(
     # required sequence before measuring Feed planning over the updated scope.
     IntelligencePriorityService.from_production(db_session_factory).materialize()
     before = _snapshot(db_session_factory)
-    assert counts() == [67, 68]
+    assert counts() == [15, 16]
     assert _snapshot(db_session_factory) == before
 
 

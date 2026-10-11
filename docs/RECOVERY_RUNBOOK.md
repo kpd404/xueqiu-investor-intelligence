@@ -32,6 +32,26 @@ intelligence remains readable while the source is unavailable.
 
 ## Create a backup
 
+### Scheduler restart and PostgreSQL refresh lock
+
+The canonical refresh uses session advisory lock `4831927501`. The lock now
+leases one dedicated PostgreSQL connection for the entire operation, independent
+of business Session commits/rollbacks. Release is checked on that same connection;
+failure invalidates it and is surfaced as `LOCK_RELEASE`, rather than returning
+a contaminated connection to the pool. It needs one additional pool slot per
+active refresh. An unexpected server/network disconnect removes a PostgreSQL
+session lock; this is detected on cleanup, but this local lock is not a distributed
+fencing protocol and cannot guarantee exclusion during an undetected disconnect.
+
+Before restarting a scheduler, confirm the executing task has finished using
+run records, logs and connection ownership. Never infer this from `idle` alone,
+terminate a database backend or release another session's lock. Normally stop
+the verified scheduler, confirm its connections/lock disappear, then restart
+the fixed code. To avoid an immediate extra tick, preserve the original next
+tick with `--not-before <timezone-qualified ISO timestamp>`. This argument only
+delays startup; the existing interval, budgets and ordinary loop stay unchanged.
+Do not use it to claim a scheduled refresh has passed before it actually runs.
+
 Ensure the database is reachable. For a consistent operator snapshot, stop
 the local backend/scheduler first when a refresh is in progress, then run:
 

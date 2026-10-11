@@ -21,7 +21,11 @@ class NoOpRefresh(OperationalRefreshService):
         return {}
 
     def _begin_execution(self, trigger):
-        return SimpleNamespace(session=None, lock=None, run_id=uuid4())
+        return SimpleNamespace(
+            session=SimpleNamespace(close=lambda: None),
+            lock=SimpleNamespace(release=lambda: None),
+            run_id=uuid4(),
+        )
 
     def _finish_execution(self, execution, summary):
         return None

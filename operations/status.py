@@ -90,6 +90,11 @@ class OperationalStatusService:
     ) -> OperationalStatusLevel:
         if latest is None:
             return OperationalStatusLevel.UNKNOWN
+        if latest.status is OperationalRefreshStatus.RUNNING:
+            # A persisted unfinished row is not proof of a live worker or a
+            # failed operation. Keep its identity/timestamps without inventing
+            # a terminal outcome; activity requires separate runtime evidence.
+            return OperationalStatusLevel.UNKNOWN
         if latest.status in {
             OperationalRefreshStatus.SUCCESS,
             OperationalRefreshStatus.SKIPPED_ALREADY_RUNNING,

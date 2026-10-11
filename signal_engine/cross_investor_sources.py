@@ -95,7 +95,7 @@ class CrossInvestorReferencedEvidenceReader:
         alignments, consensus, times, keys, _votes = self.list_with_votes(asset_ids=asset_ids)
         return alignments, consensus, times, keys
 
-    def list_with_votes(self, *, asset_ids=None):
+    def list_with_votes(self, *, asset_ids=None, source_keys=None):
         """Qualified sources, fact times, equivalence keys and actual Opinion voters.
 
         Keys are ephemeral, derived from the shared preparation and actual source
@@ -123,14 +123,36 @@ class CrossInvestorReferencedEvidenceReader:
                     strict=True,
                 )
             ]
-        snapshots = self._views(
-            self._session.scalars(statements[0]), CrossInvestorAssetSnapshotRepository
+        # Feed consumers need only their actual linked sources. Load the complete
+        # dependency chain for those sources; window inputs are still reconstructed
+        # independently by the existing effective selectors below.
+        if source_keys is not None:
+            consensus_ids = {
+                identity for kind, identity in source_keys if kind is SignalType.CONSENSUS_CHANGE
+            }
+            statements[2] = statements[2].where(
+                CrossInvestorConsensusEvidence.id.in_(consensus_ids)
+            )
+        consensus = self._views(
+            self._session.scalars(statements[2]), CrossInvestorConsensusEvidenceRepository
         )
+        if source_keys is not None:
+            alignment_ids = {
+                identity
+                for kind, identity in source_keys
+                if kind is SignalType.CROSS_INVESTOR_ALIGNMENT
+            }
+            alignment_ids.update(value.source_alignment_id for value in consensus.values())
+            statements[1] = statements[1].where(CrossInvestorAssetAlignment.id.in_(alignment_ids))
         alignments = self._views(
             self._session.scalars(statements[1]), CrossInvestorAssetAlignmentRepository
         )
-        consensus = self._views(
-            self._session.scalars(statements[2]), CrossInvestorConsensusEvidenceRepository
+        if source_keys is not None:
+            snapshot_ids = {value.source_snapshot_id for value in alignments.values()}
+            snapshot_ids.update(value.source_snapshot_id for value in consensus.values())
+            statements[0] = statements[0].where(CrossInvestorAssetSnapshot.id.in_(snapshot_ids))
+        snapshots = self._views(
+            self._session.scalars(statements[0]), CrossInvestorAssetSnapshotRepository
         )
         scopes = {}
         prepared_scopes = {}
@@ -140,13 +162,26 @@ class CrossInvestorReferencedEvidenceReader:
             attention_policy_version=attention_version,
             thesis_comparison_version=thesis_version,
         )
+        portfolio_reader = PortfolioActionRepository(self._session)
+        if source_keys is not None:
+            # Only Feed-associated source chains use this bounded preparation.
+            # Default generation/history validation retains its ordinary readers.
+            cutoff_scopes = {}
+            for snapshot in snapshots.values():
+                cutoff_scopes.setdefault(snapshot.asset_id, set()).add(snapshot.window_end)
+            portfolio_reader = portfolio_reader.prepare_cutoffs(cutoff_scopes)
         input_readers = SimpleNamespace(
             attention_occurrences=AttentionOccurrenceRepository(self._session),
             opinions=OpinionRepository(self._session),
             thesis_changes=ThesisChangeRepository(self._session),
-            portfolio_actions=PortfolioActionRepository(self._session),
+            portfolio_actions=portfolio_reader,
             portfolios=PortfolioRepository(self._session),
-            consistencies=InvestorActionConsistencyRepository(self._session),
+            consistencies=InvestorActionConsistencyRepository(
+                self._session, portfolio_action_reader=portfolio_reader
+            ),
+        )
+        input_readers = SimpleNamespace(
+            **{name: _RequestMemoReader(reader) for name, reader in vars(input_readers).items()}
         )
         valid_snapshots = {}
         snapshot_input_keys = {}
@@ -200,6 +235,7 @@ class CrossInvestorReferencedEvidenceReader:
                         )
                         for value in snapshots.values()
                     ),
+                    input_readers,
                 )
             try:
                 if self._snapshot_references_match(snapshot, scopes[scope]):
@@ -338,16 +374,14 @@ class CrossInvestorReferencedEvidenceReader:
         return qualified_alignments, qualified_consensus, fact_times, equivalence, voters
 
     def _load_scope(
-        self, snapshot, policy, attention_version, thesis_version, portfolio_references
+        self, snapshot, policy, attention_version, thesis_version, portfolio_references, readers
     ):
         asset_id, end = snapshot.asset_id, snapshot.window_end
-        opinions = OpinionRepository(self._session).list_effective_timeline_by_asset(
-            asset_id, policy, as_of=end
-        )
-        attention = AttentionOccurrenceRepository(self._session).list_effective_by_asset(
+        opinions = readers.opinions.list_effective_timeline_by_asset(asset_id, policy, as_of=end)
+        attention = readers.attention_occurrences.list_effective_by_asset(
             asset_id, policy, attention_version, as_of=end
         )
-        thesis = ThesisChangeRepository(self._session).list_effective_by_asset(
+        thesis = readers.thesis_changes.list_effective_by_asset(
             asset_id, policy, thesis_version, as_of=end
         )
         rows = self._session.execute(
@@ -361,17 +395,23 @@ class CrossInvestorReferencedEvidenceReader:
             for opinion, analysis, raw in rows
             if analysis.event_id == raw.id and opinion.investor_id == raw.investor_id
         }
+        # Only Attention identity checks consume this map. Keep all effective
+        # attention history (including first-history dependencies), but never
+        # decode unrelated RawEvent payloads for every historical window.
+        attention_event_ids = {item.event_id for item in attention}
         raw = {
             row.id: row
-            for row in self._session.scalars(select(RawEvent).where(RawEvent.published_time <= end))
+            for row in self._session.scalars(
+                select(RawEvent).where(
+                    RawEvent.id.in_(attention_event_ids), RawEvent.published_time <= end
+                )
+            )
         }
         actions, consistency, owners = {}, {}, {}
         if portfolio_references:
             actions = {
                 item.id: item
-                for item in PortfolioActionRepository(self._session).list_effective_by_asset(
-                    asset_id, as_of=end
-                )
+                for item in readers.portfolio_actions.list_effective_by_asset(asset_id, as_of=end)
             }
             consistency = {
                 item.id: item
@@ -686,3 +726,26 @@ def select_cross_signal_representatives(signals, keys):
             ),
         )
     )
+
+
+class _RequestMemoReader:
+    """Exact selector calls shared only during one validation invocation.
+
+    Cutoff, asset and approved policy are part of the key. No results survive
+    another request, and no later-cutoff timeline substitutes for an older one.
+    """
+
+    def __init__(self, reader):
+        self._reader = reader
+        self._results = {}
+
+    def __getattr__(self, name):
+        method = getattr(self._reader, name)
+
+        def read(*args, **kwargs):
+            key = (name, repr(args), repr(sorted(kwargs.items())))
+            if key not in self._results:
+                self._results[key] = method(*args, **kwargs)
+            return self._results[key]
+
+        return read

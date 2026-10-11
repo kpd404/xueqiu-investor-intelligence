@@ -101,7 +101,71 @@ class ProductDataQualityView(BaseModel):
     limitations: tuple[str, ...] = ()
 
 
+class ProductOpinionFact(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    opinion_id: UUID
+    raw_event_id: UUID
+    investor_id: UUID
+    published_time: AwareDatetime
+    role: Literal["THESIS_CURRENT", "THESIS_PREVIOUS", "DIRECTION_VOTE"]
+
+
+class ProductAttentionFact(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    attention_occurrence_id: UUID
+    raw_event_id: UUID
+    investor_id: UUID
+    published_time: AwareDatetime
+
+
+class ProductValidatedChain(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    event_id: UUID
+    signal_id: UUID
+    source_type: str
+    source_id: UUID
+    observed_at: AwareDatetime
+    source_window_start: AwareDatetime | None = None
+    source_window_end: AwareDatetime | None = None
+    source_as_of: AwareDatetime | None = None
+    investor_ids: tuple[UUID, ...]
+    direction_voter_ids: tuple[UUID, ...] = ()
+    attention_only_investor_ids: tuple[UUID, ...] = ()
+    opinion_facts: tuple[ProductOpinionFact, ...]
+    attention_facts: tuple[ProductAttentionFact, ...] = ()
+    evidence_refs: tuple[IntelligenceAttentionEvidenceRef, ...]
+
+
+class ProductHistoricalAssociation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    evidence_id: UUID
+    event_id: UUID
+    signal_id: UUID
+
+
+class ProductValidatedConsumption(BaseModel):
+    """Only accepted ACTIVE Feed Thesis/direction associations; no recency window.
+
+    Other Event types retain their existing consumption rules and are not certified
+    by this field. Chains preserve each source window; no combined consensus.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    selection_scope: Literal["ACTIVE_FEED_THESIS_AND_DIRECTION_ASSOCIATIONS"] = (
+        "ACTIVE_FEED_THESIS_AND_DIRECTION_ASSOCIATIONS"
+    )
+    signal_count: int = Field(ge=0)
+    chains: tuple[ProductValidatedChain, ...]
+
+
 class ProductTraceabilitySummary(BaseModel):
+    """Legacy counts/refs retain their audit meanings, never effective-change counts.
+
+    signal_count counts all persisted Asset Signals (including unlinked/history).
+    evidence_refs is the composed Review/Evolution audit reference set, not the
+    complete history or current effective set; canonical excludes intermediates.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     source_ref_count: int = Field(ge=0)
@@ -109,6 +173,9 @@ class ProductTraceabilitySummary(BaseModel):
     source_types: tuple[str, ...] = ()
     signal_count: int = Field(ge=0)
     evidence_refs: tuple[IntelligenceAttentionEvidenceRef, ...] = ()
+    historical_signal_ids: tuple[UUID, ...] = ()
+    historical_associations: tuple[ProductHistoricalAssociation, ...] = ()
+    validated_consumption: ProductValidatedConsumption | None = None
 
 
 class AssetIntelligenceView(BaseModel):

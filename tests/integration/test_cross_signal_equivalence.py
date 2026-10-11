@@ -347,8 +347,9 @@ def test_batch_queries_do_not_grow_per_legacy_signal(
         assert all(s.lstrip().upper().startswith("SELECT") for s in statements)
         return len(statements)
 
-    assert count() == 19
-    assert count(generation=True) == 21
+    # Current shared-source preparation already removes four redundant queries.
+    assert count() == 15
+    assert count(generation=True) == 17
     for _ in range(20):
         _legacy(
             db_session_factory,
@@ -358,8 +359,8 @@ def test_batch_queries_do_not_grow_per_legacy_signal(
             metadata={"equivalence": "forged-signature"},
         )
     before = _snapshot(db_session_factory)
-    assert count() == 19
-    assert count(generation=True) == 21
+    assert count() == 15
+    assert count(generation=True) == 17
     assert _snapshot(db_session_factory) == before
 
 

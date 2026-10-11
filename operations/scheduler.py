@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import logging
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from config import get_settings
 from contracts import OperationalRefreshStatus, OperationalRefreshTrigger
@@ -22,6 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--interval-minutes", type=int)
     parser.add_argument("--max-batches", type=int, default=1)
     parser.add_argument("--once", action="store_true", help="execute one scheduled tick and exit")
+    parser.add_argument(
+        "--not-before",
+        type=datetime.fromisoformat,
+        help="Preserve the next scheduled tick when restarting; timezone required",
+    )
     return parser
 
 
@@ -31,11 +37,18 @@ async def run_scheduler(
     interval_minutes: int,
     max_batches: int = 1,
     once: bool = False,
+    not_before: datetime | None = None,
 ) -> int:
     if interval_minutes < 1:
         raise ValueError("interval_minutes must be at least 1")
     if max_batches < 1:
         raise ValueError("max_batches must be at least 1")
+    if not_before is not None:
+        if not_before.tzinfo is None:
+            raise ValueError("not_before requires a timezone")
+        delay = max(0, (not_before - datetime.now(UTC)).total_seconds())
+        logger.info("scheduler startup waiting until %s", not_before.isoformat())
+        await asyncio.sleep(delay)
     service = OperationalRefreshService()
     while True:
         summary = await service.run(
@@ -75,6 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 interval_minutes=interval,
                 max_batches=args.max_batches,
                 once=args.once,
+                not_before=args.not_before,
             )
         )
     except KeyboardInterrupt:

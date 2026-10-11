@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { AssetProductViewPage } from "./AssetProductViewPage";
 import type {
   AssetIntelligenceView,
   AssetListResponse,
@@ -475,6 +476,9 @@ function mockApi(product: AssetIntelligenceView = productPayload) {
         : investorProductPayload;
       return Promise.resolve({ ok: true, status: 200, json: async () => payload });
     }
+    if (url.includes("/api/intelligence/assets/") && url.includes("/evidence")) {
+      return Promise.resolve({ok:true,status:200,json:async()=>({asset:product.asset, groups:[], available_history:[], historical_completeness:"UNKNOWN"})});
+    }
     if (url.includes("/api/intelligence/assets/") && url.endsWith("/view")) {
       const payload = url.includes("asset-hk-00883")
         ? cnoocProduct
@@ -755,4 +759,37 @@ describe("Asset Intelligence Product View V0", () => {
     const fallbackLinks = await screen.findAllByRole("link", { name: /打开投资者 投资者编号 investor/ });
     expect(fallbackLinks.some((link) => link.getAttribute("href") === "/investors/investor-1")).toBe(true);
   });
+});
+
+
+describe("Product traceability boundaries", () => {
+  it("labels legacy counts as audit history and never infers effective counts", () => {
+    render(<AssetProductViewPage view={productPayload} onOpenInvestor={() => {}} />);
+    expect(screen.getByText("标的全部已存 Signal")).toBeInTheDocument();
+    expect(screen.getByText("产品审计引用（含历史）")).toBeInTheDocument();
+    expect(screen.getByText("当前响应未提供已校验来源链；不能从历史数量推算。")).toBeInTheDocument();
+    expect(screen.queryByText("变化信号")).not.toBeInTheDocument();
+  });
+  it("shows a separate prepared effective count including empty results", () => {
+    const view = structuredClone(productPayload);
+    view.traceability_summary.validated_consumption = {selection_scope: "ACTIVE_FEED_THESIS_AND_DIRECTION_ASSOCIATIONS", signal_count: 0, chains: []};
+    view.traceability_summary.historical_associations = [];
+    render(<AssetProductViewPage view={view} onOpenInvestor={() => {}} />);
+    expect(screen.getByText("已校验关联 Signal")).toBeInTheDocument();
+    expect(screen.getByText("查看历史 Event 关联（不代表当前有效）")).toBeInTheDocument();
+    expect(screen.getByText("查看已校验来源链")).toBeInTheDocument();
+  });
+});
+
+
+it("current Product route opens evidence and browser back returns to Product", async () => {
+  vi.stubGlobal("fetch", mockApi());
+  render(<App />);
+  const link = await screen.findByRole("link", {name:"查看当前有效情报证据"});
+  expect(link).toHaveAttribute("href", "/assets/" + assetId + "/evidence");
+  act(() => {window.history.pushState({}, "", link.getAttribute("href")!); window.dispatchEvent(new PopStateEvent("popstate"));});
+  await screen.findByText("观点与来源证据");
+  expect(screen.getByText("当前没有可读取的有效情报关联。历史引用不能补足当前证据。")).toBeInTheDocument();
+  act(() => {window.history.replaceState({}, "", "/assets/" + assetId); window.dispatchEvent(new PopStateEvent("popstate"));});
+  await screen.findByRole("link", {name:"查看当前有效情报证据"});
 });

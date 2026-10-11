@@ -247,8 +247,12 @@ class FeedCrossInvestorSignalReader:
         events = {event.id: event for event in events if event.event_type in kinds}
         if not events:
             return {}
+        links = tuple(links)
+        linked_ids = {link.signal_id for link in links if link.event_id in events}
+        signals = tuple(signal for signal in signals if signal.id in linked_ids)
         source_data = CrossInvestorReferencedEvidenceReader(self._session).list_with_votes(
-            asset_ids={event.asset_id for event in events.values()}
+            asset_ids={event.asset_id for event in events.values()},
+            source_keys={(signal.signal_type, signal.source_id) for signal in signals},
         )
         valid = {
             signal.id: signal

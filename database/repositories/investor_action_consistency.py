@@ -21,8 +21,9 @@ from database.repositories.portfolio_actions import PortfolioActionRepository
 class InvestorActionConsistencyRepository:
     """Persistence-only adapter for versioned consistency artifacts."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, portfolio_action_reader=None) -> None:
         self._session = session
+        self._portfolio_action_reader = portfolio_action_reader
 
     def create(
         self,
@@ -176,7 +177,9 @@ class InvestorActionConsistencyRepository:
         consistency_policy_version: str = CONSISTENCY_POLICY_VERSION,
         as_of: datetime | None = None,
     ) -> list[OpinionActionConsistencyView]:
-        actions = PortfolioActionRepository(self._session).list_effective_by_asset(
+        actions = (
+            self._portfolio_action_reader or PortfolioActionRepository(self._session)
+        ).list_effective_by_asset(
             asset_id,
             as_of=as_of,
         )

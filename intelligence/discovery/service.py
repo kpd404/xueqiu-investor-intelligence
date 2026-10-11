@@ -18,7 +18,11 @@ from contracts import (
     IntelligencePriorityReason,
     SignalView,
 )
-from intelligence.read_scope import AssetIntelligenceReadScope
+from intelligence.read_scope import (
+    AssetIntelligenceReadScope,
+    prepare_context_evidence,
+    validate_context_projection,
+)
 from intelligence.schemas.discovery import (
     DiscoveryActivitySummary,
     DiscoveryAssetIdentity,
@@ -117,8 +121,14 @@ class IntelligenceDiscoveryService:
     state set here would change the discovery contract and hide stale data.
     """
 
-    def __init__(self, unit_of_work_factory: IntelligenceDiscoveryQueryUoWFactory) -> None:
+    def __init__(
+        self,
+        unit_of_work_factory: IntelligenceDiscoveryQueryUoWFactory,
+        *,
+        effective_evidence: bool = False,
+    ) -> None:
         self._unit_of_work_factory = unit_of_work_factory
+        self._effective_evidence = effective_evidence
 
     @classmethod
     def from_production(
@@ -127,7 +137,10 @@ class IntelligenceDiscoveryService:
     ) -> IntelligenceDiscoveryService:
         from database.unit_of_work import SqlAlchemyIntelligenceFeedUnitOfWork
 
-        return cls(lambda: SqlAlchemyIntelligenceFeedUnitOfWork(session_factory))
+        return cls(
+            lambda: SqlAlchemyIntelligenceFeedUnitOfWork(session_factory),
+            effective_evidence=True,
+        )
 
     def get_candidates(
         self,
@@ -151,11 +164,34 @@ class IntelligenceDiscoveryService:
             events = {event.id: event for event in unit_of_work.intelligence_events.list()}
             signals = {signal.id: signal for signal in unit_of_work.signals.list()}
             links_by_event: dict[UUID, list[IntelligenceEventEvidenceView]] = defaultdict(list)
-            for link in unit_of_work.intelligence_event_evidence.list():
+            links = unit_of_work.intelligence_event_evidence.list()
+            feeds = unit_of_work.intelligence_feed_items.list()
+            groups = (
+                prepare_context_evidence(
+                    unit_of_work,
+                    tuple(events.values()),
+                    links,
+                    tuple(signals.values()),
+                    feeds,
+                    tuple(priorities.values()),
+                )
+                if self._effective_evidence
+                else {}
+            )
+            accepted_ids = {
+                event_id: {signal.id for signal in values}
+                for event_id, (values, _voters) in groups.items()
+            }
+            signals.update(
+                (signal.id, signal) for values, _voters in groups.values() for signal in values
+            )
+            for link in links:
+                if link.event_id in groups and link.signal_id not in accepted_ids[link.event_id]:
+                    continue
                 links_by_event[link.event_id].append(link)
 
             accumulators: dict[UUID, _AssetAccumulator] = {}
-            for feed_item in unit_of_work.intelligence_feed_items.list():
+            for feed_item in feeds:
                 # V0 is deliberately strict: only the explicit ACTIVE state is
                 # consumable by Discovery. NEW is not an implicit synonym.
                 if feed_item.state != FeedState.ACTIVE:
@@ -176,6 +212,11 @@ class IntelligenceDiscoveryService:
                     continue
                 if feed_item.asset_id not in assets:
                     raise ValueError(f"Asset not found for FeedItem: {feed_item.id}")
+                group = groups.get(event.id)
+                if group is not None:
+                    if not group[0]:
+                        continue
+                    validate_context_projection(feed_item, priority, event, *group)
                 links = links_by_event.get(event.id, [])
                 if len(links) != priority.evidence_count:
                     raise ValueError(
@@ -191,6 +232,8 @@ class IntelligenceDiscoveryService:
                 accumulator.event_types.add(event.event_type)
                 accumulator.priority_reasons.add(priority.reason)
                 accumulator.discovery_reasons.add(_DISCOVERY_REASONS[event.event_type])
+                if group is not None:
+                    accumulator.investor_ids.update(group[1])
                 if (
                     accumulator.first_observed_at is None
                     or feed_item.observed_at < accumulator.first_observed_at
@@ -311,6 +354,8 @@ class IntelligenceDiscoveryService:
             accumulator.event_types.add(event.event_type)
             accumulator.priority_reasons.add(priority.reason)
             accumulator.discovery_reasons.add(_DISCOVERY_REASONS[event.event_type])
+            if scope.context_evidence is not None and event.id in scope.context_evidence:
+                accumulator.investor_ids.update(scope.context_evidence[event.id][1])
             accumulator.first_observed_at = (
                 feed_item.observed_at
                 if accumulator.first_observed_at is None

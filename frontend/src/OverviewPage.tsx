@@ -291,6 +291,7 @@ function RecentIntelligencePanel({
         subtitle="最近 24 小时内呈现的可用投资情报"
       />
       {statusNotice && <div className="recent-intelligence-notice">{statusNotice}</div>}
+      <a className="inbox-user-link" href="/inbox">打开 Inbox 用户处理</a>
       {loading ? (
         <div className="recent-intelligence-loading" aria-label="正在加载近期投资情报">
           正在加载近期投资情报…
@@ -321,7 +322,7 @@ function RecentIntelligencePanel({
   );
 }
 
-function RecentIntelligenceCard({
+export function RecentIntelligenceCard({
   item,
   onOpenAsset,
   onOpenInvestor
@@ -367,6 +368,8 @@ function RecentIntelligenceCard({
         {item.asset.name} · {item.asset.market}:{item.asset.symbol}
       </a>
       <p>{reasonCopy}</p>
+      {<a href={`/assets/${item.asset.asset_id}/evidence?feed_id=${item.id}`}>查看证据</a>}
+      {' '}<a href={`/research-candidates/new?asset_id=${item.asset.asset_id}&feed_id=${item.id}`}>加入研究候选</a>
       <div className="recent-intelligence-card-footer">
         <span>证据数量 {String(item.context.signal_count ?? item.context.source_count ?? 0)}</span>
         {item.investors.length > 0 && (

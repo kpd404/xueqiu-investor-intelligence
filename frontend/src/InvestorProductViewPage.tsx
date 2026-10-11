@@ -78,6 +78,10 @@ export function InvestorProductViewPage({ view, onOpenAsset }: InvestorProductVi
         </section>
       )}
 
+      <section className="investor-section">
+        <h2>阅读标的证据</h2><p>按实际情报关联展示贡献者，不将投资者历史引用当作当前有效证据。</p>
+        {view.asset_views.map(item => <p key={item.asset.asset_id}><a href={`/assets/${item.asset.asset_id}/evidence`}>{item.asset.name} · 查看证据</a></p>)}
+      </section>
       <section className="investor-section investor-product-coverage-section">
         <SectionHeading
           title="按证据类型覆盖"

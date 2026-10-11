@@ -465,14 +465,20 @@ class OperationalRefreshService:
         else:
             summary.result = "PARTIAL_FAILURE" if partial_failure else "SUCCESS"
         finally:
-            summary.finished_at = utc_now()
-            summary.database_after = self._database_counts()
-            summary.counts["affected_assets"] = sorted(str(value) for value in affected_assets)
-            summary.counts["affected_investors"] = sorted(
-                str(value) for value in affected_investors
-            )
-            summary.counts["llm_requests"] = self._llm_request_counts()
-            self._finish_execution(execution, summary)
+            try:
+                summary.finished_at = utc_now()
+                summary.database_after = self._database_counts()
+                summary.counts["affected_assets"] = sorted(str(value) for value in affected_assets)
+                summary.counts["affected_investors"] = sorted(
+                    str(value) for value in affected_investors
+                )
+                summary.counts["llm_requests"] = self._llm_request_counts()
+                self._finish_execution(execution, summary)
+            finally:
+                try:
+                    execution.lock.release()
+                finally:
+                    execution.session.close()
         return summary
 
     def _begin_execution(
@@ -481,17 +487,17 @@ class OperationalRefreshService:
     ) -> _OperationalExecution | None:
         session = self._session_factory()
         lock = OperationalRefreshLock(session)
-        if not lock.try_acquire():
-            session.close()
-            with self._session_factory() as skipped_session:
-                OperationalRefreshRunRepository(skipped_session).create_skipped(
-                    trigger=trigger,
-                    started_at=utc_now(),
-                    summary_json={"reason": "SKIPPED_ALREADY_RUNNING"},
-                )
-                skipped_session.commit()
-            return None
         try:
+            if not lock.try_acquire():
+                session.close()
+                with self._session_factory() as skipped_session:
+                    OperationalRefreshRunRepository(skipped_session).create_skipped(
+                        trigger=trigger,
+                        started_at=utc_now(),
+                        summary_json={"reason": "SKIPPED_ALREADY_RUNNING"},
+                    )
+                    skipped_session.commit()
+                return None
             run = OperationalRefreshRunRepository(session).create_run(
                 OperationalRefreshRunCreate(
                     trigger=trigger,
@@ -500,9 +506,11 @@ class OperationalRefreshService:
             )
             session.commit()
             return _OperationalExecution(session=session, lock=lock, run_id=run.id)
-        except Exception:
-            lock.release()
-            session.close()
+        except BaseException:
+            try:
+                lock.release()
+            finally:
+                session.close()
             raise
 
     def _finish_execution(
@@ -533,8 +541,31 @@ class OperationalRefreshService:
             )
             execution.session.commit()
         finally:
-            execution.lock.release()
-            execution.session.close()
+            try:
+                execution.lock.release()
+            except Exception as exc:
+                # A successful stage result must not hide failed lock cleanup.
+                summary.result = OperationalRefreshStatus.FAILED.value
+                summary.errors.append(
+                    {
+                        "stage": "LOCK_RELEASE",
+                        "code": "LOCK_RELEASE_FAILED",
+                        "message": _safe_message(exc),
+                    }
+                )
+                execution.session.rollback()
+                OperationalRefreshRunRepository(execution.session).finish_run(
+                    execution.run_id,
+                    finished_at=summary.finished_at or utc_now(),
+                    status=OperationalRefreshStatus.FAILED,
+                    failure_stage="LOCK_RELEASE",
+                    failure_code="LOCK_RELEASE_FAILED",
+                    summary_json=summary.as_dict(),
+                )
+                execution.session.commit()
+                raise
+            finally:
+                execution.session.close()
 
     async def _execute_stage(
         self,

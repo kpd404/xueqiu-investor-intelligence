@@ -259,22 +259,90 @@ class PortfolioActionRepository:
             PortfolioSnapshotBatch.external_id,
             PortfolioSnapshotBatch.id,
         )
-        timelines: dict[UUID, list[PortfolioSnapshotBatch]] = {}
-        for batch in self._session.scalars(batches_statement):
-            timelines.setdefault(batch.portfolio_id, []).append(batch)
-        adjacent = {
-            (previous.id, current.id)
-            for timeline in timelines.values()
-            for previous, current in zip(timeline, timeline[1:], strict=False)
-        }
+        batches = list(self._session.scalars(batches_statement))
         statement = select(PortfolioAction).where(PortfolioAction.asset_id == asset_id)
         if normalized_as_of is not None:
             statement = statement.where(PortfolioAction.effective_time <= normalized_as_of)
         statement = statement.order_by(PortfolioAction.effective_time, PortfolioAction.id)
         return [
             self._to_view(entity)
-            for entity in self._session.scalars(statement)
-            if (entity.previous_snapshot_batch_id, entity.current_snapshot_batch_id) in adjacent
+            for entity in self._select_asset_actions(
+                batches, self._session.scalars(statement), normalized_as_of
+            )
+        ]
+
+    def prepare_cutoffs(self, scopes):
+        """Read only requested assets' action dependencies for one invocation.
+
+        Loading up to the maximum cutoff is a base-data bound, not an effective
+        result. Each cutoff independently reconstructs snapshot adjacency using
+        the same pure selector as the ordinary repository path.
+        """
+        scopes = {
+            asset: {self._as_utc(cutoff) for cutoff in cutoffs}
+            for asset, cutoffs in scopes.items()
+            if cutoffs
+        }
+        if not scopes:
+            return PortfolioActionCutoffReader({})
+        maximum = max(cutoff for cutoffs in scopes.values() for cutoff in cutoffs)
+        actions = list(
+            self._session.scalars(
+                select(PortfolioAction)
+                .where(
+                    PortfolioAction.asset_id.in_(scopes), PortfolioAction.effective_time <= maximum
+                )
+                .order_by(PortfolioAction.effective_time, PortfolioAction.id)
+            )
+        )
+        batches = []
+        if actions:
+            batches = list(
+                self._session.scalars(
+                    select(PortfolioSnapshotBatch)
+                    .where(
+                        PortfolioSnapshotBatch.portfolio_id.in_({a.portfolio_id for a in actions}),
+                        PortfolioSnapshotBatch.snapshot_time <= maximum,
+                    )
+                    .order_by(
+                        PortfolioSnapshotBatch.portfolio_id,
+                        PortfolioSnapshotBatch.snapshot_time,
+                        PortfolioSnapshotBatch.source,
+                        PortfolioSnapshotBatch.external_id,
+                        PortfolioSnapshotBatch.id,
+                    )
+                )
+            )
+        by_asset = {asset: [] for asset in scopes}
+        for action in actions:
+            by_asset[action.asset_id].append(action)
+        results = {
+            (asset, cutoff): tuple(
+                self._to_view(action)
+                for action in self._select_asset_actions(batches, by_asset[asset], cutoff)
+            )
+            for asset, cutoffs in scopes.items()
+            for cutoff in cutoffs
+        }
+        return PortfolioActionCutoffReader(results)
+
+    @classmethod
+    def _select_asset_actions(cls, batches, actions, cutoff):
+        """Shared fact-time adjacency rule; inputs preserve repository order."""
+        timelines = {}
+        for batch in batches:
+            if cutoff is None or cls._as_utc(batch.snapshot_time) <= cutoff:
+                timelines.setdefault(batch.portfolio_id, []).append(batch)
+        adjacent = {
+            (previous.id, current.id)
+            for timeline in timelines.values()
+            for previous, current in zip(timeline, timeline[1:], strict=False)
+        }
+        return [
+            action
+            for action in actions
+            if (cutoff is None or cls._as_utc(action.effective_time) <= cutoff)
+            and (action.previous_snapshot_batch_id, action.current_snapshot_batch_id) in adjacent
         ]
 
     def list(
@@ -407,3 +475,16 @@ class PortfolioActionRepository:
         if value.tzinfo is None or value.utcoffset() is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+
+class PortfolioActionCutoffReader:
+    """Ephemeral exact-cutoff results, never shared across requests."""
+
+    def __init__(self, results):
+        self._results = results
+
+    def list_effective_by_asset(self, asset_id, *, as_of):
+        key = (asset_id, PortfolioActionRepository._as_utc(as_of))
+        if key not in self._results:
+            raise ValueError("Portfolio cutoff was not prepared")
+        return list(self._results[key])

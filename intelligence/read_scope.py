@@ -64,6 +64,8 @@ class AssetIntelligenceReadScope:
     consensus_evidences: tuple[CrossInvestorConsensusEvidenceView, ...]
     context_evidence: dict[UUID, tuple[tuple[SignalView, ...], frozenset[UUID]]] | None = None
     context_cross_sources: tuple[tuple, tuple, tuple] | None = None
+    historical_event_evidence: tuple[IntelligenceEventEvidenceView, ...] | None = None
+    validated_source_chains: tuple[dict, ...] | None = None
 
     def __post_init__(self) -> None:
         asset_id = self.asset.asset_id
@@ -190,18 +192,25 @@ class AssetIntelligenceReadScopeLoader:
         unit_of_work_factory: AssetIntelligenceReadUoWFactory,
         *,
         now_factory: Callable[[], datetime] | None = None,
+        include_traceability: bool = False,
     ) -> None:
         self._unit_of_work_factory = unit_of_work_factory
         self._now_factory = now_factory or (lambda: datetime.now(UTC))
+        self._include_traceability = include_traceability
 
     @classmethod
     def from_production(
         cls,
         session_factory: Callable[[], object],
+        *,
+        include_traceability: bool = False,
     ) -> AssetIntelligenceReadScopeLoader:
         from database.unit_of_work import SqlAlchemyAssetIntelligenceReadUnitOfWork
 
-        return cls(lambda: SqlAlchemyAssetIntelligenceReadUnitOfWork(session_factory))
+        return cls(
+            lambda: SqlAlchemyAssetIntelligenceReadUnitOfWork(session_factory),
+            include_traceability=include_traceability,
+        )
 
     def load(
         self,
@@ -299,6 +308,12 @@ class AssetIntelligenceReadScopeLoader:
                 c.source_snapshot_id for c in context_consensus
             }
             context_snapshots = tuple(s for s in snapshots if s.id in snapshot_ids)
+            source_reader = getattr(unit_of_work, "product_evidence", None)
+            validated_source_chains = (
+                source_reader.resolve(asset_id, groups, snapshots, alignments, consensus_evidences)
+                if source_reader is not None and self._include_traceability
+                else None
+            )
 
         return AssetIntelligenceReadScope(
             asset=asset_identity,
@@ -315,6 +330,8 @@ class AssetIntelligenceReadScopeLoader:
             consensus_evidences=consensus_evidences,
             context_evidence=groups,
             context_cross_sources=(context_snapshots, context_alignments, context_consensus),
+            historical_event_evidence=tuple(event_evidence),
+            validated_source_chains=validated_source_chains,
         )
 
     @staticmethod

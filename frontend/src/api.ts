@@ -1,4 +1,5 @@
 import type {
+  EvidenceReading,
   AssetListResponse,
   AssetIntelligenceView,
   CombinedAssetView,
@@ -90,4 +91,9 @@ export function getRecentIntelligence(
       "&state=ACTIVE&since=" +
       encodeURIComponent(since)
   );
+}
+
+
+export function getEvidenceReading(assetId: string, query: string): Promise<EvidenceReading> {
+  return request<EvidenceReading>(PRODUCT_API_BASE + "/assets/" + encodeURIComponent(assetId) + "/evidence" + query);
 }

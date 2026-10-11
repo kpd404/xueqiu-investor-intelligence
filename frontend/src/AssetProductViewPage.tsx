@@ -37,8 +37,8 @@ const reasonLabels: Record<string, string> = {
 const discoveryReasonLabels: Record<string, string> = {
   MULTI_INVESTOR_ACTIVITY: "多投资者活动",
   THESIS_ACTIVITY: "投资逻辑活动",
-  CROSS_INVESTOR_ACTIVITY: "跨投资者活动",
-  CONSENSUS_ACTIVITY: "共识活动"
+  CROSS_INVESTOR_ACTIVITY: "多人观点方向证据",
+  CONSENSUS_ACTIVITY: "多人观点方向证据"
 };
 
 export function AssetProductViewPage({
@@ -223,19 +223,40 @@ export function AssetProductViewPage({
         </ul>
       </section>
 
+      <a href={`/assets/${view.asset.asset_id}/evidence`}>查看当前有效情报证据</a>
+      {' '}<a href={`/research-candidates/new?asset_id=${view.asset.asset_id}`}>加入研究候选（选择有效证据）</a>
       <section className="product-section product-traceability-section">
-        <ProductHeading number="T" title="证据可追溯性" subtitle="已持久化来源产物的引用" />
+        <ProductHeading number="T" title="证据可追溯性" subtitle="区分产品审计引用、历史关联与读取时有效证据" />
         <div className="product-traceability-stats">
-          <ProductStat label="证据引用" value={view.traceability_summary.source_ref_count} />
-          <ProductStat label="规范来源" value={view.traceability_summary.canonical_source_count} />
-          <ProductStat label="变化信号" value={view.traceability_summary.signal_count} />
+          <ProductStat label="产品审计引用（含历史）" value={view.traceability_summary.source_ref_count} />
+          <ProductStat label="非中间产物审计引用" value={view.traceability_summary.canonical_source_count} />
+          <ProductStat label="标的全部已存 Signal" value={view.traceability_summary.signal_count} />
         </div>
+        <p>历史数量和审计引用不代表当前有效证据或变化次数。</p>
+        <p>已校验范围仅为 ACTIVE 条目实际关联的投资逻辑与多人方向证据，不等于近期窗口，也不证明共识发生变化。</p>
+        {view.traceability_summary.validated_consumption ? <>
+          <ProductStat label="已校验关联 Signal" value={view.traceability_summary.validated_consumption.signal_count} />
+          <details className="product-evidence-details">
+            <summary>查看已校验来源链</summary>
+            {view.traceability_summary.validated_consumption.chains.map((chain) => <div key={chain.event_id + ":" + chain.signal_id}>
+              <a href={`/assets/${view.asset.asset_id}/evidence?event_id=${chain.event_id}&signal_id=${chain.signal_id}`}>查看证据</a>
+              <p>Signal <code>{chain.signal_id}</code> · 事实时间 {formatTime(chain.observed_at)}</p>
+              <p>方向投票者 {chain.direction_voter_ids.length} · 仅关注贡献者 {chain.attention_only_investor_ids.length}</p>
+              {chain.evidence_refs.map((ref) => <p key={ref.source_type + ":" + ref.source_id}>{formatEnum(ref.source_type)} <code>{ref.source_id}</code></p>)}
+            </div>)}
+          </details>
+        </> : <p>当前响应未提供已校验来源链；不能从历史数量推算。</p>}
+        {view.traceability_summary.historical_associations && <details className="product-evidence-details">
+          <summary>查看历史 Event 关联（不代表当前有效）</summary>
+          {view.traceability_summary.historical_associations.map((link) => <p key={link.evidence_id}>Event <code>{link.event_id}</code> → Signal <code>{link.signal_id}</code></p>)}
+        </details>}
         <details className="product-evidence-details">
-          <summary>查看证据来源引用</summary>
+          <summary>查看产品审计引用（不代表当前有效）</summary>
           <div className="product-evidence-list">
             {view.traceability_summary.evidence_refs.map((reference) => (
               <div key={reference.source_type + ":" + reference.source_id}>
                 <span>{formatEnum(reference.source_type)}</span>
+                {reference.source_type === "ThesisChange" && <a href={`/assets/${view.asset.asset_id}/evidence?thesis_change_id=${reference.source_id}&history=true`}>阅读历史上下文（不代表当前有效）</a>}
                 <code title={reference.source_id}>{reference.source_id.slice(0, 8)}…</code>
               </div>
             ))}

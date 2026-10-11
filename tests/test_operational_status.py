@@ -210,3 +210,42 @@ def test_scheduler_missing_endpoint_still_uses_canonical_failure(monkeypatch) ->
     assert scheduler.main(["--once"]) == 1
     assert calls[0]["cdp_endpoint"] is None
     assert calls[0]["require_cdp"] is True
+
+
+def test_scheduler_restart_waits_before_first_tick(monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    import pytest
+
+    import operations.scheduler as scheduler
+
+    events = []
+
+    class Service:
+        async def run(self, **kwargs):
+            events.append("tick")
+            return SimpleNamespace(result="SUCCESS", counts={})
+
+    async def sleep(seconds):
+        assert seconds > 50
+        events.append("wait")
+
+    monkeypatch.setattr(scheduler, "OperationalRefreshService", Service)
+    monkeypatch.setattr(scheduler.asyncio, "sleep", sleep)
+    result = asyncio.run(
+        scheduler.run_scheduler(
+            cdp_endpoint=None,
+            interval_minutes=60,
+            once=True,
+            not_before=datetime.now(UTC) + timedelta(seconds=60),
+        )
+    )
+    assert result == 0 and events == ["wait", "tick"]
+    with pytest.raises(ValueError, match="timezone"):
+        asyncio.run(
+            scheduler.run_scheduler(
+                cdp_endpoint=None,
+                interval_minutes=60,
+                not_before=datetime.now(),
+            )
+        )

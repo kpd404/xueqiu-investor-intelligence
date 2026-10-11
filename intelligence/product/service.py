@@ -28,6 +28,7 @@ from intelligence.product.schemas import (
     ProductNarrativeView,
     ProductReviewView,
     ProductTraceabilitySummary,
+    ProductValidatedConsumption,
 )
 from intelligence.read_scope import AssetIntelligenceReadScopeLoader
 
@@ -73,7 +74,9 @@ class AssetIntelligenceProductService:
         evolution = IntelligenceEvolutionService.from_production(session_factory)
         attention = IntelligenceAttentionClassificationService.from_production(session_factory)
         return cls(
-            AssetIntelligenceReadScopeLoader.from_production(session_factory),
+            AssetIntelligenceReadScopeLoader.from_production(
+                session_factory, include_traceability=True
+            ),
             discovery,
             IntelligenceNarrativeService(discovery),
             context,
@@ -179,6 +182,21 @@ class AssetIntelligenceProductService:
                 source_types=source_types,
                 signal_count=len(scope.signals),
                 evidence_refs=attention.evidence_refs,
+                historical_signal_ids=tuple(sorted((s.id for s in scope.signals), key=str)),
+                historical_associations=tuple(
+                    dict(evidence_id=link.id, event_id=link.event_id, signal_id=link.signal_id)
+                    for link in (scope.historical_event_evidence or ())
+                ),
+                validated_consumption=(
+                    ProductValidatedConsumption(
+                        signal_count=len(
+                            {chain["signal_id"] for chain in scope.validated_source_chains}
+                        ),
+                        chains=scope.validated_source_chains,
+                    )
+                    if scope.validated_source_chains is not None
+                    else None
+                ),
             ),
         )
 

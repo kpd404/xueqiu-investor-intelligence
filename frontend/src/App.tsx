@@ -9,6 +9,9 @@ import {
   getRecentIntelligence,
   getOperationalStatus
 } from "./api";
+import { EvidenceReadingPage } from "./EvidenceReadingPage";
+import { ResearchCandidatesPage } from "./ResearchCandidatesPage";
+import { InboxPage } from "./InboxPage";
 import { AssetProductViewPage } from "./AssetProductViewPage";
 import { DiscoveryPage } from "./DiscoveryPage";
 import { InvestorProductViewPage } from "./InvestorProductViewPage";
@@ -43,6 +46,10 @@ import {
 } from "./presentation";
 
 interface RouteState {
+  inbox: boolean;
+  research: boolean;
+  researchId: string | null;
+  evidence: boolean;
   assetId: string | null;
   investorId: string | null;
   overview: boolean;
@@ -53,9 +60,13 @@ interface RouteState {
 
 function readRouteState(): RouteState {
   const path = window.location.pathname;
-  const assetMatch = path.match(/^\/assets\/([^/]+)$/);
+  const assetMatch = path.match(/^\/assets\/([^/]+)(?:\/evidence)?$/);
   const investorMatch = path.match(/^\/investors\/([^/]+)$/);
   return {
+    inbox: path === '/inbox',
+    research: path === '/research-candidates' || path.startsWith('/research-candidates/'),
+    researchId: path.match(/^\/research-candidates\/([^/]+)$/)?.[1] === 'new' ? null : path.match(/^\/research-candidates\/([^/]+)$/)?.[1] ?? null,
+    evidence: path.endsWith("/evidence") && assetMatch !== null,
     assetId: assetMatch?.[1] ?? null,
     investorId: investorMatch?.[1] ?? null,
     overview: path === "/",
@@ -217,7 +228,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!assetId) {
+    if (!assetId || route.evidence) {
       setView(null);
       setViewError(null);
       setViewLoading(false);
@@ -243,7 +254,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [assetId]);
+  }, [assetId, route.evidence]);
 
   useEffect(() => {
     if (!investorId) {
@@ -342,6 +353,8 @@ export default function App() {
         </button>
 
         <div className="asset-selector">
+          <a href="/research-candidates">研究候选</a>
+          <a className="inbox-user-link" href="/inbox">Inbox 用户处理</a>
           <label htmlFor="asset-select">跳转到标的</label>
           <input
             id="asset-search"
@@ -427,7 +440,7 @@ export default function App() {
           </div>
         </div>
 
-        {route.overview ? (
+        {route.inbox ? <InboxPage /> : route.research ? <ResearchCandidatesPage id={route.researchId} query={route.queryString} /> : route.evidence && assetId ? <EvidenceReadingPage assetId={assetId} query={route.queryString} /> : route.overview ? (
           <OverviewPage
             assets={assets}
             loading={catalogLoading}

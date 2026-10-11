@@ -553,6 +553,9 @@ class SqlAlchemyAssetIntelligenceReadUnitOfWork:
         self.cross_investor_consensus_evidences = CrossInvestorConsensusEvidenceRepository(
             self._session
         )
+        from database.repositories.product_evidence import ProductEvidenceSourceReader
+
+        self.product_evidence = ProductEvidenceSourceReader(self._session)
         return self
 
     def __exit__(

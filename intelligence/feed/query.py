@@ -115,6 +115,8 @@ class IntelligenceFeedQueryService:
         event_type: IntelligenceEventType | None = None,
         state: FeedState | None = None,
         since: datetime | None = None,
+        _transform: Callable | None = None,
+        _offset: int = 0,
     ) -> IntelligenceFeedListResponse:
         if limit < 1 or limit > 100:
             raise ValueError("limit must be between 1 and 100")
@@ -286,12 +288,15 @@ class IntelligenceFeedQueryService:
             )
         )
         total = len(projected)
-        items = tuple(projected[:limit])
+        if _transform is not None:
+            projected = _transform(projected)
+            total = len(projected)
+        items = tuple(projected[_offset:_offset + limit])
         return IntelligenceFeedListResponse(
             items=items,
             total=total,
             limit=limit,
-            has_more=total > len(items),
+            has_more=total > _offset + len(items),
         )
 
     def get_asset_feed(

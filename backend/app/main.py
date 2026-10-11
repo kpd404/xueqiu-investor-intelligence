@@ -10,7 +10,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=(
-            "Thin read-only Intelligence API over observed effective evidence. "
+            "Read-only Intelligence API and explicitly selected user research records. "
             "Historical completeness is UNKNOWN; the API makes no causality or absence inference."
         ),
     )

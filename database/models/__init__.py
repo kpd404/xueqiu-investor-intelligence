@@ -10,6 +10,7 @@ from database.models.cross_investor_asset_alignment import CrossInvestorAssetAli
 from database.models.cross_investor_asset_snapshot import CrossInvestorAssetSnapshot
 from database.models.cross_investor_consensus_evidence import CrossInvestorConsensusEvidence
 from database.models.event_analysis import EventAnalysis
+from database.models.inbox_user_state import InboxUserState
 from database.models.intelligence_event import IntelligenceEvent
 from database.models.intelligence_event_evidence import IntelligenceEventEvidence
 from database.models.intelligence_event_priority import IntelligenceEventPriority
@@ -26,11 +27,14 @@ from database.models.portfolio_action import PortfolioAction
 from database.models.portfolio_snapshot import PortfolioSnapshotBatch
 from database.models.position_snapshot import PositionSnapshot
 from database.models.raw_event import RawEvent, RawEventImmutableError
+from database.models.research_candidate import ResearchCandidate
 from database.models.signal import Signal
 from database.models.state_change import InvestorAssetStateChange, StateChangeImmutableError
 from database.models.thesis_change import ThesisChange
 
 __all__ = [
+    "InboxUserState",
+    "ResearchCandidate",
     "Asset",
     "AssetAlias",
     "AttentionOccurrence",

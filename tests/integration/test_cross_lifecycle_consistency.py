@@ -328,7 +328,7 @@ def test_cross_lifecycle_source_queries_share_complete_scopes(
         return len(statements)
 
     before = _snapshot(db_session_factory)
-    assert count() == 23
+    assert count() == 16
     assert _snapshot(db_session_factory) == before
     for offset in range(1, 6):
         version = _refresh(db_session_factory, chain, start=START - timedelta(hours=offset))
@@ -339,7 +339,7 @@ def test_cross_lifecycle_source_queries_share_complete_scopes(
             )
     _materialize(db_session_factory)
     before = _snapshot(db_session_factory)
-    assert count() == 68
+    assert count() == 16
     assert _snapshot(db_session_factory) == before
 
 

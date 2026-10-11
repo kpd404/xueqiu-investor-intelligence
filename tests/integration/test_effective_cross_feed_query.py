@@ -528,8 +528,8 @@ def test_query_scope_batching_grows_with_scopes_not_signals_or_events(
         return body, len(statements)
 
     before = _snapshot(db_session_factory)
-    assert count(event_type=EVENTS[0].value)[1] == 25
-    assert count()[1] == 25  # two Events reuse the same scope and source reads
+    assert count(event_type=EVENTS[0].value)[1] == 18
+    assert count()[1] == 18  # two Events reuse the same scope and source reads
     assert _snapshot(db_session_factory) == before
     for _ in range(20):
         fake = _legacy(
@@ -542,7 +542,7 @@ def test_query_scope_batching_grows_with_scopes_not_signals_or_events(
         _historical_feed(db_session_factory, chain[1].asset_id, [fake], CROSS[0])
     before = _snapshot(db_session_factory)
     body, queries = count()
-    assert queries == 25 and body["total"] == 2
+    assert queries == 18 and body["total"] == 2
     assert _snapshot(db_session_factory) == before
     for offset in range(1, 6):
         version = _refresh(db_session_factory, chain, start=START - timedelta(hours=offset))
@@ -551,7 +551,7 @@ def test_query_scope_batching_grows_with_scopes_not_signals_or_events(
             _historical_feed(db_session_factory, chain[1].asset_id, [signal], kind)
     before = _snapshot(db_session_factory)
     body, queries = count()
-    assert queries == 70 and body["total"] == 2
+    assert queries == 18 and body["total"] == 2
     assert all(item["context"]["signal_count"] == 1 for item in body["items"])
     assert _snapshot(db_session_factory) == before
     for _ in range(5):
@@ -561,5 +561,5 @@ def test_query_scope_batching_grows_with_scopes_not_signals_or_events(
             _historical_feed(db_session_factory, other[1].asset_id, [signal], kind)
     before = _snapshot(db_session_factory)
     body, queries = count()
-    assert queries == 145 and body["total"] == 12
+    assert queries == 48 and body["total"] == 12
     assert _snapshot(db_session_factory) == before

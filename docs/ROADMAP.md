@@ -1,5 +1,437 @@
 # Project Roadmap
 
+## 2026-10-11 15:15:18 自然槽位 — 单轮 SUCCESS；持续运行未验证
+
+本条完成上次恢复记录的待验收项，只观察指定槽位，不修改代码、配置、业务
+记录或服务安排。香港时间 14:48:54 保存 31 张表内容指纹及源/派生 ID 基线；
+15:04 再核对 scheduler 27956/14188 的创建时间、实际命令及等待日志，而非
+仅依据历史 PID。资料保存 `.local/natural-slot-20261011`，不覆盖原基线。
+等待期间不查询业务库；目标槽位前 10 秒起以 10 秒间隔只读记录运行与锁。
+
+计划 2026-10-11 15:15:18.092621，实际开始 15:15:18.220509（约晚 0.128 秒），
+run_id `d6a86b2d-2312-44ee-93af-34ab7b9eac32`，trigger SCHEDULED。
+结束 15:17:18.316420，SUCCESS，约 120.096 秒，无失败阶段或错误码。
+各阶段均 SUCCESS：
+
+| 阶段 | 秒 |
+| --- | ---: |
+| COLLECTION | 33.922 |
+| ANALYSIS | 72.896 |
+| RESOLUTION | 0.529 |
+| DOMAIN_STATE | 3.923 |
+| CROSS_INVESTOR | 0.341 |
+| SIGNALS | 0.905 |
+| INTELLIGENCE_EVENTS | 5.918 |
+| PRIORITY | 0.221 |
+| FEED | 0.187 |
+| FEED_LIFECYCLE | 0.230 |
+| PRODUCT_VERIFICATION | 0.502 |
+
+Following 实际找到现有页面并完成原 max_batches=1，16 条观察/新增事实；
+Profile 沿原 48 小时、2 页、30 秒预算，8 位均成功，73 条观察，29 条新事实。
+总观察 89（含 7 条来源重叠），唯一事件 82，新 RawEvent 45、既有事件 37；
+CollectionRun +9、Observation +89。此次没有再出现连接/页面为空、认证或
+适配器错误；仅证明本轮实际访问成立，不保证以后不再失效。
+
+Analysis +45：37 NO_OPINION、8 PARTIALLY_RESOLVED、0 FAILED，不能把阶段
+SUCCESS 说成所有提及均完整解析。Opinion、ThesisChange、Attention 各 +1；
+Snapshot +3、Alignment/Consensus 各 +2、Signal +1（候选 13、复用 12），
+evidence link +1、state change +1、Investor +1。Event/Priority/Feed 没有新增行，
+但原有派生字段有更新；完整增量见 comparison.json，不将零新增说成零写入。
+这些是目标自然调度的正常增量，本次验收没有独立业务写入或维护。
+
+实际 DeepSeek 请求 48：Opinion 47（包含 2 次重试）、Thesis 1（0 次重试）；
+48 条 HTTP 200 回执，45 条 Analysis 的 provider 元数据保存供核对。
+费用账单/扣费回执未取得，不估算费用，不宣称零费用。
+
+12 次 RUNNING 采样均为 PostgreSQL backend 28372 持有原 advisory lock；
+客户端端口 50125 实际映射 scheduler 14188。采样中连接可合法 idle；
+15:17:28 SUCCESS 采样及产品核验后锁均为空，随后同一 backend 为 idle，
+advisory_count=0，连接仍建立，未归还成带锁污染连接。首次采样在运行开始后
+约 10 秒，证明为采样证据，不伪称每个瞬间都有连续追踪。没有解锁或终止连接。
+运行时状态 API 为 UNKNOWN / latest_status RUNNING，开始时间保留、结束为空；
+latest_failure 字段仍是旧 CDP_UNAVAILABLE 的历史失败，不能误读为本轮错误。
+
+结束后健康/状态 API 200，状态回到本轮 SUCCESS；近期 ACTIVE Feed total=3，
+返回 3，约 2.342 秒。受影响标的 SZ159981，asset
+`36a94306-59a8-4443-beae-40f3ddf45289`，Product 200（约 0.092 秒）；
+Feed `dba6d5c5-1efa-4f59-834e-c1d619b08e9b` 的证据入口 200（约 0.092 秒）。
+响应为 THESIS_CHANGE_OBSERVED，5 个有效 Thesis Signal/source、1 位投资者；
+证据页 5 组一致，6 个去重 RawEvent 引用均能解析、投资者/发布时间匹配、
+本地正文可读且 source URL 可用。最大事实时间为 2026-10-10T11:43:51Z
+（香港 19:43:51），Feed 与证据一致，没有改为今天的计算时间。
+本次不重新打开远端原帖验证全文。Context/投票与公开字段沿现有有效入口。
+
+目标开始前后 Research Candidate 与 Inbox 全表内容指纹一致。自然轮次后的
+产品查询前后所有业务表指纹也一致，区别于自然调度本身的业务增量；没有错过
+前基线。外部第二轮未发生，本次没有创建候选、用户处理操作、手动刷新或补偿。
+
+同一 scheduler 创建身份仍存活，日志准确记录目标 SUCCESS 后返回原循环；
+按完成后 60 分钟 sleep 推算下一次约 16:17:18（不是数据库持久化计划时间）。
+原 backend 2436/27848、Vite 20112、CDP 18164 与调度安排均保留，不观察第二轮。
+环境在本轮就绪、指定自然轮次完整成功、scheduler 原安排等待分别确认。
+长期持续运行、网络断连互斥、稳定性能、远端正文及历史完整性仍未验证；
+historical completeness UNKNOWN，不宣称 Operational MVP 全部完成。
+
+## CDP / scheduler 恢复与状态修复部署 — 2026-10-11；自然轮次待验收
+
+保留全部已有修改及 VERIFIED 用户能力。本轮仅恢复现有 runtime，无迁移、
+旧 RUNNING 维护、手动 refresh 或情报修改。核查资料位于
+`.local/runtime-recover-20261011`，HEAD e7c0d6fdcc4158037201b4549718305956c22beb；
+部署前 working diff SHA256
+`eedd8948ae1e60c505adfe6293196a8228f3fbe0101e1f28f9977d8295d0e2d4`，
+未跟踪实现指纹和部署运行文件 SHA256 已保存，不以 HEAD 单独代表代码身份。
+
+更正上轮受限进程查询的边界：提升权限重新核查确认原 Vite 20112（5173）、
+专用 Edge 18164（9222）始终有现存进程，并非本轮重启；原 profile 为
+`.local/edge-cdp-profile`。当前 8000 无监听，项目 backend / scheduler 无活进程。
+未操作普通 Edge、没有清 profile、复制认证或新建身份。PostgreSQL 为 6480，
+5432 可用；无当前 advisory lock。历史 PID 元数据先备存，不作为活进程证明。
+
+最新失败 `4ab9c8e7-dfa6-4757-b4a4-088707a838c0` 的原错误摘要准确为
+`connected browser has no existing page for Following Feed observation`：
+当时连接浏览器后 pages 为空，由 adapter 报 CDP_UNAVAILABLE；不能归因为
+端口不可达、认证失效或浏览器崩溃。为何当时页面为空、scheduler 后续为何消失
+缺少退出日志，原因未知。Windows 原登录启动任务为 Ready / enabled，最后
+launcher 结果 0；这不证明 scheduler 正常退出。该任务没有被修改或额外触发。
+
+当前真实 CDP 为一个 context / 一个雪球页面
+`https://www.xueqiu.com/u/6238316110`，title 因思明见；读取现有 DOM，包含
+“已关注”“设置备注”等认证后操作，没有现有登录/风控标记。保留页面、不导航、
+不捕获 Following payload、不开采集、不读 Cookie/令牌；可读页面与认证 UI
+不替代下一轮 Following 接口和全链路验证。
+
+沿原 uvicorn 命令启动唯一 backend 2436/27848，8000，加载现有工作区与
+operations/status.py 的 RUNNING→UNKNOWN 修复；未改 FAILED→SUCCESS。
+前端仍为原 Vite，不重启。沿原 scheduler 参数启动唯一 27956/14188，显式
+CDP `http://127.0.0.1:9222`（Settings 中默认 endpoint 为 null，原命令也显式传入）。
+保持 60 分钟、max_batches=1、既有 Profile bounded 预算，以及 DeepSeek /
+deepseek-v4-flash / responses / max_retries=2 和原批准 policy；无预算切换。
+原 loop 不保存未来计划；以最后完成时间 20:15:18.092621 的 60 分钟相位跳过
+停机期间槽位，`--not-before 2026-10-11T15:15:18.092621+08:00` 恢复下一未来槽。
+不声称该时刻是数据库保存的计划，不补跑漏失轮次，不启动第二实例。
+原启动方式、PID 记录和失败恢复边界保存：新进程失败时只处理核对归属的新进程，
+回到先前 backend/scheduler 未运行状态；不降级数据库或更改原浏览器/前端。
+
+香港时间 14:44 只读就绪验收：health/DB 200，status 200（约 0.033 秒），
+OpenAPI 200；状态仍准确为较新 FAILED/COLLECTION/CDP_UNAVAILABLE，freshness
+STALE，没有被较早 SUCCESS 或旧 RUNNING 覆盖。API next_expected_refresh_at
+仍是按上次 SUCCESS 推算的历史值，不能当作当前 scheduler 实际等待时刻；
+实际 15:15:18 由启动参数及 scheduler startup waiting 日志核对。
+近期 ACTIVE Feed 返回 2 条，200，约 2.497 秒；现有样本 asset
+`6f578ae9-1320-414e-bf30-87f7975a723e` 的 Product 200（约 0.708 秒），
+Feed `9686a729-ef1f-4079-b614-a1dbd242b5c5` 的证据入口 200（约 0.856 秒）。
+这些是恢复前已有有效样本，不冒充未执行自然轮次的受影响产品。
+恢复前后 31 张表指纹一致，包括候选、Inbox、两条旧 RUNNING 和来源；无 LLM。
+
+自然调度验收 PENDING：本次核查尚未到 15:15:18，scheduler 只在 startup waiting。
+尚无本轮 run_id、阶段结果、业务增量、LLM/费用回执及运行中锁证据，不能用
+就绪探针或昨日 SUCCESS 替代。保留已恢复的循环与原 Windows 登录启动安排；
+没有观察脚本/自动化、手动任务或第二轮刷新。环境就绪及状态修复部署通过，
+自然轮次、长期持续运行分别未验证。远端正文、性能、网络断连互斥、FAILED
+补偿和跨投资者回流不扩展，历史完整性保持 UNKNOWN。
+
+## 历史 RUNNING 与运行状态边界 — 2026-10-11 只读核查及最小修复
+
+保留刷新锁修复、Research Candidate / Inbox VERIFIED 及全部已有修改。
+香港时间 14:32:05–14:35:07 对真实 PostgreSQL 只读核查，资料位于
+`.local/running-audit-20261011`；HEAD 与工作区/未跟踪内容身份保存于 before/after。
+两条未完成记录：
+
+- OperationalRefreshRun `5a706cf9-2c3c-4719-8980-633e8ac18e8e`，SCHEDULED，
+  2026-09-22 19:05:15.601392 开始，19:05:15.603367 创建；RUNNING，
+  finished_at、failure_stage、failure_code、summary 均为空。
+- CollectionRun `5283b24a-de9e-45ef-8788-a1aaca202916`，ENTITY_HISTORY /
+  BROWSER_CDP / xueqiu_profile_history_cdp，2026-09-22 19:05:30.950774
+  开始/创建；RUNNING，ended_at、stop_reason、summary 为空，coverage UNKNOWN。
+  Profile scope 为 `c2d0352b-9783-47fb-bab6-33b4c6f69ffd:9957341637`，
+  没有 CollectionObservation。两实体均无 updated_at，不能提供不存在的更新时间。
+
+当前没有可确认的本项目 scheduler/后端/前端进程或刷新 advisory lock，原 PID
+元数据仍保留；没有停止、重启或恢复原 runtime。上述历史行不能描述当前活动，
+但结束时刻、阶段及具体中断原因证据不足，分类为“执行结果未知”；没有把年龄、
+当前无锁或相近开始时间当作明确失败/关联证明。整轮记录没有保存来源 run ID，
+不能证明两行属于同一任务；缺失来源记录不能补造。
+
+已确认旧行未覆盖较新结果：最近为 `4ab9c8e7-dfa6-4757-b4a4-088707a838c0`，
+2026-10-10 20:15:15→20:15:18 FAILED/COLLECTION/CDP_UNAVAILABLE；较早
+`2b0a47c8-c4d0-47b5-8115-c356ebaf93a1` 的 SUCCESS 仅供 freshness 使用。
+状态查询按 started_at 选最近运行；canonical 资格由 advisory lock 决定；
+增量分析/恢复依据有效 Analysis 和源事件，不依据未结束运行计数。
+Collection provenance 保留原始 run_status，仅描述历史归属；无 Observation 的
+旧来源行不构造有效事实或恢复目标。本轮没有复现旧 RUNNING 阻塞选择/恢复。
+
+实际复现另一最小错误：最新 RUNNING（包括缺少日志/来源的唯一未完成行）
+落到 ACTION_REQUIRED，页面因此显示“刷新失败”。只修改 operations/status.py：
+RUNNING 对应 UNKNOWN，保留最新身份、原始时间及 RUNNING 技术值，不推断活跃、
+结束、失败或 SUCCESS。UNKNOWN 使用现有前端“刷新状态未知”标签；没有新增
+状态、监控、恢复机制或改写历史。最新失败仍优先于旧 SUCCESS，未降低真实告警。
+
+数据库及 HTTP 失败先行 2 failed/3 passed；修复后状态/真实 canonical 入口资格、
+失败优先、历史保留、全表零写入、分析恢复及用户能力回归合计 46 passed；
+另有真实隔离 PostgreSQL 锁回归 13 passed，限定 Ruff / diff 检查通过。
+canonical 入口资格测试执行真实 begin/finish 和竞争边界，不执行采集/provider；
+恢复资格由既有恢复回归证明，不表示进行了真实补偿。SQLite 隔离路径不替代
+真实 PostgreSQL 锁验证，两组分别报告。
+
+独立临时 8127 后端（27256/11752）只读健康和状态 API 为 200；状态约 0.097 秒，
+返回 ACTION_REQUIRED / STALE / 最新 FAILED/CDP_UNAVAILABLE；真实数据库没有
+最新 RUNNING，UNKNOWN 分支由隔离真实 HTTP 路径验证。临时进程关闭，端口不再
+监听。核查前后 31 张表内容指纹完全一致，没有外部自然调度增量；没有 LLM、
+刷新、恢复或运行记录维护。原 runtime 未被启用，本次代码没有部署到原服务。
+
+不需要白名单维护来解除已证明的阻断；当前证据也不足以提出旧行的准确终态和
+结束时间，未准备强写计划。网络断连、运行实体缺少 worker/session 关联与更新
+时间、长期调度及当前 runtime 未运行的原因仍未验证；没有扩展其他恢复事项。
+历史完整性继续 UNKNOWN，不宣称持续运行或 Operational MVP 全部完成。
+
+## PostgreSQL 刷新锁连接生命周期 — 2026-10-10 修复及有界真实验证
+
+保留全部情报修复、Research Candidate 与 Inbox 用户处理 VERIFIED。
+本轮仅修改锁连接生命周期、canonical 清理边界及 scheduler 重启时间协调，
+没有修改情报、来源有效性、用户工作流或采集/分析预算。
+
+只读证据：原刷新锁键 4831927501 为 session advisory lock；PostgreSQL backend
+8120 的客户端端口 57727 映射到原 scheduler 12396。最后实际任务 c012843b…
+16:14:27 SUCCESS，17:14/18:14 两轮 SKIPPED_ALREADY_RUNNING，连接 idle；
+9 月 22 日旧 RUNNING 行单独保留。不能单凭 idle 认定遗留；本轮真实执行期间
+锁连接也可合法 idle。历史 acquire/unlock 的逐次 PID/重入计数没有保存，无法
+唯一还原旧生产连接轨迹，不能把某一条静态假设直接当作完整生产根因。
+
+隔离库 snowball_lock_test_5907e9e562bb 用真实两连接池复现：业务 Session
+获取锁后 commit 将连接归还池，强制借走原连接后 release 在其他 backend 执行，
+原锁仍在；重复获取同一对象使 PostgreSQL 重入计数不归零。原 unlock 返回值
+被忽略。失败先行 3 failed/1 passed；修复后 PostgreSQL 13 项通过，包括真实
+canonical 全阶段、失败/rollback、取消、最终清理异常、重复获取、竞争拒绝、
+连接断开/失效、释放失败与污染连接丢弃。编排/用户工作流 35 项、canonical
+范围与 Thesis/跨投资者生命周期 78 项回归通过；限定 Ruff 和 diff 检查通过。
+
+锁改为独立 PostgreSQL Connection 租约，获取、保持和检查释放绑定同一实际
+会话；业务 commit/rollback 不归还该锁连接、不提前解锁。同对象重复获取幂等；
+竞争失败关闭未持锁租约；释放失败 invalidate 后关闭并抛错，不用 unlock_all。
+canonical 最外层 finally 保证最终统计/异常/取消也清理，Session 始终关闭；
+释放失败准确记录 FAILED/LOCK_RELEASE，不将其静默保留为成功。
+锁键及所有 canonical 入口一致，未增加表或修改数据库连接池配置。
+
+确认原任务结束后暂停后续调度，记录代码指纹、PID、日志与 31 张表基线。
+专属控制台核对仅属于原 scheduler/控制器后，用正常 Ctrl+C 退出 16900/12396；
+日志记录 stopped，原锁随连接关闭消失，无 Stop-Process/pg_terminate_backend
+或强制释放。真实双连接无业务探针 acquire→hold→竞争拒绝→release→再次获取
+通过；部署/探针期间全部 31 张表不变。
+
+修复版 scheduler 最终为 4124/6932，原 backend 25620/25984、Vite 20112 未动。
+新增可选 `--not-before`（默认不变），只为重启保留原下一轮 19:14:27.924 的时间，
+不提前触发任务。第一次启动在地区格式时间解析时退出，未执行任务，错误日志
+保留；维护脚本改用带时区 ISO 时间后启动成功。
+启动实际加载的工作区身份、原命令、生产文件 SHA256 和部署记录位于
+`.local/lock-fix-20261010`，HEAD 仍为 e7c0d6fdcc4158037201b4549718305956c22beb，
+不能只用 HEAD 代表当前未提交实现。完整工作区/未跟踪指纹分别保存于部署计划、
+live-lock-probe 和 final-audit；最后文档记录在代码部署后写入。
+
+原计划自然调度 `2b0a47c8-c4d0-47b5-8115-c356ebaf93a1`：香港时间
+19:14:27.992617→19:15:15.762901，SUCCESS，11 阶段全部通过，无失败阶段。
+24 次 RUNNING 采样始终同一 backend 9988，客户端端口 64280 映射 scheduler
+6932；结束及后续核查锁为空，scheduler 回到等待。仅观察这一轮，没有手动
+refresh、第二轮或监控自动化。代码修复、真实无业务锁验证和本轮自然调度
+分别通过；这一样本不能证明长期持续运行。
+
+本轮原配置 DeepSeek Opinion 请求 18 次（含 3 次重试），Thesis 比较 0 次，
+18 条 HTTP 200 回执，最终分析 provider token 元数据可查；费用账单未取得，
+不估计费用。正常调度新增 RawEvent 15、Analysis 15、Signal 2、Event 1、
+Priority/Feed 各 2 等正常增量，完整差异见 final-audit；不能宣称真实库零写入。
+Research Candidate、Inbox 用户记录和 Alembic 指纹始终不变，未做历史维护。
+
+剩余边界：每个 active refresh 占额外连接池槽；网络/服务端断连会使 session
+锁消失，清理时能检测并报错，但未实现分布式 fencing，不能保证未感知断连
+期间的互斥。9 月 22 日历史 RUNNING 行未纠正，长时/高并发/多轮持续运行未验证。
+历史完整性 UNKNOWN、跨投资者回流、FAILED 补偿、性能和界面缺口均不扩展。
+
+## Inbox 用户处理真实启用 — 2026-10-10 VERIFIED（有界用户能力）
+
+本条更新下方“隔离通过、真实未启用”的当时状态，保留其历史记录及此前
+Research Candidate VERIFIED。没有新增功能或修改情报语义。
+
+真实库 snowball 从 20261010_0025 执行
+`.venv\Scripts\python.exe -m alembic upgrade 20261010_0026`；仅新增
+inbox_user_states。Feed ID 主键兼唯一约束、RESTRICT 外键、非空 BOOLEAN
+阅读/处理状态和创建/更新时间已核对；没有单独状态枚举 CHECK 或额外索引。
+迁移后新表为空，没有自动初始化记录；既有业务表不变，仅 Alembic 版本变化。
+
+完整 PostgreSQL 备份位于
+`.local/inbox-enable-20261010/backups/snowball-20261010-184803.dump`，
+3,503,572 字节，SHA256
+`40de889935ece789cf295e01581f4da2b43c8b5002352bb1abc58bd2dd9037a5`。
+实际恢复到新隔离库 snowball_restore_verify_inbox_4018840b2496；30 张表内容
+指纹一致。结构仅既有 Research Candidate CHECK 的 PostgreSQL 类型转换文本
+不同（数组整体转 text 与逐元素转 text），独立只读验证等价；其他结构一致。
+未覆盖真实库，恢复验证库保留；未重复候选迁移、未改旧 SQLite 0011。
+
+实际代码 HEAD e7c0d6fdcc4158037201b4549718305956c22beb，启用时工作区差异
+SHA256 11efb427746852dee60907c6bee30a2b73556a79df2996636659325128d84ed9，
+未跟踪代码逐文件指纹及启动身份保存在 preparation.json。启用及重启期间代码
+身份一致；本条文档更新在运行验收后进行。保留全部原修改。
+已核实后端沿原 uvicorn/项目目录/8000 替换：25436/4124 → 9684（启用）→
+25620/25984（重启持久化）。前端 Vite 20112、5173 未重启，代理为 8000；
+仅一套目标后端。健康/数据库、OpenAPI、Inbox 三种筛选及状态 API、Feed、
+紫金矿业 Asset Product/证据和既有候选 API 均为 200。
+
+真实浏览器 Inbox → 当前有效紫金矿业证据 → 返回 → 显式已读 → 未读排除
+→ 显式已处理 → 待处理排除 → 刷新 → 后端重启 → 状态保持 → 显式恢复通过。
+唯一验收 Feed `3b764c33-d00e-4a9a-aa4e-9da61d3ae5c0`，初始无用户记录，
+默认 false/false；操作后 true/true；最终 false/false。保留默认状态验收记录。
+两次同值 API 提交不改变整行或更新时间；重启前后 ID、状态、创建/更新时间
+完全一致。未创建或修改候选，不伪造来源或生命周期反例；相关反例沿用隔离测试。
+
+暂停区间最终指纹审计仅 Alembic 版本、新表及该用户记录变化，29 张既有业务表
+完整不变，包括 Research Candidate、原始来源、Signal/Event、历史关联、Priority、
+Feed 和生命周期内部数据。没有采集、refresh、恢复历史、LLM 或性能重构。
+本轮三种 Inbox 列表约 0.919–0.939 秒（6 条），既有 Feed 单次 1.031 秒，
+Product 0.267 秒、证据 0.337 秒；这些样本不替代稳定性能未达标记录。
+
+原 scheduler 16900/12396 在任务结束后暂停、验收后恢复同一进程原循环，
+没有中断任务或额外触发。发现其 idle 连接持有刷新锁：最后实际任务
+c012843b-f8c0-45a6-8e27-1e75a39c15f0 于 16:14:27 SUCCESS，17:14/18:14
+两轮 SKIPPED_ALREADY_RUNNING。依据数据库客户端端口及 PID 确认归属后，
+本轮保留锁及 9 月 22 日历史 RUNNING 记录，不强制释放、不顺带修复。
+调度“进程恢复”不等于“后续刷新能够成功”，持续运行仍未通过。
+
+资料及截图保存于 `.local/inbox-enable-20261010`。当前 Inbox 仍显示“标的视图”
+和“标的情报”导航语义、侧栏入口排版待整理，本轮仅记录。新证据自动恢复未读、
+跨投资者回流、通知/批量处理未实现；远端正文超时、历史完整性 UNKNOWN、稳定
+性能及持续运行缺口保持，不宣称 Operational MVP 全部完成。
+
+## Inbox 用户处理 — 2026-10-10 实现及隔离验收通过；真实启用未执行
+
+用户可在当前 `/inbox` 明确标记已读/恢复未读、已处理/恢复待处理，按全部、
+未读、待处理筛选，并继续查看证据或加入研究候选。筛选数量、分页和排序在
+既有有效证据校正之后计算；用户状态不使失效情报重新进入 Inbox。
+阅读、预取、加入/归档候选均不自动改变处理进度；新增证据不自动恢复未读。
+
+现有 Feed 是系统投影，Research Candidate 是用户研究意图，均不能承载独立
+阅读/处理进度。本轮仅新增 `inbox_user_states`，以真实 Feed ID 为主键及限制删除
+外键，保存两个独立布尔值和创建/更新时间；无记录默认未读/待处理。
+用户操作不写 Feed.context，不改变 Feed.state、Priority、来源或生命周期基线。
+重复显式提交幂等；失败不显示成功；浏览器返回重新读取状态并保留筛选及页码。
+
+失败先行：新数据库 HTTP 测试在实现前因路由不存在失败 2 项；实现后相关后端
+114 项通过（含 Thesis/跨投资者有效读取、Thesis 回流和 Research Candidate），
+前端 60 项通过，TypeScript/Vite 构建及限定 Ruff 检查通过。
+隔离 PostgreSQL `snowball_inbox_test_837e36ede309` 实际执行完整 Alembic
+0001→20261010_0026 并重复升级验证；SQLite 实际 0025→0026 增量验证通过。
+不将旧 SQLite 0011 完整安装路径声明为已修复。
+
+独立 8113/5176 服务、结构化 fixture、固定来源窗口下真实浏览器完成：
+未读筛选→读取有效前后观点→显式已读→加入候选→返回仍待处理→键盘显式已处理
+→页面刷新→隔离服务重启→已读/已处理保留→显式恢复。
+验收 Feed `139cd013-fff0-4dc3-8b40-a9e2d760bb62`；隔离候选
+`1c01cf05-4f24-492d-915b-929653a40c1c`。窄屏布局和证据返回路径已检查。
+隔离 31 张表前后指纹仅 inbox_user_states 与 research_candidates 变化，其余
+29 张（含来源、Feed、历史关联及内部基线）不变。验收资料位于
+`.local/inbox-acceptance-20261010`；验收结束停止本轮隔离服务。
+
+真实业务库未升级 0026，未替换真实 runtime，原后端/前端/scheduler 未操作。
+本能力真实启用状态为 NOT ENABLED，不标记整个能力 VERIFIED；此前 Research
+Candidate 真实启用 VERIFIED 保持。外部 scheduler 原安排继续，不能将其写入
+归因于本轮或宣称整个真实数据库零写入。
+Feed 性能未达标、远端正文超时、历史完整性 UNKNOWN、跨投资者回流、候选页面
+样式/导航问题继续保留。没有新增自动提醒、批量处理、通知或账户功能。
+
+## Research Candidate 真实启用 — 2026-10-10 VERIFIED（有界用户能力）
+
+在用户明确授权调整既有 runtime 后，确认数据库仍为 0025，不重复迁移。
+确认 canonical refresh 锁空闲后暂挂原 scheduler（16900／12396），没有中断任务；
+验收结束恢复同一进程与原循环，未通过重启调度器触发新任务。
+仅替换归属已核对的后端：19184／19236 → 13280（首次启用）→
+25436／4124（真实重启持久化）。沿原 Python/uvicorn 命令、项目目录、8000
+地址启动，没有第二套后端；Vite 20112、5173 保持原样，实际页面加载当前实现。
+加载代码 HEAD e7c0d6fdcc4158037201b4549718305956c22beb 加工作区及未跟踪实现
+指纹，保存于 `.local/research-enable-20261010/preparation.json`；重启前后实现
+指纹一致，保留全部已有修改。没有新增功能或改动 Intelligence 语义。
+
+健康/数据库、候选列表与 OpenAPI 路由检查通过；近期 Feed 200、6 条，
+本轮单次 1.270 秒；中际旭创 Asset Product 200、0.034 秒；证据 API 200、
+0.067 秒，1 组有效关联、2 位方向投票者。单次速度不替代此前未达标记录。
+
+真实浏览器完成 Inbox → 中际旭创证据 → 展开本地原文 → 手动保存功能验收记录
+→ 填写用户原因/问题/笔记 → 研究中 → 刷新 → 返回准确来源 → 重复添加复用
+→ 后端重启 → 再次打开 → 归档 → 刷新仍归档。唯一候选
+`b7daa082-8c44-4b49-8e6d-b9cb12a1f12c`，创建于香港时间
+15:48:51.579054，最终 ARCHIVED。两次提交、1 条来源引用，没有重复候选；
+身份、创建时间、用户内容和引用在真实重启后完整保持。
+实际关联 Alignment de048fb3-f41b-449a-8dc1-1ece09d67f81，来源 RawEvent
+297795c1-e3d7-4065-bcba-b26eada12a02／0e60cae2-f944-4754-862b-86cb12d8eb03。
+原帖 https://xueqiu.com/7448680761/411737835 与保存地址匹配；本轮核对地址，
+没有把远端正文可读标记为通过。本地保存原文可读且区分作者/转发及 AI 提取。
+
+香港时间 15:52:19 的暂停区间终态核对：30 张表仅 research_candidates 变化，
+其余 29 张（含 Alembic、运行表及全部既有业务表）指纹不变；未修改来源、
+Signal/Event、关联、Priority/Feed 或内部生命周期基线。用户记录只由明确操作
+保存/编辑；既有 refresh 没有该用户实体写入路径，本次不触发刷新作额外验证。
+调度恢复后自然运行单独归因，不能把这一暂停区间结论扩展为持续零写入。
+证据和最终截图保存在 `.local/research-enable-20261010`。
+
+本标记仅代表 Research Candidate 的本次真实入口及完整有界工作流通过。
+不代表持续运行或 Operational MVP 整体完成；Feed 性能、远端正文、历史完整性
+UNKNOWN、跨投资者回流、样式与导航问题继续保留。本轮停止，不推进其他功能。
+
+## Research Candidate 真实迁移 — 2026-10-10（启用待协调）
+
+真实 PostgreSQL `snowball` 已从 `20260920_0024` 通过实际命令
+`.venv/Scripts/python.exe -m alembic upgrade 20261010_0025` 升到
+`20261010_0025`。仅新增 research_candidates 表、主键、标的 RESTRICT 外键、
+状态 CHECK 和未归档标的部分唯一索引；结构已核对，候选记录为零。
+迁移在既有 refresh advisory lock 保护下执行，没有调用 refresh。
+迁移紧邻前后，28 张既有业务表内容指纹不变，仅 Alembic 版本更新。
+
+完整备份位于 `.local/research-live-20261010/backups/snowball-20261010-154037.dump`，
+3,479,052 字节，SHA256
+`d0fd5605184f49f3a658be4525685f914847750dafd51eb4ac73b72d9e33ec77`。
+pg_restore 目录可读，并实际恢复到新建隔离库
+`snowball_restore_verify_research_984af1bd7e1d`；全部 29 张表指纹与准备基线一致。
+代码 HEAD e7c0d6fdcc4158037201b4549718305956c22beb 及工作区、未跟踪实现指纹
+保存于 `.local/research-live-20261010/plan.json`，没有只用 HEAD 标识运行代码。
+
+**未启用，真实浏览器工作流未验收，不标记能力 VERIFIED。** 原后端 8000、
+前端 5173 和 scheduler 由另一组既有 runtime 管理，本轮保持原样。
+旧后端尚未加载候选 API；必须先协调该运行安排，再单独替换后端以加载明确的
+当前代码，避免同时出现不同版本业务写入服务。没有创建验收候选、没有执行
+真实服务重启持久化检查；此前隔离结果不代替这些验收项。
+外部 scheduler 存在，其后续自然运行不能归为本轮；未启动新的 scheduler、
+未采集、分析、调用 LLM 或刷新。远端正文、Feed 性能、历史完整性 UNKNOWN、
+跨投资者回流及持续运行限制保留；样式和导航问题单独待处理。本轮到此停止。
+
+## 用户能力增量 — 最小 Research Candidate（2026-10-10）
+
+已实现并通过隔离前后端浏览器验收：Inbox／Asset Product／证据页面手动加入
+研究候选，保存用户研究原因、待验证问题和笔记，查看列表及详情，切换待研究、
+研究中、已归档，明确恢复，并返回具体证据和原帖地址。用户判断独立标识，
+没有自动导入 Discovery、LLM 问题生成、评分或买卖建议。
+
+DiscoveryCandidate 是查询投影，现有原始事实与 Intelligence 实体不能承载用户
+意图，故新增唯一 `research_candidates` 用户记录表及 0025 Alembic 迁移。
+同标的仅一个未归档候选；重复添加复用并合并准确来源引用，不覆盖原笔记和
+创建时间；提交身份及内容指纹保证重放幂等，归档记录不会自动打开。
+来源校验复用证据读取边界；记录保存具体来源、Opinion／RawEvent 身份，
+失效后保留用户记录并区分当前有效、历史引用、未验证与不可用，不借用其他证据。
+
+验收环境为独立 PostgreSQL `snowball_research_test_77cc54fe6b7f`，端口
+8102／5175，结构化 fixture 标的 `5706d694-eb5e-43b9-9930-2d77d98b9fa5`。
+浏览器完成证据→保存问题→研究中→刷新→重启隔离前后端→再次打开→返回来源，
+候选 `f5191e0b-2efe-4d2b-8dc7-590d12733d8e` 的身份、创建时间和内容保持。
+测试覆盖关系拒绝、重复引用、归档恢复、来源失效与历史阅读、API 错误、
+源表保护及迁移重启持久化；后端及保留回归 109 项、前端 57 项与
+TypeScript/Vite build、Ruff 检查通过。重启后的只读验收区间，隔离库全部
+30 张表内容指纹无变化。
+新 PostgreSQL 实际 0001→0025 升级通过；SQLite 已有 0024 结构到 0025 的实际
+Alembic 升级及重复升级通过。全新 SQLite 仍在旧 0011 约束 ALTER 失败，
+本次没有修复历史安装缺口。
+
+真实业务库未迁移、未写入测试候选；外部后端、前端和 scheduler 保持原样，
+仅停止本次隔离服务。未调用真实 LLM、采集、refresh 或维护。
+真实产品启用仍需单独批准业务库迁移及运行验收；本次仅完成隔离用户工作流。
+远端原帖正文超时、Feed 后续约 3 秒及首次波动继续未通过；跨投资者回流、
+已读状态、通知、持续运行和 Operational MVP 整体均未完成。历史完整性 UNKNOWN。
+
 ## 当前执行主线 — 2026-10-08 准备基线
 
 本节取代下文历史记录中的 Current phase、Current sprint、Recommended next
@@ -1047,6 +1479,470 @@ SQL 实测（无 Portfolio 引用 fixture）独立 Context 和整次 Asset Produ
 历史污染、未观察依赖/全局 policy 协调、独立并发/PG 锁、跨投资者回流、
 真实共识演化及用户验收缺口。路线只记录本子任务，停止，不自动执行生产
 验证，不宣称整个 Inbox 或可信变化阶段完成。
+
+### 有界真实运行验收准备与只读消费检查 — 2026-10-10
+
+**BLOCKED：canonical refresh 尚未执行，不标记整链路 VERIFIED。**
+香港时间 01:35:41–01:40:15，HEAD 为
+`e7c0d6fdcc4158037201b4549718305956c22beb`，运行前工作区干净，
+HEAD diff SHA-256 为 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
+批准 provider/model 为 deepseek/deepseek-v4-flash，原 policy 未切换。
+计划使用现有 canonical CLI：CDP 127.0.0.1:9222、max-batches=1，其余默认；
+Profile 8 人/48 小时/2 页/每人 30 秒，未扩大名单或历史窗口。
+自动审批拒绝真实刷新，理由为尚未明确授权采集原文传输至外部 DeepSeek。
+没有通过其他入口绕过；无新 run_id、无采集、无 LLM 请求、无业务增量。
+Collection 至 PRODUCT_VERIFICATION 各阶段均未运行，原 Lifecycle 阻断尚未真实复验。
+
+已保存新只读前后快照至 `.local/acceptance-20261010/`，未覆盖 10-08 基线。
+现有备份入口成功，备份 `snowball-20261010-013542.dump`，3303998 bytes，
+SHA-256 `e9e517f05af515c01542814e34acf424b1ebf9b188c6b00bb87789322200db59`。
+主要业务数量前后一致：1999 RawEvent、2282 Analysis、297 Opinion、299 ThesisChange、
+497 Signal、104 Event、76 Priority、76 Feed、67 OperationalRefreshRun。
+历史 RUNNING 行始于 09-22，当前无刷新进程/advisory lock，未清理该行。
+最近失败 b3510349-e43e-4f24-a9b9-d9412d331dcd 仍为 FEED_LIFECYCLE，
+最新记录 386696f6-9c93-4aa7-9549-b6cd68c4fa0c 为 SKIPPED_ALREADY_RUNNING；
+当前状态不能重建失败时证据。
+
+仅临时启动当前代码后端与前端进行存量只读检查：health 200/1.146 秒，
+近期 ACTIVE Feed 200/89.603 秒、total=6，中性原因与事实时间可读取；
+现有紫金矿业 Asset Product 200/13.524 秒，Context 200/21.703 秒，
+一个已有 Investor Product 200/1.554 秒。不是本轮受影响产品验收。
+Context 当前有效窗口 40 Signal、8 Investor、5 ThesisChange，历史完整性 UNKNOWN。
+前端概览可呈现存量证据，最后观察时近期情报区仍在加载；性能不标记通过。
+
+验收前 backend/frontend/scheduler 实际均未运行，PID 文件已过期；状态脚本
+可误匹配检查命令为 scheduler。仅停止本次创建并再次确认归属的服务进程树，
+恢复原未运行安排；数据库、CDP、用户浏览器保留，未启动 scheduler，未产生后续调度轮。
+剩余：取得外部原文传输明确授权后执行唯一有界真实轮，核对阶段和产品字段；
+慢 Feed、历史运行状态残留、持续调度、跨投资者回流及历史污染仍未闭环。
+未修改功能、语义、迁移或 policy，不宣称持续运行/整个可信变化阶段完成。
+
+### 授权后唯一一轮真实 canonical refresh 验收 — 2026-10-10
+
+**VERIFIED（仅本轮有界 canonical 刷新能力）：SUCCESS。**
+用户补充明确授权必要雪球原文/分析字段传输至当前 DeepSeek 后，仅执行一次
+`.venv/Scripts/python.exe -m operations.refresh --cdp-endpoint http://127.0.0.1:9222 --max-batches 1`。
+本节补充前述被审批阻断的准备记录，不删除原记录。
+香港时间 01:46:22–01:51:10，run_id `e2c94621-4977-406f-8002-4e1bff5f8064`。
+HEAD `e7c0d6fdcc4158037201b4549718305956c22beb`，工作区差异仅此前路线记录，
+SHA-256 `6d69f559b52b0fa26614455f234dd82ecd140eb29f64583521fbb4244fa80928`。
+provider/model 和已批准 Opinion/Thesis policy 与运行前快照一致；没有迁移或切换 policy。
+沿用本地 01:35:42 成功备份；新的前后快照、原始阶段摘要、HTTP 字段和报告保存于
+`.local/acceptance-20261010-authorized/`，10-08 基线不变。
+
+所有真实阶段 SUCCESS，耗时秒数：Collection 42.21、Analysis 59.80、Resolution 0.38、
+Domain 2.03、Cross Investor 0.53、Signals 41.02、Events 66.28、Priority 18.84、
+Feed 17.60、Lifecycle 19.86、Product Verification 19.91。总约 288.6 秒。
+Following Feed 15 条/新增 9，默认预算 Profile 90 条/新增 39，重叠 3，
+总观测 102 个已有或新 RawEvent，新增 48。8 个 Profile 的现有汇总均为成功，
+其中两个 FIRST_PAGE_UNAVAILABLE，不代表覆盖完整。
+Analysis 新增 48：37 NO_OPINION、11 PARTIALLY_RESOLVED、无 FAILED；
+实际 Opinion LLM 请求 49（含一次重试）、Thesis 请求 0；费用金额未由 provider 回执证明。
+解析 9 个支持标的引用（复用），38 个未解析引用保留。无新 Opinion/Attention/Thesis。
+新增 Snapshot/Alignment/Consensus 为 7/6/6；Signal、Event、关联、Priority、Feed 均零新增。
+有界刷新仍使用既有全局事实窗口选择，没有扩大名单或另跑历史补偿。
+
+7 个来源依赖标的进入协调范围：18 个 Event 候选，20 个 ACTIVE Event 投影范围，
+16 个 Priority/Feed 先刷新再进入同范围 Lifecycle；6 次状态转换，1 个 Thesis 基线更新，
+7 Asset 和 15 Investor 通过真实产品验收，零 product failures。
+60 个范围外 Feed 明确 deferred；不得称这些历史投影一致。
+原错误 Priority `62c6ba81-1da2-4efa-b2e6-3f51c7544f86` 不在本轮范围，
+仍为 THESIS_ACCELERATION/count=2，本轮未纠正或重新验收它。
+
+真实 HTTP：health 200/2.50 秒，近期 ACTIVE Feed 200/55.42 秒、total=9；
+受影响紫金矿业 Asset Product 200/16.00 秒、Context 200/15.84 秒，
+受影响 Investor Product 200/3.93 秒。四并发只读测试；Feed 不能称性能达标，
+之前本日同代码存量检查为 89.60 秒，不据此推断稳定性能改善。
+Context 与产品内 Context 除请求时钟窗口边界外一致：当前 40 Signal/8 Investor/5 ThesisChange；
+Feed 展示 THESIS_CHANGE_OBSERVED/CROSS_INVESTOR_DIRECTION_EVIDENCE、实际投票人数及
+来源事实时间（例如紫金矿业仍为 10-09 21:28:04 香港时间，非本輪计算时刻）。
+前端概览呈现运行正常及已观察数据；近期情报区长时间加载后最终呈现 9 条，与 HTTP 一致。
+方向条目明确为当前状态、未进行前后比较，事实时间与投票者可见；本轮页面读取通过，性能未达标。
+
+**独立读取反例保留**：真实 `/api/intelligence/discovery?asset_id=6f578ae9-1320-414e-bf30-87f7975a723e`
+为 422/2.98 秒。服务实际错误
+`Priority evidence count does not match Event evidence: efde357d-e18d-4797-99bc-c5c7a216718d`，
+该 Priority 为 INVESTOR_VIEW_CHANGE/count=4，历史关联=9；独立入口会全局校验后才筛选标的。
+Asset Product 内修复后的 Discovery 通过不能代替此入口通过。只报告，不修改代码。
+
+服务原先实际未运行（PID 文件过期，状态脚本曾误匹配检查命令），无 scheduler 并发。
+临时后端/前端只用于此轮验收，结束恢复原未运行安排，数据库/CDP/认证 profile 保留；
+scheduler 不启动，不产生第二轮刷新。历史 09-22 RUNNING 行不清理；本轮锁正常释放。
+最新真实结果为 MANUAL SUCCESS，状态接口当时 HEALTHY/FRESH 并保留历史失败信息，
+这不证明 scheduler 存活、持续运行、重启恢复或所有历史污染已解决。
+剩余：独立 Discovery/其他读取入口、Feed/前端响应速度、原失败延期投影、
+跨投资者回流、持续调度与用户验收。历史完整性 UNKNOWN；整个可信变化阶段未完成。
+到此停止，不再刷新或扩展修复。
+
+### 独立 Discovery 有效关联读取子任务 — 2026-10-10
+
+**局部代码修复完成；隔离验收通过；真实独立入口仍被未刷新历史投影阻断。**
+保留本日 MANUAL SUCCESS 真实运行记录与此前路线修改。HEAD 仍为
+`e7c0d6fdcc4158037201b4549718305956c22beb`，本次未提交。
+09:51:30 香港时间，只读 repeatable-read 核查完整 Priority
+`efde357d-e18d-4797-99bc-c5c7a216718d`，Event
+`3c0b8823-a5c6-4844-8efd-2c48a819217e`、Asset
+`3bd2441a-cdd9-4388-8210-bfd16a707176`，存储数量 4、历史关联 9、当前有效 4。
+这只是当前来源状态，不声称重建此前失败时完整事实。
+另行确认原 Priority `62c6ba81-1da2-4efa-b2e6-3f51c7544f86`
+仍为 THESIS_ACCELERATION/count=2、有效 1，本次不维护。
+
+根因：独立 Discovery UoW 直接使用全部历史 links；生产 Context 前置路径和
+Asset Product 先经过有效 Asset read scope。现在独立生产服务与 HTTP 依赖启用
+同一 `prepare_context_evidence` 和 `validate_context_projection`：一次批量准备
+三类实际关联有效证据，跨投资者在 Event 关联范围选代表、读取真实投票者和事实时间，
+不借用未关联来源。保留普通历史仓储和其他类型的既有消费规则。
+有效数量、分类、标题、公开 context 或事实时间未刷新时仍报错；全部来源失效排除；
+缺失 Priority/Event 不伪装为空结果。原数量检查保留，现比较有效 links。
+列表、scope Discovery 同步真实投票人数；窗口、候选规则、标的筛选顺序、limit/total/
+has_more 与 fact-time 排序含义不变，没有新增 score/rank/持久化候选或响应字段。
+
+首批真实数据库/HTTP 回归修复前 **4 failed**，修复后通过；最终新增
+`test_effective_discovery.py` **30 passed**，包括有效 4/历史 9、三类混合输入、
+等价本地代表、未关联证据、迟到前驱、全部失效、15 种真实投影漂移、必要实体缺失、
+真实 HTTP dependency、过滤/分页/排序和业务表内容不变。
+既有 Attention-only 来源/事实时间测试补充独立 Discovery 对照；独立服务、Context
+及 Asset Product scope 对同一有效输入一致。此前 Thesis、跨来源、canonical
+SUCCESS/失败保真等回归共 **614 个不同后端用例通过**（583 项相关集合，
+另 29 项消费者用例，以及之后新增的 2 项缺失实体测试；重复执行不重复计数）。
+实际命令为 pytest 新集成文件、相关 integration 文件集合与 Signal/Event/Priority/
+Feed/Lifecycle/read API/architecture 测试，以及 Operational/Discovery/Context/Asset Product
+消费者；均 `-q -p no:cacheprovider --tb=short`。
+Ruff check/format 与 git diff --check 通过，只有已有 Starlette/httpx 弃用警告。
+
+前端实际标的发现页消费 Asset List API，不伪称本次校正它；已有 Discovery reason
+的展示（presentation/AssetProductViewPage）将两种跨投资者技术 key 统一为
+“多人观点方向证据”，类型与契约不变。新增标签测试先 **1 failed** 后通过；
+全部前端 **47 passed**，`npm test`、`npm run lint`、`npm run build` 通过。
+
+只读批量规模：2 种 Signal、1/6 个 distinct 完整 scope 为 **24/69 SELECT**，
+每增加 scope 增加 9 次来源准备；不逐重复 Signal、Feed 或 Event 重建同一 scope，
+同一调用不保留跨请求缓存。隔离读取前后完整业务表内容相同。
+真实数据库 09:57:53/10:01:49 的 **29 张表内容指纹全部一致**。
+未刷新、采集、补偿、LLM、迁移或业务写入，未改真实 Priority/Feed/来源/关联。
+
+真实只读 HTTP：临时后端健康/数据库 200、0.77 秒。
+`/api/intelligence/discovery?asset_id=3bd2441a-cdd9-4388-8210-bfd16a707176&limit=1`
+仍 **422、32.945 秒**。同 HTTP 生产只读依赖记录完整实际错误：
+`Context effective evidence count mismatch: 62c6ba81-1da2-4efa-b2e6-3f51c7544f86`
+（10:00:47，额外错误定位只读调用 29.592 秒）。原 efde357d 旧关联误报已解除，
+现在触及真实未刷新历史行；入口仍在筛选标的前校验全体 ACTIVE 投影，未改变该边界。
+因此真实入口不能标记可用，不能以隔离通过或旧 canonical SUCCESS 替代本次结果。
+
+后端原未运行，仅启动本次所属进程树，验证后恢复未运行状态；scheduler、frontend
+不启动，数据库/CDP 与用户进程不操作。没有新增刷新 run，未清理历史 RUNNING 行。
+剩余：真实未刷新投影及限定维护策略、列表全体校验的作用范围、响应速度、其他产品
+读取入口、跨投资者回流与持续运行。本次只测性能，不优化；历史完整性 UNKNOWN，
+历史污染/整个可信变化阶段未完成，到此停止。
+
+### 限定历史 Priority／Feed 协调 — 2026-10-10
+
+**最小协调入口及指定对象真实维护完成；独立 Discovery 仍被其余未刷新投影阻断。**
+只读盘点时间香港 10:10:12，范围为独立 Discovery 在过滤、分页前消费的全部
+70 条 ACTIVE Feed：39 条可由现有 Priority／Feed 规则纠正，5 条全部证据失效
+按有效读取排除，15 条目标类型投影一致，11 条其他类型按原规则没有数量误差。
+完整 Priority／Event／Feed／标的身份、旧值、期望值及实际来源依据保存在新的
+本地盘点中；没有遇到第一条错误即停止，没有把盘点集合转换为写入集合。
+实体／直接来源存在性补充核查未发现缺失；这是当前数据库状态，非旧失败时快照。
+
+新增 `operations.projection_reconcile`，必须显式选择 priority-id 或 asset-id，
+默认 dry-run 保存差异计划，单独 `--apply` 重新准备并比较完整前置条件。
+复用 Priority／Feed 的现有候选构造和限定 repository 刷新；先在内存使用计划
+Priority 给出 Feed 期望值，再在同一事务按 Priority → Feed 写入。仅允许现有
+三类 Event 的现有派生行，缺失实体／Feed 身份异常拒绝自动创建或纠正，
+没有有效输入／非 ACTIVE Event 跳过，不写零证据投影。
+保留 ID、created_at、Feed.state 和内部 Thesis 生命周期基线，不运行 Lifecycle。
+
+计划采用保守的全部上游表内容指纹与生产 policy 身份保护，除选中派生行外
+不扩大写入范围；无关上游变化也可能要求重新准备。来源读取按同次 Event
+集合缓存，实测 Thesis 单 scope **44 SELECT**；跨投资者同一来源 scope 下
+1／2 个目标 Event 均 **77 SELECT**，不会按每个 Feed 重建来源链。
+指纹另需按上游表批量读取，时间／内存随当前上游行数增长，尚未性能优化。
+apply 使用既有 canonical 协作锁和选中行锁；已有 session advisory lock 的
+跨 commit／连接池边界仍未作为本次并发保证验收，不能宣称所有独立写入互斥。
+
+初始隔离测试 **12 failed**，其中九个历史混合场景复现现有 Feed dry-run 无法
+消费旧 Priority 分类。最终新增 **21 passed**；相关回归两组 **204／188 passed**，
+另加共享 scope 测试，扣除重复用例共 **373** 个通过。覆盖旧 2→有效 1、三类
+规则、真实 Discovery HTTP、零网络调用、过期来源／输入／目标计划拒绝、
+中途 Feed 失败整事务回滚、限定范围、重复新计划 apply 稳定、STALE／RESOLVED
+和内部基线保护、缺失实体拒绝、全失效跳过；Ruff、format、diff 检查通过。
+事务故障注入使用隔离 SQLite，未在真实 PostgreSQL 注入故障。
+
+真实维护前香港 10:16:46 保存新的 29 表快照和差异计划，HEAD
+`e7c0d6fdcc4158037201b4549718305956c22beb`，另保存工作区 diff 与新增代码内容
+指纹。已有备份脚本成功生成 `snowball-20261010-101656.dump`，3,436,094 bytes，
+SHA-256 `79658bda62fe87e0d48118e81416326fc72cd4cec2d2e58e89ea71436d9c1faa`。
+真实 apply **仅** Priority `62c6ba81-1da2-4efa-b2e6-3f51c7544f86` 和 Feed
+`0323fe80-628d-4bb1-8374-e5f42df85598`：数量 2→1、旧加速原因→中性观察，
+Feed 标题／原因／公开计数同步。等级 MEDIUM、事实时间
+`2026-08-27T07:50:49Z`、身份／created_at／ACTIVE 保持不变。
+旧字段已在这两行被替换，原值记录在差异计划中，不声称行内保留旧原因。
+29 表对照只发现上述两行的允许字段变化；源表、Event、Signal、关联和范围外
+派生记录不变。相同范围再次 dry-run 无纠正；HTTP／最终 dry-run 前后全表一致。
+
+真实 Discovery `/api/intelligence/discovery?limit=1` 香港 10:21:06 返回
+**422，85.106 秒**；同一真实依赖核对为
+`Context effective evidence count mismatch: 690f2af8-57fa-4daa-8ccf-c4c8a43aca77`
+（77.539 秒），该对象已在盘点中：SH:600219，存储 2／有效 1。
+没有继续 apply 其余 38 个可纠正对象；5 个全失效对象保留原行并由读取排除。
+临时后端验证后已退出，恢复原未运行状态；scheduler 始终未启动，无 refresh、
+采集、LLM、迁移、policy 切换或清理。本次维护没有新增 canonical run_id，
+不能代替 canonical SUCCESS。Discovery 整体可用性、性能、其他历史投影、
+跨投资者回流和持续运行仍未完成；基线与历史 Sprint 原文保持不变。到此停止。
+
+### 显式 38 条历史 Priority／Feed 批量协调 — 2026-10-10
+
+**本白名单子任务完成；本次真实 Discovery 解除投影阻断，性能未通过。**
+
+依据香港时间 2026-10-10 10:10:12.344032+08:00 的 39 条可纠正名单，剔除
+`62c6ba81-1da2-4efa-b2e6-3f51c7544f86`，核对剩余 38 个唯一完整 ID。
+名单与来源 SHA 保存在 `.local/reconcile-batch-20261010/whitelist.json`、
+`whitelist-origin.json`。五条全失效对象不在写入范围。
+当前计划：38 READY，0 已一致／全失效／异常；38 Event、38 Feed、28 标的，
+Thesis 23、跨投资者发现 14、兼容共识类型 1。
+
+维护入口新增 `--priority-ids-file`，默认 dry-run，显式 `--apply --plan`。
+同批复用有效证据准备和来源指纹；代码、policy、来源或目标变化拒绝过期计划。
+单批一个事务按 Priority → Feed 执行；不创建缺失实体、不修改语义或 Lifecycle。
+新增测试修复前 6 项失败，修复后新增 9 项、单对象兼容合计 30 项通过，相关
+九文件回归 214 项通过；覆盖中途失败整批回滚、旧计划拒绝、跳过、范围外保护、
+STALE/RESOLVED/内部基线保留、幂等和零网络调用。Ruff、格式和 diff 检查通过。
+同批跨投资者分组准备一次、各上游表指纹批量读取一次；来源指纹保守覆盖现有
+上游表，仍随上游行数增长，不宣称性能完成。
+
+apply HEAD `e7c0d6fdcc4158037201b4549718305956c22beb`，工作区差异 SHA256
+`81fb5fb41d840a5c4bfed2bfb6d0ad6888eb3b97ed4d4df44db7c9500e5fbbad`。
+完整未追踪代码身份、最终计划、精确差异和快照保存在上述本地目录。
+前快照 10:42:34.593620+08:00，后快照 10:45:25.015226+08:00。
+新备份 `snowball-20261010-104244.dump` 成功，3,436,100 bytes，SHA256
+`b6b83a2c9b98443eb856bf82fbc2be6b0ae6496388f577aeaf35ef3b68dd1ac7`。
+无项目 refresh/scheduler 进程、无 advisory lock；一条 2026-09-22 历史 RUNNING
+CollectionRun 保留，不解释为当前运行进程。
+一次真实 apply 仅改 38 Priority 和 38 Feed：原因各 38、数量 35、标题 38、公开
+context 37、事实时间 17 条；等级、身份、created_at、state、内部区域均保留。
+源记录、Event、Signal、历史关联和白名单外行未变；再次 dry-run 38 CONSISTENT，
+无待纠正字段；LLM 0。成功批次在 PostgreSQL 提交；故障回滚注入仅隔离库验证。
+
+临时后端 HTTP：health 200/0.130s；Discovery 200/43.459s、40 候选；近期 ACTIVE
+Feed 200/47.751s、6 条；SH:600219 Product 200/0.106s、Context 200/0.081s；
+HK:00916 Product 200/3.438s、Context 200/3.546s。代表 Thesis 有效 Signal 1、
+事实时间 2026-08-28；跨投资者标的有效总消费 10，当前／前窗口 7／3、投资者 3。
+独立与嵌套 Context 的数量、投资者和事实时间一致；近期 Feed 人数匹配、不泄漏
+内部区域。HTTP 前后 29 业务表完全不变。临时后端已关闭，恢复原未运行状态，
+scheduler 未启动。
+
+剩余：43–48 秒耗时不满足日常交互；Product traceability Signal 数量 3／22 与
+有效消费 1／10 不同，另一读取边界尚待核查，本次不扩大修复。五条全失效旧行、
+历史 Event 时间/metadata/关联保留；跨投资者回流、持续运行和独立并发锁仍未完成。
+Historical completeness UNKNOWN。本次不运行 canonical refresh，不证明全体历史
+投影永久一致，不标记整个可信变化阶段完成。
+
+### 近期 Feed 保持结果不变的读取优化 — 2026-10-10
+
+**限定读取优化及真实只读复验完成；约 2 秒目标尚未达到。**
+
+固定参数 `state=ACTIVE, since=2026-10-09T02:50:00+00:00, limit=100`。
+29 张业务表的指纹与前次维护后完全相同，剖析／HTTP 后也不变。应用首次／后续
+剖析分别 47.891／49.864 秒：1,745 SELECT、181,432 返回行，SQL 执行累计
+10.754／11.260 秒（不含 fetch/JSON 解码）。跨投资者校验 47.328 秒，95 次
+引用 scope 加载 44.455 秒；全库 RawEvent 被每个历史 cutoff 重复加载，JSON
+解码约 24 秒是主要瓶颈。实际评估 70 ACTIVE Feed，跨投资者 24、21 个标的，
+129 个完整输入 scope／95 个引用 scope；去重和响应 context 耗时小于 1 毫秒。
+
+最小修改仅两处生产文件：`signal_engine/cross_investor_sources.py`、
+`signal_engine/repository.py`。Feed 先限定实际关联 Signal 的真实来源依赖链；
+所有引用 Snapshot 仍按自己的窗口、as_of、policy 重建完整有效输入。
+RawEvent identity map 只加载有效 Attention 的来源（保留全部 first history）；
+相同 selector 方法／资产／policy／cutoff 在单次调用内复用。无跨请求缓存、
+新表或新算法；不按不可信存储时间、since 或 LIMIT 提前截断。
+普通历史读取、资格、前驱、事实时间、关联范围等价去重和分页规则未改。
+
+同数据同参数优化后剖析 2.861／2.827 秒、933 SELECT、8,168 行，SQL 执行
+0.679／0.640 秒；97 个完整输入 scope／71 个引用 scope。prepare_inputs 1.547 秒，
+引用加载 0.719 秒，引用检查 0.046 秒，等价去重约 0.0005 秒。
+最终相关十文件回归 283 项通过；canonical 范围、Thesis 物化／Lifecycle 和批量协调
+另 59 项通过。Ruff、格式、diff 检查通过。
+优化前后完整响应 JSON 完全一致（6 条、相同身份／证据人数／事实时间／排序／
+公开 context／分页）。隔离 1／12／100 个历史窗口，全来源校验 0.028／0.160／
+1.385 秒；固定关联读取 0.025／0.015／0.022 秒，均 14 SELECT、结果一致。
+既有规模回归增加 20 个无效历史 Signal、5 个同 cutoff 窗口和 5 个无关标的，
+同 scope 不再重复查询，但不同 cutoff 仍独立验证。请求后来源 FAILED 下一次读取
+立即排除；无永久缓存。旧测试的重复查询次数改为更低的严格数量断言，保留所有
+有效性、投影错误、时间、过滤分页及零写入断言。
+
+真实临时后端首次／后续三次 HTTP 200，3.950／4.067／4.333 秒（当时并行回归
+测试占用资源）；测试停止后再限定两次顺序请求 200，3.041／3.922 秒。全部响应
+与固定旧基线完全一致。Discovery 仅观察一次：200、40 候选、4.372 秒，同样处于
+并行测试负载，不宣称其专项性能通过。临时后端已关闭、无项目业务进程，scheduler
+未启动；LLM 0，无采集／刷新／维护／迁移。所有 29 业务表在验证前后不变。
+
+剩余瓶颈为 distinct cutoff 的有效 selector SQL 和输入准备（仍 933 查询），
+本次不继续扩大为跨窗口基础加载重构。2 秒目标未达，不能标记日常性能合格。
+Product traceability 数量差异保留为不同读取口径待核查，不直接判作错误或修复。
+历史污染、跨投资者回流、持续运行、Historical completeness UNKNOWN 均保持原边界。
+
+### Feed 不同 cutoff 的单次有限准备优化 — 2026-10-10
+
+**本次有限读取方案完成；2 秒目标未达，HTTP 延迟稳定改善未被本次样本证明。**
+
+分组剖析覆盖 selector／资产／policy／cutoff／窗口（完整数据保存于
+`.local/feed-cutoff-20261010/group-before.json`）。933 SQL、8,168 行中，
+PortfolioAction 共 388 查询、0 行：97 个资产/cutoff 组每组两次调用，直接输入准备
+与 Consistency 各一次。各组政策与 cutoff 明确区分；其余 Opinion／Attention／
+Thesis 为 97／97／194 查询，没有把不同 cutoff 误判为相同缓存键。
+涉及 21 个跨投资者标的、97 完整输入 scope、71 引用 scope，13 个不同截止时间。
+当次不带 cProfile 的分组计时 2.198 秒，prepare_inputs 累计 1.015 秒；这与
+上一步带 cProfile 的约 2.8 秒和 HTTP 3.0–3.9 秒分别记录，不混为同一指标。
+
+唯一方案是限定 Feed 关联 Snapshot 的 PortfolioAction 多 cutoff 基础读取。
+`PortfolioActionRepository.prepare_cutoffs` 批量读取所需资产的 Action 和对应组合
+快照；最大 cutoff 仅限制基础加载范围。每个 cutoff 仍独立过滤快照并重建相邻
+关系，绝不把最大截止的有效 Action 直接过滤成旧窗口。普通 by-asset 入口和
+批量路径共享 `_select_asset_actions` 纯选择函数，排序与身份不变。
+`InvestorActionConsistencyRepository` 可接收此只读 Action reader，配对、policy、
+latest-opinion 算法原样复用。共享来源链仅在 Feed `source_keys` 限定路径启用；
+新候选/普通历史路径保留原读取。无跨请求缓存、新表、索引或语义扩展。
+Opinion、Attention、Thesis selector、前驱、窗口 fingerprint、first history 和
+as_of 校验不变；不提前按旧时间或 LIMIT 截断，不新增 Portfolio intelligence。
+
+新测试先因缺少入口失败 2 项，修复后 cutoff／规模 5 项通过，Consistency 与
+初始新测试合计 14 项通过；迟到中间快照使旧相邻配对失效，下一请求重新准备
+立即体现。非空数据 1资产/1截止、1资产/20截止、5资产/20截止均 2 SQL，
+分别加载 3／3／15 基础行，准备 0.005／0.007／0.021 秒；逐截止原 selector
+比较约 0.003／0.039／0.204 秒，全部相同。20资产各100截止的空数据仅1 SQL。
+前次 1／12／100 历史窗口规模测试和来源失效／前驱／policy／同数身份替换／
+未来隔离／关联等价／分页／真实投影报错回归保留。相关十文件 279 项直接通过，
+4 项旧 SQL 数量断言更新到更低严格数量后单独通过；Portfolio/Snapshot/canonical/
+批量协调另 41 项通过。有效性及零写入断言未削弱。Ruff/格式/diff 检查通过。
+
+固定 `state=ACTIVE,since=2026-10-09T02:50:00+00:00,limit=100`，完整响应一直
+与旧基线相同（6 条）。SQL 降至 546，行数仍 8,168，完整输入 scope 仍为 97；
+后续带 cProfile 服务样本为 4.179／4.078 秒，不能据 SQL 减少声称耗时改善。
+当次分组计时 2.808 秒、输入准备 1.238 秒，同样不作为稳定性能结论。
+测试停止后真实 HTTP 首次 200/5.266 秒，后三次 200/3.036、3.303、3.173 秒。
+每次完整 JSON 比较通过，没有继续循环压测或另行重构。
+
+本次加载代码 HEAD `e7c0d6fdcc4158037201b4549718305956c22beb`，工作区差异 SHA
+`96825640a288cafdfbdebd766116cdae2ca99db2634e19fd029a42027a328803`；完整身份与
+未追踪代码指纹在前后快照/result.json。香港时间前快照 12:11:04.689359+08:00，
+后快照 12:12:47.770354+08:00；29 业务表与前次数据截面完全相同且零写入。
+无 LLM、采集、refresh、维护、迁移。临时后端归属核验后关闭，恢复未运行状态，
+scheduler 未启动。历史 RUNNING CollectionRun 保留，未解释为当前进程。
+
+剩余成本包括不同截止的 Opinion/Attention/Thesis 有效读取、引用加载和
+fingerprint/输入准备。进一步批量化须单独证明前驱/有效配对/时间边界；本次到此
+停止。Discovery 未专项优化，traceability 差异不直接判为错误；不宣称长期性能、
+高并发、持续运行或整个可信变化阶段完成，Historical completeness 仍 UNKNOWN。
+
+### Asset Product traceability 历史／有效口径 — 2026-10-10
+
+**本子任务完成；仅核验并呈现证据口径，不完成整个可信变化阶段。性能重构暂停，约 3 秒后续 Feed 与首次波动仍未达到 2 秒目标。**
+
+根因：旧 `signal_count` 是标的全部已存 Signal（含未关联、失效与历史），
+`evidence_refs` 是 Review/Evolution 的组合审计引用，既不是全部历史关联，也不是
+当前有效集合。`canonical_source_count` 仅排除中间产物，仍含解释 artifact，
+不能表述成 RawEvent 或当前有效事实数量。差异本身合法；前端“变化信号”标签错误。
+旧字段数值、含义和审计 ID 保留，前端改为“标的全部已存 Signal”“产品审计引用
+（含历史）”“非中间产物审计引用”，明确不代表有效证据或变化次数。
+
+兼容添加 `historical_signal_ids`、`historical_associations`（实际旧 Event 关联），
+以及可空 `validated_consumption`。后者限定 ACTIVE Feed 实际关联的 Thesis 与
+方向证据，不等于近期窗口，不认证其他 Event 类型，不拼接窗口重新推导共识。
+未准备来源链时返回 null，区别于已校验后零证据。保留旧响应可反序列化及旧前端
+类型兼容。没有替换普通历史读取、创建表或改写历史状态。
+
+Product 专用 scope 开启 provenance；Context/Discovery 不额外加载。
+`ProductEvidenceSourceReader` 对已有共享有效关联分组批量追溯 Signal →
+ThesisChange/Alignment/Consensus → Snapshot/Opinion → RawEvent，核对标的、
+投资者、Analysis/Event 指针和窗口。Opinion 标明当前/前驱/方向投票角色，
+Attention 单独追溯并区分 attention-only 投资者。来源时间来自 RawEvent；
+链路 observed_at 复用已校正有效输入。每条保留原窗口/as_of，不生成新语义。
+没有复制 policy、前驱、输入 fingerprint 或关联范围等价算法，也不借用未关联来源。
+新增最多三次批量 SELECT（Thesis、Opinion、Attention），随所需来源行数增长，
+不逐 Signal 查询；跨投资者 fixture 中 Product 25 SELECT、独立 Context 23，
+添加五个等价窗口后数量仍相同。原 scope 的窗口有效性校验继续保留。
+
+新增真实数据库测试最初三项因缺少区分字段失败，最终 traceability 14 项通过，
+覆盖非 material、inactive、失效前驱、FAILED 上游、全部失效、混合历史关联、
+等价窗口、全局代表未关联、真实投票者与仅关注者、HTTP 和零写入。
+与 Thesis 回流合计 40 项通过；Product/Context/两类 Feed/Discovery/canonical
+分组 155 项通过；另九文件 250 项先通过，一项沿用上一轮优化前 SQL 数量失败，
+严格预期由 19/21 更新为实际 15/17 后，等价回归整个 18 项通过。
+Product 新增两次批量 provenance 的 SQL 断言单独明确，未削弱有效性和零写入。
+前端 49 项、TypeScript/Vite 构建、Ruff/格式/diff 检查通过。
+
+香港时间 12:39:22 前快照、12:43:44 后快照：29 张业务表行数与内容指纹完全
+一致，零 LLM/采集/refresh/维护/迁移。真实只读 HTTP 核验记录于
+`.local/traceability-20261010/http-results.json`；当时 HEAD 为
+`e7c0d6fdcc4158037201b4549718305956c22beb`，工作区差异 SHA 为
+`bfbb81ef6e6571e164bcfa2acbda34daa585c4d01239b03c69c3e3814831ea97`，
+完整未追踪代码指纹一并记录。未覆盖基线。
+
+SH:600219：已存 3、历史关联 2、已校验关联 1，旧审计引用 10/非中间 5；
+HK:00916：已存/历史关联 22、已校验 7（Thesis 4、Alignment 2、Consensus 1），
+旧审计引用 71/非中间 48；Product Discovery 消费 10，其中另三条沿用其他类型
+路径，不能强行改成 7。已校验 Opinion 链分别解析到 2/7 个不同 RawEvent，
+跨投资者实际方向投票者三人。旧 trace 字段完整比较一致；Context 对应内容与
+Product 一致。HTTP 各请求按自己时钟锚定窗口，窗口边界分别记录，不声称完全
+相同 as_of。Product 200/0.104、0.400 秒；Context 200/0.095、0.376 秒。
+这是两个标的的样本，不证明全局 Feed 性能达标。
+
+临时后端归属核验后关闭，恢复项目后端/scheduler 未运行安排；历史 RUNNING
+记录未改写，未当作当前进程。遗留：历史污染仍保留；其他读取入口的历史/current
+state 展示尚未全部校正；跨投资者回流未实现；完整原文阅读、前后观点对比、
+统一证据导航及 Research Candidates 工作流仍缺失。Historical completeness
+保持 UNKNOWN。本次停止，不扩展证据页面或继续性能优化。
+
+### 2026-10-10：当前入口证据阅读（限定能力已实现，远端阅读验收受限）
+
+用户路径：Inbox「查看证据」→指定 Feed 的实际有效关联；Asset Product
+「查看当前有效情报证据」及逐来源入口→观点/前后比较→已保存原文/原帖。
+Investor Product 提供覆盖标的的证据导航。新增只读 evidence API 和当前实际
+`/assets/:id/evidence` 路由，不改 Intelligence 判定，不创建持久化 Evidence View。
+
+复用共享有效来源链、关联范围去重、投票身份与有效前驱；内容和选择共用一次
+repeatable-read、read-only 事务。Opinion/Attention 正文分别批量解析；来源失效
+返回 409，不替换为未关联证据。历史引用与有效观点历史单独标识。页面区分
+原文事实、AI 提取、已有系统分类；未知字段不推断删除；首次观察不宣称此前
+无观点。跨投资者保留各窗口与真实投票者，Attention-only 单列，不拼接新共识。
+完整展示已保存文本，不承诺远端全文完整；HTML 不注入执行，转发保持归属边界，
+仅保存的安全 http/https URL 可打开。返回页面及重新校验时重新读取来源。
+
+真实浏览器：南山铝业（4b44a018-7114-4913-b18f-422663486f19）Product→证据，
+验证 2026-08-24/08-28 的有效前后观点与原文；来源比较
+4793f846-2b35-444f-83b4-7a40ff237e86，RawEvent
+5cb325ea-74aa-452e-9403-88fd14d5b93b/1f168f58-9205-4644-911b-6f939f56adfd。
+龙源电力（afacf10c-d6e5-4f20-80a7-028a55706ba6）Product→证据，看到逐人
+方向观点、各自窗口和原帖；实际点击爱投资的小人书原帖 7103876041/408505060。
+Inbox 中际旭创 Feed 57a051a4-a5af-4599-a5be-573bbdb282c5→证据，显示
+Captain-Nemo船长和戴维斯双击，返回概览成功。雪球原帖新标签获得正确 URL
+及对应帖子标题，但远端正文读取工具超时；不得将此记为远端全文阅读通过。
+本地原文和观点阅读通过；真实 Attention-only 跨投资者样本未单独验收，隔离测试覆盖。
+
+真实 HTTP Thesis/cross/指定 Inbox evidence 均 200，分别 0.180/0.419/0.128 秒，
+返回 1/10/1 组；Feed 固定参数 200/3.349 秒。Feed 约 2 秒目标仍未达到，
+本次没有继续性能重构。代码 HEAD e7c0d6fdcc4158037201b4549718305956c22beb，
+工作区差异及新增文件各自哈希记录于新的本地验收快照，不能只用 HEAD 表示代码。
+
+数据库指纹对照时间：香港 14:03:12→14:49:18，29 表中 27 表不变，包含来源、
+Event、Signal、关联、Priority、Feed；collection_runs 与 operational_refresh_runs
+变化。观察到独立 SCHEDULED run 1ac1e43b-f4f0-46e9-8f65-8d05ac1b77b5
+于 14:11:44 启动、14:11:46 FAILED。验收未调用采集/refresh/LLM；不能把整段
+环境写入归为零。原临时后端/前端 PID 已退出，另组服务与 scheduler 已运行，
+归属不同，未停止或改动外部进程；不得宣称服务恢复为原未运行状态。
+
+最终隔离回归：`python -m pytest tests/integration/test_evidence_reading.py
+tests/integration/test_product_traceability_boundaries.py tests/test_asset_intelligence_product_view.py
+tests/integration/test_effective_asset_context.py tests/integration/test_thesis_stale_reentry.py -q`
+94 passed，其中新增证据阅读 15 项。`npm test -- --run` 54 passed（证据页面 4 项）；
+`npm run build`、相关 Ruff lint/format、git diff --check 通过。真实只读批量核验
+11 个不同 Opinion、24 个引用的标的/投资者/RawEvent/已保存正文/事实时间一致。
+隔离查询前后数据库不变；真实环境的运行表变化限制如上，不能全局声称零写入。
+
+限定验收不代表历史污染清除、全部证据完整、跨投资者回流或持续运行成立。
+Historical completeness 仍 UNKNOWN，Research Candidate 工作流未实现。
+本次结束，不自动推进其他能力。
 
 ## 历史路线与 Sprint 记录（原文保留）
 

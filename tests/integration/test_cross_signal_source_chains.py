@@ -409,13 +409,12 @@ def test_reads_group_by_window_scope_not_per_signal(
         version = (chain[0], snapshot, alignment, consensus)
         for kind in CROSS:
             _legacy(db_session_factory, version, kind)
-    # Each additional complete window scope prepares inputs once (9 SELECTs),
-    # shared by Alignment/Consensus. Equivalent windows now have only two
-    # candidate identity lookups overall, plus one batch of historical Signals.
-    assert count() == first_count + 5 * 9
-    assert first_count == 21
-    assert count(persisted=True) == first_persisted_count + 5 * 9
-    assert first_persisted_count == 19
+    # Different starts still rebuild window fingerprints, but selectors with
+    # identical asset/policy/cutoff share results during this invocation.
+    assert count() == first_count  # identical cutoffs reuse selector reads
+    assert first_count == 17
+    assert count(persisted=True) == first_persisted_count
+    assert first_persisted_count == 15
 
 
 @pytest.mark.parametrize("kind", CROSS)

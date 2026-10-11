@@ -454,12 +454,36 @@ export interface ProductDataQualityView {
   limitations: string[];
 }
 
+export interface ProductValidatedChain {
+  event_id: string;
+  signal_id: string;
+  source_type: string;
+  source_id: string;
+  observed_at: string;
+  source_window_start: string | null;
+  source_window_end: string | null;
+  source_as_of: string | null;
+  investor_ids: string[];
+  direction_voter_ids: string[];
+  attention_only_investor_ids: string[];
+  opinion_facts: Array<{ opinion_id: string; raw_event_id: string; investor_id: string; published_time: string; role: string }>;
+  attention_facts: Array<{ attention_occurrence_id: string; raw_event_id: string; investor_id: string; published_time: string }>;
+  evidence_refs: Array<{ source_type: string; source_id: string }>;
+}
+
 export interface ProductTraceabilitySummary {
   source_ref_count: number;
   canonical_source_count: number;
   source_types: string[];
   signal_count: number;
   evidence_refs: Array<{ source_type: string; source_id: string }>;
+  historical_signal_ids?: string[];
+  historical_associations?: Array<{ evidence_id: string; event_id: string; signal_id: string }>;
+  validated_consumption?: {
+    selection_scope: "ACTIVE_FEED_THESIS_AND_DIRECTION_ASSOCIATIONS";
+    signal_count: number;
+    chains: ProductValidatedChain[];
+  } | null;
 }
 
 export interface AssetIntelligenceView {
@@ -656,4 +680,31 @@ export interface IntelligenceFeedListResponse {
   total: number;
   limit: number;
   has_more: boolean;
+}
+
+
+export interface EvidenceRaw {
+  raw_event_id: string; investor_id: string; investor_name: string; published_time: string;
+  source: string; source_url: string | null; source_url_status: string;
+  content: string; readable_content: string; current_author_text: string; contains_repost: boolean;
+}
+export interface EvidenceOpinion {
+  opinion_id: string; role: "THESIS_PREVIOUS" | "THESIS_CURRENT" | "DIRECTION_VOTE" | "ATTENTION_OPINION";
+  direction: Direction; thesis: string[]; catalysts: string[]; risks: string[];
+  time_horizon: string | null; confidence: number; analysis_id: string | null;
+  analysis_version: string | null; model_version: string; raw: EvidenceRaw;
+}
+export interface EvidenceReading {
+  asset: {asset_id: string; name: string; market: string; symbol: string};
+  historical_completeness: "UNKNOWN";
+  available_history: Array<{thesis_change_id: string; change_type: string; effective_time: string; investor_id: string}>;
+  groups: Array<{
+    source_id: string; source_type: string; signal_id: string | null; event_id: string | null;
+    basis: "CURRENT_ASSOCIATION" | "EFFECTIVE_HISTORY" | "HISTORICAL_REFERENCE";
+    observed_at: string; source_window_start: string | null; source_window_end: string | null;
+    source_as_of: string | null; direction_voter_ids: string[]; attention_only_investor_ids: string[];
+    comparison: {change_type: string; summary: string; evidence: string[]; confidence: number;
+      comparison_version: string; opinion_analysis_version: string} | null;
+    opinions: EvidenceOpinion[]; attention: Array<{attention_occurrence_id: string; attention_only: boolean; raw: EvidenceRaw}>;
+  }>;
 }
